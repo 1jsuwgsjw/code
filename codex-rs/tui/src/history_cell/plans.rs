@@ -45,7 +45,11 @@ impl HistoryCell for StreamingPlanTailCell {
 }
 /// Render a user‑friendly plan update styled like a checkbox todo list.
 pub(crate) fn new_plan_update(update: UpdatePlanArgs) -> PlanUpdateCell {
-    let UpdatePlanArgs { explanation, plan } = update;
+    let UpdatePlanArgs {
+        explanation,
+        plan,
+        research_delta: _,
+    } = update;
     PlanUpdateCell { explanation, plan }
 }
 

@@ -113,6 +113,7 @@ impl ChatWidget {
                             },
                         })
                         .collect(),
+                    research_delta: None,
                 })
             }
             ServerNotification::HookStarted(notification) => {

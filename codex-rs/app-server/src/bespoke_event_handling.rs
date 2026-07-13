@@ -3636,6 +3636,7 @@ mod tests {
                     status: StepStatus::Completed,
                 },
             ],
+            research_delta: None,
         };
 
         let conversation_id = ThreadId::new();

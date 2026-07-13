@@ -2191,6 +2191,7 @@ fn plan_update_with_note_and_wrapping_snapshot() {
                     status: StepStatus::Pending,
                 },
             ],
+            research_delta: None,
         };
 
     let cell = new_plan_update(update);
@@ -2214,6 +2215,7 @@ fn plan_update_without_note_snapshot() {
                 status: StepStatus::Pending,
             },
         ],
+        research_delta: None,
     };
 
     let cell = new_plan_update(update);
@@ -2234,6 +2236,7 @@ fn plan_update_does_not_split_url_like_tokens_in_note_or_step() {
             step: format!("Validate callbacks under {step_url} before rollout."),
             status: StepStatus::InProgress,
         }],
+        research_delta: None,
     };
 
     let cell = new_plan_update(update);

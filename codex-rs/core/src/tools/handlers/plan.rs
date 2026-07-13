@@ -88,6 +88,12 @@ impl PlanHandler {
         }
 
         let args = parse_update_plan_arguments(&arguments)?;
+        if let Some(research_delta) = args.research_delta.as_deref() {
+            session
+                .apply_research_delta(research_delta)
+                .await
+                .map_err(|err| FunctionCallError::RespondToModel(err.to_string()))?;
+        }
         session
             .send_event(turn.as_ref(), EventMsg::PlanUpdate(args))
             .await;
@@ -103,3 +109,7 @@ fn parse_update_plan_arguments(arguments: &str) -> Result<UpdatePlanArgs, Functi
         FunctionCallError::RespondToModel(format!("failed to parse function arguments: {e}"))
     })
 }
+
+#[cfg(test)]
+#[path = "plan_tests.rs"]
+mod tests;

@@ -2675,6 +2675,7 @@ dependencies = [
  "codex-prompts",
  "codex-protocol",
  "codex-response-debug-context",
+ "codex-research-state",
  "codex-rmcp-client",
  "codex-rollout",
  "codex-rollout-trace",
@@ -3777,6 +3778,16 @@ dependencies = [
  "http 1.4.0",
  "pretty_assertions",
  "serde_json",
+]
+
+[[package]]
+name = "codex-research-state"
+version = "0.0.0"
+dependencies = [
+ "codex-protocol",
+ "pretty_assertions",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

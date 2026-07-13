@@ -1,0 +1,99 @@
+name: Custom Codex Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-state
+
+permissions:
+  contents: read
+
+jobs:
+  test-linux:
+    name: Test research-state integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: codex-rs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-ci
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt -- --config imports_granularity=Item --check
+
+      - name: Test research-state crate
+        run: just test -p codex-research-state
+
+      - name: Test protocol crate
+        run: just test -p codex-protocol
+
+      - name: Test core plan integration
+        run: just test -p codex-core plan
+
+  build-windows:
+    name: Build custom codex.exe
+    runs-on: windows-latest
+    timeout-minutes: 120
+    needs:
+      - test-linux
+    defaults:
+      run:
+        working-directory: codex-rs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-ci
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Configure MSVC environment
+        uses: ./.github/actions/setup-msvc-env
+        with:
+          target: x86_64-pc-windows-msvc
+
+      - name: Build Codex for Windows
+        shell: bash
+        env:
+          LIBSQLITE3_FLAGS: SQLITE_DISABLE_INTRINSIC
+        run: |
+          cargo build \
+            --locked \
+            --release \
+            --target x86_64-pc-windows-msvc \
+            --bin codex
+
+      - name: Stage custom binary
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item `
+            "$env:CARGO_TARGET_DIR\x86_64-pc-windows-msvc\release\codex.exe" `
+            "dist\codex-custom.exe"
+
+      - name: Upload custom Windows binary
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: codex-custom-windows-x64
+          path: codex-rs/dist/codex-custom.exe
+          if-no-files-found: error
+          retention-days: 14
