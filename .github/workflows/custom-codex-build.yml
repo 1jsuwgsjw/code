@@ -52,7 +52,10 @@ jobs:
   build-windows:
     name: Build custom codex.exe
     runs-on: windows-latest
-    timeout-minutes: 120
+    # The first Windows build has no compiled Rust cache. Keep a generous
+    # ceiling, while the dev-small profile below avoids release LTO and is
+    # substantially faster for iteration builds.
+    timeout-minutes: 360
     needs:
       - test-linux
     defaults:
@@ -77,6 +80,17 @@ jobs:
         with:
           target: x86_64-pc-windows-msvc
 
+      - name: Restore Windows Cargo build cache
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ${{ env.CARGO_TARGET_DIR }}
+          key: windows-codex-dev-small-${{ hashFiles('codex-rs/Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            windows-codex-dev-small-${{ hashFiles('codex-rs/Cargo.lock') }}-
+
       - name: Build Codex for Windows
         shell: bash
         env:
@@ -84,8 +98,9 @@ jobs:
         run: |
           cargo build \
             --locked \
-            --release \
+            --profile dev-small \
             --target x86_64-pc-windows-msvc \
+            --package codex-cli \
             --bin codex
 
       - name: Stage custom binary
@@ -93,7 +108,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item `
-            "$env:CARGO_TARGET_DIR\x86_64-pc-windows-msvc\release\codex.exe" `
+            "$env:CARGO_TARGET_DIR\x86_64-pc-windows-msvc\dev-small\codex.exe" `
             "dist\codex-custom.exe"
 
       - name: Upload custom Windows binary
