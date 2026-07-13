@@ -2674,8 +2674,8 @@ dependencies = [
  "codex-plugin",
  "codex-prompts",
  "codex-protocol",
- "codex-response-debug-context",
  "codex-research-state",
+ "codex-response-debug-context",
  "codex-rmcp-client",
  "codex-rollout",
  "codex-rollout-trace",
@@ -3770,6 +3770,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-research-state"
+version = "0.0.0"
+dependencies = [
+ "codex-protocol",
+ "pretty_assertions",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "codex-response-debug-context"
 version = "0.0.0"
 dependencies = [
@@ -3778,16 +3788,6 @@ dependencies = [
  "http 1.4.0",
  "pretty_assertions",
  "serde_json",
-]
-
-[[package]]
-name = "codex-research-state"
-version = "0.0.0"
-dependencies = [
- "codex-protocol",
- "pretty_assertions",
- "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -14060,9 +14060,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter"
-version = "0.25.10"
+version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78f873475d258561b06f1c595d93308a7ed124d9977cb26b148c2084a4a3cc87"
+checksum = "af1c71c1c4cc0920b20d6b0f6572e7682cd07a6a2faec71067a31fa394c586df"
 dependencies = [
  "cc",
  "regex",
