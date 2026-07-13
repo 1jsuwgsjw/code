@@ -71,6 +71,20 @@ ON CONFLICT(project_id) DO NOTHING
         .execute(&mut *tx)
         .await?;
 
+        // Remote and root-commit aliases are strong identity evidence for the
+        // current checkout. Replace stale values so a removed upstream or an
+        // old repository fingerprint cannot merge an unrelated future project.
+        sqlx::query(
+            r#"
+DELETE FROM research_project_aliases
+WHERE project_id = ?
+  AND (alias GLOB 'git_remote:*' OR alias GLOB 'git_roots:*')
+            "#,
+        )
+        .bind(project_id.as_str())
+        .execute(&mut *tx)
+        .await?;
+
         for alias in &aliases {
             sqlx::query(
                 r#"

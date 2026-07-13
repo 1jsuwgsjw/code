@@ -3,6 +3,7 @@ use codex_git_utils::get_git_remote_urls_assume_git_repo;
 use codex_git_utils::get_git_repo_root;
 use codex_git_utils::get_git_root_commit_hashes;
 use codex_utils_path::normalize_for_path_comparison;
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::Path;
 use uuid::Uuid;
@@ -15,11 +16,9 @@ pub(crate) async fn discover_research_project_aliases(cwd: &Path) -> Vec<String>
     let root = get_git_repo_root(cwd).unwrap_or_else(|| cwd.to_path_buf());
     let remotes = get_git_remote_urls_assume_git_repo(root.as_path())
         .await
-        .unwrap_or_default()
-        .into_values()
-        .filter_map(|remote| canonicalize_git_remote_url(remote.as_str()))
-        .collect::<BTreeSet<_>>();
-    let root_commits = if remotes.is_empty() {
+        .unwrap_or_default();
+    let remote = preferred_remote(remotes);
+    let root_commits = if remote.is_none() {
         get_git_root_commit_hashes(root.as_path())
             .await
             .unwrap_or_default()
@@ -29,33 +28,41 @@ pub(crate) async fn discover_research_project_aliases(cwd: &Path) -> Vec<String>
     } else {
         Vec::new()
     };
-    aliases_from_evidence(root.as_path(), remotes, root_commits)
+    aliases_from_evidence(root.as_path(), remote, root_commits)
 }
 
 fn aliases_from_evidence(
     root: &Path,
-    remotes: BTreeSet<String>,
+    remote: Option<String>,
     mut root_commits: Vec<String>,
 ) -> Vec<String> {
     let mut aliases = BTreeSet::new();
-    if remotes.is_empty() {
+    if let Some(remote) = remote {
+        aliases.insert(opaque_alias("git_remote", remote.as_str()));
+    } else {
         root_commits.sort_unstable();
         root_commits.dedup();
         if !root_commits.is_empty() {
             aliases.insert(opaque_alias("git_roots", root_commits.join("\n").as_str()));
         }
-    } else {
-        aliases.extend(
-            remotes
-                .into_iter()
-                .map(|remote| opaque_alias("git_remote", remote.as_str())),
-        );
     }
     aliases.insert(opaque_alias(
         "path",
         normalized_path_material(root).as_str(),
     ));
     aliases.into_iter().collect()
+}
+
+fn preferred_remote(remotes: BTreeMap<String, String>) -> Option<String> {
+    if let Some(origin) = remotes
+        .get("origin")
+        .and_then(|remote| canonicalize_git_remote_url(remote))
+    {
+        return Some(origin);
+    }
+    remotes
+        .into_iter()
+        .find_map(|(_, remote)| canonicalize_git_remote_url(remote.as_str()))
 }
 
 fn opaque_alias(kind: &str, material: &str) -> String {

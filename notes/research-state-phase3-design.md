@@ -20,18 +20,19 @@ Phase 3 不是简单地把会话内对象序列化到磁盘，而是让项目研
 
 Git 项目的证据优先级：
 
-1. canonical Git remote。
+1. canonical `origin` Git remote；没有 `origin` 时使用按名称排序后的第一个有效 remote。
 2. 无 remote 时使用所有 root commit 组成的 repository fingerprint。
 3. canonical workspace root 作为本机连续性别名。
 
 规则：
 
-- 有 remote：使用 remote aliases 与 path alias。
+- 有 remote：只使用一个首选 remote alias 与 path alias，不把共享 `upstream` 当成独立项目身份。
 - 无 remote 的 Git 仓库：使用 repository fingerprint alias 与 path alias。
 - 非 Git 目录：使用 path alias。
 - 所有 alias material 先通过 UUID v5 转成不透明值，数据库不保存 remote URL 或工作区绝对路径原文。
 - 同一个 alias 已存在时复用原 `project_id`，并把本次发现的新 aliases 绑定进去。
 - 多个 aliases 意外指向不同项目时返回明确冲突，不静默合并状态。
+- 每次成功解析后刷新 remote/root 强别名，删除已经不属于当前 checkout 的旧强别名。
 
 由此得到：
 
