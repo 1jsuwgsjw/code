@@ -542,10 +542,12 @@ UI 只消费状态投影和事件，不为动画、展开或颜色效果修改�
 - app-server 的 `turn/researchState/updated` 投影。
 - 最小 Research State TUI 历史单元。
 - research-state 结构化日志字段。
+- Phase 2 GitHub Actions 全部定向测试和 Windows 构建通过。
+- Phase 2 自定义 EXE 已安装到 `D:\codex-bin\codex-custom.exe`。
 
 尚未完成：
 
-- Phase 2 代码的 GitHub Actions 编译、测试和新 EXE 运行时复验。
+- Phase 2 新 EXE 的 revision、changed、entry_count 与 TUI 运行时复验。
 - 持久化。
 - 项目身份。
 - 上下文投影与缓存。
