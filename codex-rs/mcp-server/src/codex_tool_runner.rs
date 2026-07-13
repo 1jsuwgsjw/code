@@ -351,6 +351,7 @@ async fn run_codex_tool_session_inner(
                     | EventMsg::WebSearchBegin(_)
                     | EventMsg::WebSearchEnd(_)
                     | EventMsg::PlanUpdate(_)
+                    | EventMsg::ResearchStateUpdated(_)
                     | EventMsg::TurnAborted(_)
                     | EventMsg::UserMessage(_)
                     | EventMsg::ShutdownComplete
