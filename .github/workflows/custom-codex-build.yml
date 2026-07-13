@@ -31,23 +31,23 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
-        with:
-          tool: nextest
-          version: 0.9.103
-
       - name: Check formatting
         run: cargo fmt -- --config imports_granularity=Item --check
 
       - name: Test research-state crate
-        run: just test -p codex-research-state
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-research-state
 
       - name: Test protocol crate
-        run: just test -p codex-protocol
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-protocol
 
       - name: Test core plan integration
-        run: just test -p codex-core plan
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-core plan
 
   build-windows:
     name: Build custom codex.exe
