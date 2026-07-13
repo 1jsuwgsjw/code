@@ -544,10 +544,14 @@ UI 只消费状态投影和事件，不为动画、展开或颜色效果修改�
 - research-state 结构化日志字段。
 - Phase 2 GitHub Actions 全部定向测试和 Windows 构建通过。
 - Phase 2 自定义 EXE 已安装到 `D:\codex-bin\codex-custom.exe`。
+- Phase 2 真实 EXE 运行时三段验收通过：
+  - 首次 upsert：revision 1、changed true。
+  - 幂等重复 upsert：revision 1、changed false。
+  - set_status supported：revision 2、changed true。
+- 独立 Research State TUI、状态符号和有界工具结果均已验证。
 
 尚未完成：
 
-- Phase 2 新 EXE 的 revision、changed、entry_count 与 TUI 运行时复验。
 - 持久化。
 - 项目身份。
 - 上下文投影与缓存。
@@ -568,15 +572,15 @@ UI 只消费状态投影和事件，不为动画、展开或颜色效果修改�
 
 ## 17. 下一步唯一优先事项
 
-先完成 Phase 2 验收，不提前进入持久化或上下文投影：
+Phase 2 已完成。现在进入 Phase 3，但不提前进入上下文投影：
 
-1. 推送 Phase 2 实现并运行自定义 GitHub Actions。
-2. 验证 research-state、protocol、core、app-server-protocol、app-server 和 TUI 定向测试。
-3. 下载新 Windows EXE。
-4. 在真实会话中调用 `upsert -> set_status`。
-5. 确认工具结果显示 revision、changed 和 entry_count。
-6. 确认 TUI 显示独立 Research State 单元。
-7. 确认幂等重复调用返回 `changed: false` 且 revision 不增加。
-8. 记录 Phase 2 基线后再进入 Phase 3 项目身份与持久化。
+1. 定义稳定 `project_id`，覆盖 Git、无 Git、项目移动和 worktree 边界。
+2. 在 `codex-state` 增加 append-only research events 与 materialized projection。
+3. 保持 reducer 为唯一状态规则来源，数据库层不复制业务判断。
+4. 会话启动时恢复项目研究状态。
+5. 成功 delta 在同一事务中写入事件和投影。
+6. 处理 revision 并发冲突和幂等重放。
+7. 验证关闭 Codex、重新启动后 project scope 恢复，task scope 不错误泄漏。
+8. Phase 3 基线通过后再进入有界上下文投影。
 
-Phase 2 基线未通过前，不进入 Phase 3。
+Phase 3 基线未通过前，不进入 Phase 4。
