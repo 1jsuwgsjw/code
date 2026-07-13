@@ -37,9 +37,27 @@ pub enum ResearchStateError {
     MissingStatus { id: String },
     #[error("research entry `{id}` does not exist in scope `{scope:?}`")]
     EntryNotFound { id: String, scope: ResearchScope },
+    #[error("research snapshot contains duplicate entry `{id}` in scope `{scope:?}`")]
+    DuplicateEntry { id: String, scope: ResearchScope },
+    #[error("research projection expected scope `{expected:?}` but received `{actual:?}`")]
+    UnexpectedScope {
+        expected: ResearchScope,
+        actual: ResearchScope,
+    },
 }
 
 impl ResearchState {
+    pub fn from_snapshot(snapshot: ResearchStateSnapshot) -> Result<Self, ResearchStateError> {
+        let mut entries = BTreeMap::new();
+        for entry in snapshot.entries {
+            insert_entry(&mut entries, entry)?;
+        }
+        Ok(Self {
+            revision: snapshot.revision,
+            entries,
+        })
+    }
+
     pub fn revision(&self) -> u64 {
         self.revision
     }
@@ -64,18 +82,75 @@ impl ResearchState {
             apply_delta(&mut next_entries, delta)?;
         }
 
+        Ok(self.commit_entries(next_entries))
+    }
+
+    /// Replace the durable project projection and apply task-local deltas as
+    /// one visible session-state transaction.
+    pub fn apply_project_projection(
+        &mut self,
+        project_entries: Vec<ResearchEntry>,
+        task_deltas: &[ResearchDelta],
+    ) -> Result<ResearchStateUpdate, ResearchStateError> {
+        let mut next_entries = self.entries.clone();
+        next_entries.retain(|key, _| key.scope != ResearchScope::Project);
+        for entry in project_entries {
+            if entry.scope != ResearchScope::Project {
+                return Err(ResearchStateError::UnexpectedScope {
+                    expected: ResearchScope::Project,
+                    actual: entry.scope,
+                });
+            }
+            insert_entry(&mut next_entries, entry)?;
+        }
+        for delta in task_deltas {
+            if delta.scope != ResearchScope::Task {
+                return Err(ResearchStateError::UnexpectedScope {
+                    expected: ResearchScope::Task,
+                    actual: delta.scope,
+                });
+            }
+            apply_delta(&mut next_entries, delta)?;
+        }
+
+        Ok(self.commit_entries(next_entries))
+    }
+
+    fn commit_entries(
+        &mut self,
+        next_entries: BTreeMap<ResearchEntryKey, ResearchEntry>,
+    ) -> ResearchStateUpdate {
         let changed = next_entries != self.entries;
         if changed {
             self.entries = next_entries;
             self.revision = self.revision.saturating_add(1);
         }
 
-        Ok(ResearchStateUpdate {
+        ResearchStateUpdate {
             revision: self.revision,
             changed,
             entries: self.entries(),
-        })
+        }
     }
+}
+
+fn insert_entry(
+    entries: &mut BTreeMap<ResearchEntryKey, ResearchEntry>,
+    entry: ResearchEntry,
+) -> Result<(), ResearchStateError> {
+    let id = entry.id.trim().to_string();
+    if id.is_empty() {
+        return Err(ResearchStateError::EmptyId);
+    }
+    let scope = entry.scope;
+    let key = ResearchEntryKey {
+        scope,
+        id: id.clone(),
+    };
+    if entries.insert(key, entry).is_some() {
+        return Err(ResearchStateError::DuplicateEntry { id, scope });
+    }
+    Ok(())
 }
 
 fn apply_delta(

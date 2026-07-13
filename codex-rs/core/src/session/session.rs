@@ -20,7 +20,8 @@ use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TurnEnvironmentSelections;
 use codex_research_state::ResearchDelta;
-use codex_research_state::ResearchStateError;
+use codex_research_state::ResearchScope;
+use codex_research_state::ResearchState;
 use codex_research_state::ResearchStateUpdate;
 use std::sync::OnceLock;
 use tokio::sync::Semaphore;
@@ -466,8 +467,36 @@ impl Session {
     pub(crate) async fn apply_research_delta(
         &self,
         deltas: &[ResearchDelta],
-    ) -> std::result::Result<ResearchStateUpdate, ResearchStateError> {
-        self.state.lock().await.research_state.apply(deltas)
+    ) -> anyhow::Result<ResearchStateUpdate> {
+        let Some(state_db) = self.services.state_db.as_ref() else {
+            return Ok(self.state.lock().await.research_state.apply(deltas)?);
+        };
+        let Some(project_id) = self.services.research_project_id.as_deref() else {
+            return Ok(self.state.lock().await.research_state.apply(deltas)?);
+        };
+        let project_deltas = deltas
+            .iter()
+            .filter(|delta| delta.scope == ResearchScope::Project)
+            .cloned()
+            .collect::<Vec<_>>();
+        if project_deltas.is_empty() {
+            return Ok(self.state.lock().await.research_state.apply(deltas)?);
+        }
+        let task_deltas = deltas
+            .iter()
+            .filter(|delta| delta.scope == ResearchScope::Task)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let mut state = self.state.lock().await;
+        let mut task_validation = state.research_state.clone();
+        task_validation.apply(&task_deltas)?;
+        let project_update = state_db
+            .apply_research_project_deltas(project_id, &project_deltas)
+            .await?;
+        Ok(state
+            .research_state
+            .apply_project_projection(project_update.entries, &task_deltas)?)
     }
 
     /// Returns the concrete identity for this thread.
@@ -676,6 +705,21 @@ impl Session {
             otel.name = "session_init.state_db",
             session_init.ephemeral = config.ephemeral,
         ));
+        let research_project_aliases_fut = async {
+            if config.ephemeral {
+                Vec::new()
+            } else {
+                crate::research_project::discover_research_project_aliases(
+                    session_configuration.cwd().as_path(),
+                )
+                .await
+            }
+        }
+        .instrument(info_span!(
+            "session_init.research_project_identity",
+            otel.name = "session_init.research_project_identity",
+            session_init.ephemeral = config.ephemeral,
+        ));
 
         let auth_manager_clone = Arc::clone(&auth_manager);
         let config_for_mcp = Arc::clone(&config);
@@ -731,8 +775,14 @@ impl Session {
         let (
             thread_persistence_result,
             state_db_ctx,
+            research_project_aliases,
             (auth, mcp_projection, mcp_servers, auth_statuses, tool_plugin_provenance),
-        ) = tokio::join!(thread_persistence_fut, state_db_fut, auth_and_mcp_fut);
+        ) = tokio::join!(
+            thread_persistence_fut,
+            state_db_fut,
+            research_project_aliases_fut,
+            auth_and_mcp_fut
+        );
 
         let mut live_thread_init =
             LiveThreadInitGuard::new(thread_persistence_result.map_err(|e| {
@@ -740,6 +790,38 @@ impl Session {
                 e
             })?);
         let session_result: anyhow::Result<Arc<Self>> = async {
+            let (research_project_id, restored_research_state) =
+                if let Some(state_db) = state_db_ctx.as_ref()
+                    && !research_project_aliases.is_empty()
+                {
+                    match state_db
+                        .resolve_research_project(&research_project_aliases)
+                        .await
+                    {
+                        Ok(project) => match state_db
+                            .load_research_project_snapshot(project.project_id.as_str())
+                            .await
+                        {
+                            Ok(snapshot) => match ResearchState::from_snapshot(snapshot) {
+                                Ok(state) => (Some(project.project_id), Some(state)),
+                                Err(err) => {
+                                    warn!("failed to restore research project state: {err}");
+                                    (None, None)
+                                }
+                            },
+                            Err(err) => {
+                                warn!("failed to load research project state: {err:#}");
+                                (None, None)
+                            }
+                        },
+                        Err(err) => {
+                            warn!("failed to resolve research project identity: {err:#}");
+                            (None, None)
+                        }
+                    }
+                } else {
+                    (None, None)
+                };
             let rollout_path = if let Some(live_thread) = live_thread_init.as_ref() {
                 live_thread.local_rollout_path().await?
             } else {
@@ -948,10 +1030,13 @@ impl Session {
             session_configuration.thread_name = thread_name.clone();
             validate_config_lock_if_configured(&session_configuration).await?;
             export_config_lock_if_configured(&session_configuration, thread_id).await?;
-            let state = SessionState::new_with_auto_compact_window_ids(
+            let mut state = SessionState::new_with_auto_compact_window_ids(
                 session_configuration.clone(),
                 initial_auto_compact_window_ids,
             );
+            if let Some(restored_research_state) = restored_research_state {
+                state.research_state = restored_research_state;
+            }
             let managed_network_requirements_configured = config
                 .config_layer_stack
                 .requirements_toml()
@@ -1108,6 +1193,7 @@ impl Session {
                 managed_network_requirements_configured,
                 network_approval: Arc::clone(&network_approval),
                 state_db: state_db_ctx.clone(),
+                research_project_id,
                 live_thread: live_thread_init.as_ref().cloned(),
                 thread_store: Arc::clone(&thread_store),
                 attestation_provider: attestation_provider.clone(),

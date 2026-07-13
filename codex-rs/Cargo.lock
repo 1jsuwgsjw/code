@@ -4013,6 +4013,7 @@ dependencies = [
  "clap",
  "codex-git-utils",
  "codex-protocol",
+ "codex-research-state",
  "dirs",
  "libsqlite3-sys",
  "log",

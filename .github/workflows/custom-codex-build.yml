@@ -43,6 +43,16 @@ jobs:
           RUST_MIN_STACK: 8388608
         run: cargo test --locked -p codex-research-state
 
+      - name: Test research persistence
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-state runtime::research::tests
+
+      - name: Test Git project identity evidence
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-git-utils root_commit_hashes_are_stable_after_new_commits
+
       - name: Test protocol crate
         env:
           RUST_MIN_STACK: 8388608

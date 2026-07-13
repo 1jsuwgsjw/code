@@ -110,3 +110,52 @@ fn snapshot_is_a_stable_read_only_projection() {
     assert_eq!(snapshot.entries[0].status, ResearchStatus::Open);
     assert_eq!(snapshot, state.snapshot());
 }
+
+#[test]
+fn snapshot_restoration_preserves_revision_and_entries() {
+    let snapshot = ResearchStateSnapshot {
+        revision: 7,
+        entries: vec![ResearchEntry {
+            id: "theme".to_string(),
+            scope: ResearchScope::Project,
+            kind: ResearchEntryKind::Fact,
+            subject: "theme".to_string(),
+            statement: "Theme is persisted".to_string(),
+            status: ResearchStatus::Supported,
+        }],
+    };
+
+    let state = ResearchState::from_snapshot(snapshot.clone()).expect("restore snapshot");
+
+    assert_eq!(state.snapshot(), snapshot);
+}
+
+#[test]
+fn project_projection_and_task_delta_commit_once() {
+    let mut state = ResearchState::default();
+    let update = state
+        .apply_project_projection(
+            vec![ResearchEntry {
+                id: "project-theme".to_string(),
+                scope: ResearchScope::Project,
+                kind: ResearchEntryKind::Decision,
+                subject: "theme".to_string(),
+                statement: "Use a durable project projection".to_string(),
+                status: ResearchStatus::Supported,
+            }],
+            &[ResearchDelta {
+                operation: ResearchOperation::Upsert,
+                id: "task-check".to_string(),
+                scope: ResearchScope::Task,
+                kind: Some(ResearchEntryKind::Unknown),
+                subject: Some("runtime".to_string()),
+                statement: Some("Verify the current executable".to_string()),
+                status: Some(ResearchStatus::Open),
+            }],
+        )
+        .expect("merge project and task state");
+
+    assert_eq!(update.revision, 1);
+    assert!(update.changed);
+    assert_eq!(update.entries.len(), 2);
+}

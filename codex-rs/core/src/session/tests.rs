@@ -5527,6 +5527,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         managed_network_requirements_configured: false,
         network_approval: Arc::clone(&network_approval),
         state_db: None,
+        research_project_id: None,
         live_thread: None,
         thread_store: Arc::new(codex_thread_store::LocalThreadStore::new(
             codex_thread_store::LocalThreadStoreConfig::from_config(config.as_ref()),
@@ -7658,6 +7659,7 @@ where
         managed_network_requirements_configured: false,
         network_approval: Arc::clone(&network_approval),
         state_db: state_db.clone(),
+        research_project_id: None,
         live_thread: None,
         thread_store: Arc::new(codex_thread_store::LocalThreadStore::new(
             codex_thread_store::LocalThreadStoreConfig::from_config(config.as_ref()),

@@ -186,6 +186,30 @@ pub async fn get_head_commit_hash(cwd: &Path) -> Option<GitSha> {
     }
 }
 
+/// Return every root commit reachable from local refs, sorted by hash.
+///
+/// Unlike `HEAD`, this set remains stable across ordinary commits, branches,
+/// repository moves, and worktrees. Callers can use it as fallback identity
+/// evidence for repositories that do not have a remote.
+pub async fn get_git_root_commit_hashes(cwd: &Path) -> Option<Vec<GitSha>> {
+    let output =
+        run_git_command_with_timeout(&["rev-list", "--max-parents=0", "--all"], cwd).await?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let mut hashes = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|hash| !hash.is_empty())
+        .map(GitSha::new)
+        .collect::<Vec<_>>();
+    hashes.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+    hashes.dedup_by(|left, right| left.0 == right.0);
+    (!hashes.is_empty()).then_some(hashes)
+}
+
 pub fn canonicalize_git_remote_url(url: &str) -> Option<String> {
     let url = trim_git_suffix(url.trim().trim_end_matches('/'));
     if url.is_empty() {
@@ -985,6 +1009,50 @@ mod tests {
             local_git_branches(repo).await,
             vec!["main".to_string(), "feature/local".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn root_commit_hashes_are_stable_after_new_commits() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let repo = temp_dir.path();
+        let run_git = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(repo)
+                .status()
+                .expect("run Git command");
+            assert_eq!(status.code(), Some(0), "Git command failed: {args:?}");
+        };
+
+        run_git(&["init", "-q", "--initial-branch=main"]);
+        run_git(&[
+            "-c",
+            "user.name=Codex Tests",
+            "-c",
+            "user.email=codex-tests@example.com",
+            "commit",
+            "--allow-empty",
+            "-q",
+            "-m",
+            "initial",
+        ]);
+        let initial = get_git_root_commit_hashes(repo)
+            .await
+            .expect("read root commits");
+
+        run_git(&[
+            "-c",
+            "user.name=Codex Tests",
+            "-c",
+            "user.email=codex-tests@example.com",
+            "commit",
+            "--allow-empty",
+            "-q",
+            "-m",
+            "second",
+        ]);
+
+        assert_eq!(get_git_root_commit_hashes(repo).await, Some(initial));
     }
 
     #[cfg(unix)]
