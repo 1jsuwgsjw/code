@@ -201,4 +201,16 @@ codex-rs/tui/src/history_cell/plans.rs
 - 研究状态暂存在 `SessionState`，尚未持久化或注入模型上下文。
 - app-server 和 TUI 继续兼容原有计划投影，暂不展示研究状态。
 
-下一阶段应先完成项目身份、持久化与有界上下文投影，再做知识提升和独立 UI。
+Phase 1 已经通过 GitHub Actions 编译测试和真实 EXE 的会话内
+`upsert -> set_status` 冒烟测试。
+
+Phase 2 当前增加：
+
+- 只读 `ResearchStateSnapshot`。
+- 有界工具结果摘要，不把完整状态回灌模型上下文。
+- 独立 `ResearchStateUpdated` 事件。
+- app-server `turn/researchState/updated` 通知。
+- 最小 Research State TUI 展示。
+- revision、changed、entry_count 日志和测试。
+
+Phase 2 通过真实构建与运行时复验后，再进入项目身份、持久化和有界上下文投影。

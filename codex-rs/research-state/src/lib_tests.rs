@@ -95,3 +95,18 @@ fn status_updates_and_removals_are_idempotent() {
     assert!(!repeated_remove.changed);
     assert!(state.entries().is_empty());
 }
+
+#[test]
+fn snapshot_is_a_stable_read_only_projection() {
+    let mut state = ResearchState::default();
+    state
+        .apply(&[upsert("theme", "Theme may be a reusable dimension")])
+        .expect("upsert should apply");
+
+    let snapshot = state.snapshot();
+    assert_eq!(snapshot.revision, 1);
+    assert_eq!(snapshot.entries.len(), 1);
+    assert_eq!(snapshot.entries[0].id, "theme");
+    assert_eq!(snapshot.entries[0].status, ResearchStatus::Open);
+    assert_eq!(snapshot, state.snapshot());
+}

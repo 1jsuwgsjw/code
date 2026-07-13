@@ -9,6 +9,7 @@ use crate::tools::registry::ToolExecutor;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseInputItem;
+use codex_protocol::plan_tool::ResearchStateUpdate;
 use codex_protocol::plan_tool::UpdatePlanArgs;
 use codex_protocol::protocol::EventMsg;
 use codex_tools::ToolName;
@@ -17,13 +18,34 @@ use serde_json::Value as JsonValue;
 
 pub struct PlanHandler;
 
-pub struct PlanToolOutput;
+pub struct PlanToolOutput {
+    research_update: Option<ResearchStateUpdate>,
+}
 
 const PLAN_UPDATED_MESSAGE: &str = "Plan updated";
 
+impl PlanToolOutput {
+    fn response_message(&self) -> String {
+        let Some(update) = &self.research_update else {
+            return PLAN_UPDATED_MESSAGE.to_string();
+        };
+        let change = if update.changed {
+            "changed"
+        } else {
+            "unchanged"
+        };
+        let entry_count = update.entries.len();
+        let entry_label = if entry_count == 1 { "entry" } else { "entries" };
+        format!(
+            "{PLAN_UPDATED_MESSAGE}; research state revision {} ({change}, {entry_count} {entry_label})",
+            update.revision
+        )
+    }
+}
+
 impl ToolOutput for PlanToolOutput {
     fn log_preview(&self) -> String {
-        PLAN_UPDATED_MESSAGE.to_string()
+        self.response_message()
     }
 
     fn success_for_logging(&self) -> bool {
@@ -31,7 +53,7 @@ impl ToolOutput for PlanToolOutput {
     }
 
     fn to_response_item(&self, call_id: &str, _payload: &ToolPayload) -> ResponseInputItem {
-        let mut output = FunctionCallOutputPayload::from_text(PLAN_UPDATED_MESSAGE.to_string());
+        let mut output = FunctionCallOutputPayload::from_text(self.response_message());
         output.success = Some(true);
 
         ResponseInputItem::FunctionCallOutput {
@@ -41,7 +63,16 @@ impl ToolOutput for PlanToolOutput {
     }
 
     fn code_mode_result(&self, _payload: &ToolPayload) -> JsonValue {
-        JsonValue::Object(serde_json::Map::new())
+        let Some(update) = &self.research_update else {
+            return JsonValue::Object(serde_json::Map::new());
+        };
+        serde_json::json!({
+            "research_state": {
+                "revision": update.revision,
+                "changed": update.changed,
+                "entry_count": update.entries.len(),
+            }
+        })
     }
 }
 
@@ -88,17 +119,37 @@ impl PlanHandler {
         }
 
         let args = parse_update_plan_arguments(&arguments)?;
-        if let Some(research_delta) = args.research_delta.as_deref() {
-            session
+        let research_update = if let Some(research_delta) = args.research_delta.as_deref() {
+            let update = session
                 .apply_research_delta(research_delta)
                 .await
                 .map_err(|err| FunctionCallError::RespondToModel(err.to_string()))?;
-        }
+            tracing::info!(
+                target: "codex_research_state",
+                revision = update.revision,
+                changed = update.changed,
+                entry_count = update.entries.len(),
+                delta_count = research_delta.len(),
+                "research state delta applied"
+            );
+            Some(update)
+        } else {
+            None
+        };
         session
             .send_event(turn.as_ref(), EventMsg::PlanUpdate(args))
             .await;
 
-        Ok(boxed_tool_output(PlanToolOutput))
+        if let Some(update) = research_update.as_ref() {
+            session
+                .send_event(
+                    turn.as_ref(),
+                    EventMsg::ResearchStateUpdated(update.clone()),
+                )
+                .await;
+        }
+
+        Ok(boxed_tool_output(PlanToolOutput { research_update }))
     }
 }
 

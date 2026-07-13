@@ -2261,6 +2261,32 @@ fn plan_update_does_not_split_url_like_tokens_in_note_or_step() {
 }
 
 #[test]
+fn research_state_update_renders_revision_and_entries() {
+    let cell = new_research_state_update(
+        codex_app_server_protocol::TurnResearchStateUpdatedNotification {
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            revision: 2,
+            changed: true,
+            entries: vec![codex_app_server_protocol::TurnResearchStateEntry {
+                id: "runtime-smoke-research".to_string(),
+                scope: codex_app_server_protocol::TurnResearchScope::Task,
+                kind: codex_app_server_protocol::TurnResearchEntryKind::Hypothesis,
+                subject: "research-state runtime".to_string(),
+                statement: "The native plan tool accepts bounded research deltas".to_string(),
+                status: codex_app_server_protocol::TurnResearchStatus::Supported,
+            }],
+        },
+    );
+
+    let rendered = render_lines(&cell.display_lines(60)).join("\n");
+    assert!(rendered.contains("Research State · rev 2"));
+    assert!(rendered.contains("Hypothesis"));
+    assert!(rendered.contains("[task · supported]"));
+    assert!(rendered.contains("native plan tool accepts"));
+}
+
+#[test]
 fn reasoning_summary_block() {
     let cell = new_reasoning_summary_block(
         vec!["**High level reasoning**\n\nDetailed reasoning goes here.".to_string()],

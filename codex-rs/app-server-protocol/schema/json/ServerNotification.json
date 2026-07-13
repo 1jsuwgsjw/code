@@ -5398,6 +5398,100 @@
       ],
       "type": "object"
     },
+    "TurnResearchEntryKind": {
+      "enum": [
+        "fact",
+        "constraint",
+        "goal",
+        "unknown",
+        "hypothesis",
+        "exploration",
+        "decision",
+        "futurePressure",
+        "outcome"
+      ],
+      "type": "string"
+    },
+    "TurnResearchScope": {
+      "enum": [
+        "task",
+        "project"
+      ],
+      "type": "string"
+    },
+    "TurnResearchStateEntry": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/TurnResearchEntryKind"
+        },
+        "scope": {
+          "$ref": "#/definitions/TurnResearchScope"
+        },
+        "statement": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/TurnResearchStatus"
+        },
+        "subject": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "kind",
+        "subject",
+        "statement",
+        "status"
+      ],
+      "type": "object"
+    },
+    "TurnResearchStateUpdatedNotification": {
+      "properties": {
+        "changed": {
+          "type": "boolean"
+        },
+        "entries": {
+          "items": {
+            "$ref": "#/definitions/TurnResearchStateEntry"
+          },
+          "type": "array"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId",
+        "turnId",
+        "revision",
+        "changed",
+        "entries"
+      ],
+      "type": "object"
+    },
+    "TurnResearchStatus": {
+      "enum": [
+        "open",
+        "supported",
+        "rejected",
+        "resolved",
+        "superseded"
+      ],
+      "type": "string"
+    },
     "TurnStartedNotification": {
       "properties": {
         "threadId": {
@@ -6118,6 +6212,26 @@
         "params"
       ],
       "title": "Turn/plan/updatedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "turn/researchState/updated"
+          ],
+          "title": "Turn/researchState/updatedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/TurnResearchStateUpdatedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "Turn/researchState/updatedNotification",
       "type": "object"
     },
     {

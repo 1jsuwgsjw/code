@@ -88,3 +88,32 @@ pub struct ResearchDelta {
     #[serde(default)]
     pub status: Option<ResearchStatus>,
 }
+
+/// Current materialized value of one research-state entry.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ResearchEntry {
+    pub id: String,
+    pub scope: ResearchScope,
+    pub kind: ResearchEntryKind,
+    pub subject: String,
+    pub statement: String,
+    pub status: ResearchStatus,
+}
+
+/// Read-only materialized research state for a session.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ResearchStateSnapshot {
+    pub revision: u64,
+    pub entries: Vec<ResearchEntry>,
+}
+
+/// Result of transactionally applying a research-state delta batch.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ResearchStateUpdate {
+    pub revision: u64,
+    pub changed: bool,
+    pub entries: Vec<ResearchEntry>,
+}

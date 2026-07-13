@@ -533,41 +533,48 @@ UI 只消费状态投影和事件，不为动画、展开或颜色效果修改�
 - 旧 TUI/app-server 兼容字段处理。
 - 单元测试与 Schema/解析测试源码。
 - 格式化与 workspace metadata 验证。
+- GitHub Actions Linux 测试与 Windows 自定义 EXE 构建。
+- 自定义 EXE 的真实 `upsert -> set_status` 会话连续性验证。
+- Phase 1 基线验收通过。
+- Phase 2 只读 `ResearchStateSnapshot` API。
+- 工具结果的有界 `revision / changed / entry_count` 摘要。
+- 独立 `ResearchStateUpdated` 核心事件。
+- app-server 的 `turn/researchState/updated` 投影。
+- 最小 Research State TUI 历史单元。
+- research-state 结构化日志字段。
 
 尚未完成：
 
-- 实际 Rust 编译与测试通过。
-- 可观测 snapshot/revision 输出。
-- 独立研究状态事件。
-- TUI 展示。
+- Phase 2 代码的 GitHub Actions 编译、测试和新 EXE 运行时复验。
 - 持久化。
 - 项目身份。
 - 上下文投影与缓存。
 - stakeholder/domain/global。
 - 知识提升与评价。
 
-## 16. 当前环境阻塞
+## 16. 当前环境与验证路径
 
 当前 Windows 环境：
 
-- 没有 WSL Linux 发行版。
-- 没有 Docker/Podman。
 - 原生 Rust MSVC 缺少 `link.exe` 和 Visual C++ Build Tools。
-- Workspace Git 依赖下载曾发生超时。
+- 本地 `cargo metadata` 和 `cargo fmt` 可运行。
+- 本地完整 `cargo check/test` 会在需要链接 build script 时受 MSVC 缺失阻塞。
+- GitHub 仓库已经公开，标准 GitHub-hosted runners 可用于测试和构建。
+- Windows `dev-small` 构建和 Cargo target 缓存已经建立。
 
-仓库官方构建说明优先支持 Windows 11 via WSL2。因此在继续扩大改动前，应先建立可重复的 WSL2 测试环境，完成当前 Phase 1 的真实编译与测试。
+因此当前采用 GitHub Actions 作为真实编译测试基线，本地负责格式化、metadata、diff 和轻量静态检查。该路径已经完成 Phase 1 验证，不再阻塞 Phase 2。
 
 ## 17. 下一步唯一优先事项
 
-在继续持久化、上下文投影或 UI 之前：
+先完成 Phase 2 验收，不提前进入持久化或上下文投影：
 
-1. 建立受支持的 Rust/WSL2 构建环境。
-2. 运行 `just fmt`。
-3. 运行 `just test -p codex-research-state`。
-4. 运行 `just test -p codex-protocol` 或对应定向测试。
-5. 运行 `just test -p codex-core` 的计划工具相关测试。
-6. 修复所有编译、TS、Schema 和集成问题。
-7. 记录 Phase 1 基线测试结果。
+1. 推送 Phase 2 实现并运行自定义 GitHub Actions。
+2. 验证 research-state、protocol、core、app-server-protocol、app-server 和 TUI 定向测试。
+3. 下载新 Windows EXE。
+4. 在真实会话中调用 `upsert -> set_status`。
+5. 确认工具结果显示 revision、changed 和 entry_count。
+6. 确认 TUI 显示独立 Research State 单元。
+7. 确认幂等重复调用返回 `changed: false` 且 revision 不增加。
+8. 记录 Phase 2 基线后再进入 Phase 3 项目身份与持久化。
 
-基线未通过前，不进入 Phase 2。
-
+Phase 2 基线未通过前，不进入 Phase 3。

@@ -10,6 +10,10 @@ use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::models::ImageDetail;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::plan_tool::PlanItemArg as CorePlanItemArg;
+use codex_protocol::plan_tool::ResearchEntry as CoreResearchEntry;
+use codex_protocol::plan_tool::ResearchEntryKind as CoreResearchEntryKind;
+use codex_protocol::plan_tool::ResearchScope as CoreResearchScope;
+use codex_protocol::plan_tool::ResearchStatus as CoreResearchStatus;
 use codex_protocol::plan_tool::StepStatus as CorePlanStepStatus;
 use codex_protocol::user_input::ByteRange as CoreByteRange;
 use codex_protocol::user_input::TextElement as CoreTextElement;
@@ -418,6 +422,63 @@ pub struct TurnPlanUpdatedNotification {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct TurnResearchStateUpdatedNotification {
+    pub thread_id: String,
+    pub turn_id: String,
+    pub revision: u64,
+    pub changed: bool,
+    pub entries: Vec<TurnResearchStateEntry>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct TurnResearchStateEntry {
+    pub id: String,
+    pub scope: TurnResearchScope,
+    pub kind: TurnResearchEntryKind,
+    pub subject: String,
+    pub statement: String,
+    pub status: TurnResearchStatus,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum TurnResearchScope {
+    Task,
+    Project,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum TurnResearchEntryKind {
+    Fact,
+    Constraint,
+    Goal,
+    Unknown,
+    Hypothesis,
+    Exploration,
+    Decision,
+    FuturePressure,
+    Outcome,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum TurnResearchStatus {
+    Open,
+    Supported,
+    Rejected,
+    Resolved,
+    Superseded,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct TurnPlanStep {
     pub step: String,
     pub status: TurnPlanStepStatus,
@@ -447,6 +508,56 @@ impl From<CorePlanStepStatus> for TurnPlanStepStatus {
             CorePlanStepStatus::Pending => Self::Pending,
             CorePlanStepStatus::InProgress => Self::InProgress,
             CorePlanStepStatus::Completed => Self::Completed,
+        }
+    }
+}
+
+impl From<CoreResearchEntry> for TurnResearchStateEntry {
+    fn from(value: CoreResearchEntry) -> Self {
+        Self {
+            id: value.id,
+            scope: value.scope.into(),
+            kind: value.kind.into(),
+            subject: value.subject,
+            statement: value.statement,
+            status: value.status.into(),
+        }
+    }
+}
+
+impl From<CoreResearchScope> for TurnResearchScope {
+    fn from(value: CoreResearchScope) -> Self {
+        match value {
+            CoreResearchScope::Task => Self::Task,
+            CoreResearchScope::Project => Self::Project,
+        }
+    }
+}
+
+impl From<CoreResearchEntryKind> for TurnResearchEntryKind {
+    fn from(value: CoreResearchEntryKind) -> Self {
+        match value {
+            CoreResearchEntryKind::Fact => Self::Fact,
+            CoreResearchEntryKind::Constraint => Self::Constraint,
+            CoreResearchEntryKind::Goal => Self::Goal,
+            CoreResearchEntryKind::Unknown => Self::Unknown,
+            CoreResearchEntryKind::Hypothesis => Self::Hypothesis,
+            CoreResearchEntryKind::Exploration => Self::Exploration,
+            CoreResearchEntryKind::Decision => Self::Decision,
+            CoreResearchEntryKind::FuturePressure => Self::FuturePressure,
+            CoreResearchEntryKind::Outcome => Self::Outcome,
+        }
+    }
+}
+
+impl From<CoreResearchStatus> for TurnResearchStatus {
+    fn from(value: CoreResearchStatus) -> Self {
+        match value {
+            CoreResearchStatus::Open => Self::Open,
+            CoreResearchStatus::Supported => Self::Supported,
+            CoreResearchStatus::Rejected => Self::Rejected,
+            CoreResearchStatus::Resolved => Self::Resolved,
+            CoreResearchStatus::Superseded => Self::Superseded,
         }
     }
 }

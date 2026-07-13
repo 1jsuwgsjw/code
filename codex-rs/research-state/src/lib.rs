@@ -5,24 +5,15 @@
 //! domain-specific schema.
 
 pub use codex_protocol::plan_tool::ResearchDelta;
+pub use codex_protocol::plan_tool::ResearchEntry;
 pub use codex_protocol::plan_tool::ResearchEntryKind;
 pub use codex_protocol::plan_tool::ResearchOperation;
 pub use codex_protocol::plan_tool::ResearchScope;
+pub use codex_protocol::plan_tool::ResearchStateSnapshot;
+pub use codex_protocol::plan_tool::ResearchStateUpdate;
 pub use codex_protocol::plan_tool::ResearchStatus;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::BTreeMap;
 use thiserror::Error;
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct ResearchEntry {
-    pub id: String,
-    pub scope: ResearchScope,
-    pub kind: ResearchEntryKind,
-    pub subject: String,
-    pub statement: String,
-    pub status: ResearchStatus,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct ResearchEntryKey {
@@ -34,13 +25,6 @@ struct ResearchEntryKey {
 pub struct ResearchState {
     revision: u64,
     entries: BTreeMap<ResearchEntryKey, ResearchEntry>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResearchApplyResult {
-    pub revision: u64,
-    pub changed: bool,
-    pub entries: Vec<ResearchEntry>,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -64,10 +48,17 @@ impl ResearchState {
         self.entries.values().cloned().collect()
     }
 
+    pub fn snapshot(&self) -> ResearchStateSnapshot {
+        ResearchStateSnapshot {
+            revision: self.revision,
+            entries: self.entries(),
+        }
+    }
+
     pub fn apply(
         &mut self,
         deltas: &[ResearchDelta],
-    ) -> Result<ResearchApplyResult, ResearchStateError> {
+    ) -> Result<ResearchStateUpdate, ResearchStateError> {
         let mut next_entries = self.entries.clone();
         for delta in deltas {
             apply_delta(&mut next_entries, delta)?;
@@ -79,7 +70,7 @@ impl ResearchState {
             self.revision = self.revision.saturating_add(1);
         }
 
-        Ok(ResearchApplyResult {
+        Ok(ResearchStateUpdate {
             revision: self.revision,
             changed,
             entries: self.entries(),

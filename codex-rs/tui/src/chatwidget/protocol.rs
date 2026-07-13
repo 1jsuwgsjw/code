@@ -116,6 +116,9 @@ impl ChatWidget {
                     research_delta: None,
                 })
             }
+            ServerNotification::TurnResearchStateUpdated(notification) => {
+                self.on_research_state_update(notification)
+            }
             ServerNotification::HookStarted(notification) => {
                 self.on_hook_started(notification.run);
             }

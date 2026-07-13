@@ -499,6 +499,14 @@ impl ChatWidget {
         self.add_to_history(history_cell::new_plan_update(update));
     }
 
+    pub(super) fn on_research_state_update(
+        &mut self,
+        update: TurnResearchStateUpdatedNotification,
+    ) {
+        self.add_to_history(history_cell::new_research_state_update(update));
+        self.request_redraw();
+    }
+
     pub(super) fn interrupted_turn_message(&self, reason: TurnAbortReason) -> String {
         if reason == TurnAbortReason::BudgetLimited {
             return "Goal budget reached - the turn was stopped.".to_string();

@@ -78,6 +78,8 @@ use codex_app_server_protocol::TurnItemsView;
 use codex_app_server_protocol::TurnModerationMetadataNotification;
 use codex_app_server_protocol::TurnPlanStep;
 use codex_app_server_protocol::TurnPlanUpdatedNotification;
+use codex_app_server_protocol::TurnResearchStateEntry;
+use codex_app_server_protocol::TurnResearchStateUpdatedNotification;
 use codex_app_server_protocol::TurnStartedNotification;
 use codex_app_server_protocol::TurnStatus;
 use codex_app_server_protocol::WarningNotification;
@@ -1165,6 +1167,15 @@ pub(crate) async fn apply_bespoke_event_handling(
             )
             .await;
         }
+        EventMsg::ResearchStateUpdated(research_state_update) => {
+            handle_turn_research_state_update(
+                conversation_id,
+                &event_turn_id,
+                research_state_update,
+                &outgoing,
+            )
+            .await;
+        }
         EventMsg::ShutdownComplete => {
             thread_watch_manager
                 .note_thread_shutdown(&conversation_id.to_string())
@@ -1210,6 +1221,28 @@ async fn handle_turn_plan_update(
     };
     outgoing
         .send_server_notification(ServerNotification::TurnPlanUpdated(notification))
+        .await;
+}
+
+async fn handle_turn_research_state_update(
+    conversation_id: ThreadId,
+    event_turn_id: &str,
+    research_state_update: codex_protocol::plan_tool::ResearchStateUpdate,
+    outgoing: &ThreadScopedOutgoingMessageSender,
+) {
+    let notification = TurnResearchStateUpdatedNotification {
+        thread_id: conversation_id.to_string(),
+        turn_id: event_turn_id.to_string(),
+        revision: research_state_update.revision,
+        changed: research_state_update.changed,
+        entries: research_state_update
+            .entries
+            .into_iter()
+            .map(TurnResearchStateEntry::from)
+            .collect(),
+    };
+    outgoing
+        .send_server_notification(ServerNotification::TurnResearchStateUpdated(notification))
         .await;
 }
 
@@ -3654,6 +3687,56 @@ mod tests {
                 assert_eq!(n.plan[0].status, TurnPlanStepStatus::Pending);
                 assert_eq!(n.plan[1].step, "second");
                 assert_eq!(n.plan[1].status, TurnPlanStepStatus::Completed);
+            }
+            other => bail!("unexpected message: {other:?}"),
+        }
+        assert!(rx.try_recv().is_err(), "no extra messages expected");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_handle_turn_research_state_update_emits_notification_for_v2() -> Result<()> {
+        let (tx, mut rx) = mpsc::channel(CHANNEL_CAPACITY);
+        let outgoing = Arc::new(OutgoingMessageSender::new(
+            tx,
+            codex_analytics::AnalyticsEventsClient::disabled(),
+        ));
+        let outgoing = ThreadScopedOutgoingMessageSender::new(
+            outgoing,
+            vec![ConnectionId(1)],
+            ThreadId::new(),
+        );
+        let update = codex_protocol::plan_tool::ResearchStateUpdate {
+            revision: 3,
+            changed: true,
+            entries: vec![codex_protocol::plan_tool::ResearchEntry {
+                id: "theme".to_string(),
+                scope: codex_protocol::plan_tool::ResearchScope::Project,
+                kind: codex_protocol::plan_tool::ResearchEntryKind::Hypothesis,
+                subject: "theme".to_string(),
+                statement: "Theme may be reusable".to_string(),
+                status: codex_protocol::plan_tool::ResearchStatus::Supported,
+            }],
+        };
+        let conversation_id = ThreadId::new();
+
+        handle_turn_research_state_update(conversation_id, "turn-123", update, &outgoing).await;
+
+        let msg = recv_broadcast_message(&mut rx).await?;
+        match msg {
+            OutgoingMessage::AppServerNotification(
+                ServerNotification::TurnResearchStateUpdated(notification),
+            ) => {
+                assert_eq!(notification.thread_id, conversation_id.to_string());
+                assert_eq!(notification.turn_id, "turn-123");
+                assert_eq!(notification.revision, 3);
+                assert!(notification.changed);
+                assert_eq!(notification.entries.len(), 1);
+                assert_eq!(notification.entries[0].id, "theme");
+                assert_eq!(
+                    notification.entries[0].status,
+                    codex_app_server_protocol::TurnResearchStatus::Supported
+                );
             }
             other => bail!("unexpected message: {other:?}"),
         }

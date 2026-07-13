@@ -1431,6 +1431,9 @@ pub enum EventMsg {
 
     PlanUpdate(UpdatePlanArgs),
 
+    /// Materialized research state after an `update_plan.research_delta` batch.
+    ResearchStateUpdated(crate::plan_tool::ResearchStateUpdate),
+
     TurnAborted(TurnAbortedEvent),
 
     /// Notification that the agent is shutting down.

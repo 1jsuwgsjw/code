@@ -19,9 +19,10 @@ use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TurnEnvironmentSelections;
-use codex_research_state::ResearchApplyResult;
 use codex_research_state::ResearchDelta;
 use codex_research_state::ResearchStateError;
+use codex_research_state::ResearchStateSnapshot;
+use codex_research_state::ResearchStateUpdate;
 use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
@@ -466,8 +467,12 @@ impl Session {
     pub(crate) async fn apply_research_delta(
         &self,
         deltas: &[ResearchDelta],
-    ) -> std::result::Result<ResearchApplyResult, ResearchStateError> {
+    ) -> std::result::Result<ResearchStateUpdate, ResearchStateError> {
         self.state.lock().await.research_state.apply(deltas)
+    }
+
+    pub(crate) async fn research_state_snapshot(&self) -> ResearchStateSnapshot {
+        self.state.lock().await.research_state.snapshot()
     }
 
     /// Returns the concrete identity for this thread.

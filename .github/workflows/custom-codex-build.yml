@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: custom-codex-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-linux:
     name: Test research-state integration
@@ -48,6 +52,21 @@ jobs:
         env:
           RUST_MIN_STACK: 8388608
         run: cargo test --locked -p codex-core plan
+
+      - name: Test app-server research-state protocol
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-app-server-protocol
+
+      - name: Test app-server research-state projection
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-app-server test_handle_turn_research_state_update_emits_notification_for_v2
+
+      - name: Test TUI research-state cell
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-tui research_state_update_renders_revision_and_entries
 
   build-windows:
     name: Build custom codex.exe
