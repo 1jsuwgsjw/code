@@ -23,6 +23,7 @@ use codex_research_state::ResearchDelta;
 use codex_research_state::ResearchScope;
 use codex_research_state::ResearchState;
 use codex_research_state::ResearchStateUpdate;
+use std::num::NonZeroUsize;
 use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
@@ -468,11 +469,28 @@ impl Session {
         &self,
         deltas: &[ResearchDelta],
     ) -> anyhow::Result<ResearchStateUpdate> {
-        let Some(state_db) = self.services.state_db.as_ref() else {
-            return Ok(self.state.lock().await.research_state.apply(deltas)?);
-        };
-        let Some(project_id) = self.services.research_project_id.as_deref() else {
-            return Ok(self.state.lock().await.research_state.apply(deltas)?);
+        let (Some(state_db), Some(project_id)) = (
+            self.services.state_db.as_ref(),
+            self.services.research_project_id.as_deref(),
+        ) else {
+            let mut state = self.state.lock().await;
+            let previous_project_entries = state
+                .research_state
+                .entries()
+                .into_iter()
+                .filter(|entry| entry.scope == ResearchScope::Project)
+                .collect::<Vec<_>>();
+            let update = state.research_state.apply(deltas)?;
+            let project_entries = update
+                .entries
+                .iter()
+                .filter(|entry| entry.scope == ResearchScope::Project)
+                .cloned()
+                .collect::<Vec<_>>();
+            if project_entries != previous_project_entries {
+                state.research_project_revision = state.research_project_revision.saturating_add(1);
+            }
+            return Ok(update);
         };
         let project_deltas = deltas
             .iter()
@@ -494,9 +512,12 @@ impl Session {
         let project_update = state_db
             .apply_research_project_deltas(project_id, &project_deltas)
             .await?;
-        Ok(state
+        let project_revision = project_update.revision;
+        let update = state
             .research_state
-            .apply_project_projection(project_update.entries, &task_deltas)?)
+            .apply_project_projection(project_update.entries, &task_deltas)?;
+        state.research_project_revision = project_revision;
+        Ok(update)
     }
 
     /// Returns the concrete identity for this thread.
@@ -1036,6 +1057,7 @@ impl Session {
             );
             if let Some(restored_research_state) = restored_research_state {
                 state.research_state = restored_research_state;
+                state.research_project_revision = state.research_state.revision();
             }
             let managed_network_requirements_configured = config
                 .config_layer_stack
@@ -1194,6 +1216,9 @@ impl Session {
                 network_approval: Arc::clone(&network_approval),
                 state_db: state_db_ctx.clone(),
                 research_project_id,
+                research_context_cache: codex_utils_cache::BlockingLruCache::new(
+                    NonZeroUsize::new(16).unwrap_or(NonZeroUsize::MIN),
+                ),
                 live_thread: live_thread_init.as_ref().cloned(),
                 thread_store: Arc::clone(&thread_store),
                 attestation_provider: attestation_provider.clone(),

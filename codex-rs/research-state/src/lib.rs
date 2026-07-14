@@ -4,6 +4,12 @@
 //! explorations, decisions, and outcomes without coupling the model to a
 //! domain-specific schema.
 
+mod projection;
+
+pub use projection::ResearchContextCacheKey;
+pub use projection::ResearchContextProjection;
+pub use projection::project_research_context;
+
 pub use codex_protocol::plan_tool::ResearchDelta;
 pub use codex_protocol::plan_tool::ResearchEntry;
 pub use codex_protocol::plan_tool::ResearchEntryKind;

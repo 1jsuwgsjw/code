@@ -27,11 +27,11 @@ impl WorldStateSection for AppsInstructionsState {
         role == "developer" && AppsInstructions::matches_text(text)
     }
 
-    fn has_retained_fragment_matcher() -> bool {
+    fn has_retained_fragment_matcher(&self) -> bool {
         true
     }
 
-    fn matches_retained_fragment(role: &str, text: &str) -> bool {
+    fn matches_retained_fragment(&self, role: &str, text: &str) -> bool {
         Self::matches_legacy_fragment(role, text)
     }
 

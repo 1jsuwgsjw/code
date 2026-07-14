@@ -63,6 +63,11 @@ jobs:
           RUST_MIN_STACK: 8388608
         run: cargo test --locked -p codex-core plan
 
+      - name: Test core research context projection
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-core research_context
+
       - name: Test app-server research-state protocol
         env:
           RUST_MIN_STACK: 8388608

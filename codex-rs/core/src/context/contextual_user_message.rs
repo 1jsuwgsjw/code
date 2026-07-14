@@ -10,6 +10,7 @@ use super::LegacyApplyPatchExecCommandWarning;
 use super::LegacyModelMismatchWarning;
 use super::LegacyUnifiedExecProcessLimitWarning;
 use super::RecommendedPluginsInstructions;
+use super::ResearchContextFragment;
 use super::SkillInstructions;
 use super::SubagentNotification;
 use super::TurnAborted;
@@ -36,6 +37,8 @@ static INTERNAL_MODEL_CONTEXT_REGISTRATION: FragmentRegistrationProxy<
 > = FragmentRegistrationProxy::new();
 static RECOMMENDED_PLUGINS_REGISTRATION: FragmentRegistrationProxy<RecommendedPluginsInstructions> =
     FragmentRegistrationProxy::new();
+static RESEARCH_CONTEXT_REGISTRATION: FragmentRegistrationProxy<ResearchContextFragment> =
+    FragmentRegistrationProxy::new();
 static LEGACY_UNIFIED_EXEC_PROCESS_LIMIT_WARNING_REGISTRATION: FragmentRegistrationProxy<
     LegacyUnifiedExecProcessLimitWarning,
 > = FragmentRegistrationProxy::new();
@@ -56,6 +59,7 @@ static CONTEXTUAL_USER_FRAGMENTS: &[&dyn FragmentRegistration] = &[
     &SUBAGENT_NOTIFICATION_REGISTRATION,
     &INTERNAL_MODEL_CONTEXT_REGISTRATION,
     &RECOMMENDED_PLUGINS_REGISTRATION,
+    &RESEARCH_CONTEXT_REGISTRATION,
     &LEGACY_UNIFIED_EXEC_PROCESS_LIMIT_WARNING_REGISTRATION,
     &LEGACY_APPLY_PATCH_EXEC_COMMAND_WARNING_REGISTRATION,
     &LEGACY_MODEL_MISMATCH_WARNING_REGISTRATION,

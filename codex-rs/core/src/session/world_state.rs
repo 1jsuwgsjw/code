@@ -5,8 +5,12 @@ use crate::context::world_state::AgentsMdState;
 use crate::context::world_state::AppsInstructionsState;
 use crate::context::world_state::EnvironmentsState;
 use crate::context::world_state::PluginsInstructionsState;
+use crate::context::world_state::ResearchContextState;
 use crate::context::world_state::WorldState;
 use codex_extension_api::WorldStateContributionInput;
+use codex_research_state::ResearchContextCacheKey;
+use codex_research_state::ResearchContextProjection;
+use codex_research_state::project_research_context;
 
 impl Session {
     #[tracing::instrument(name = "world_state.build", level = "info", skip_all)]
@@ -30,6 +34,52 @@ impl Session {
 
         let mut world_state = WorldState::default();
         world_state.add_section(AgentsMdState::new(step_context.loaded_agents_md.as_deref()));
+        let (research_task_context, research_project_revision, research_entries) = {
+            let state = self.state.lock().await;
+            (
+                state.research_task_context.clone(),
+                state.research_project_revision,
+                state.research_state.entries(),
+            )
+        };
+        let research_projection = if research_task_context.signature.is_empty() {
+            ResearchContextProjection::default()
+        } else {
+            let project_id = self
+                .services
+                .research_project_id
+                .clone()
+                .unwrap_or_else(|| format!("session:{}", self.session_id()));
+            let cache_key = ResearchContextCacheKey::new(
+                project_id,
+                research_project_revision,
+                research_task_context.signature,
+            );
+            if let Some(projection) = self.services.research_context_cache.get(&cache_key) {
+                tracing::trace!(
+                    project_revision = research_project_revision,
+                    entry_count = projection.entries.len(),
+                    "research context projection cache hit"
+                );
+                projection
+            } else {
+                let projection = project_research_context(
+                    research_entries.as_slice(),
+                    research_task_context.text.as_str(),
+                );
+                self.services
+                    .research_context_cache
+                    .insert(cache_key, projection.clone());
+                tracing::trace!(
+                    project_revision = research_project_revision,
+                    entry_count = projection.entries.len(),
+                    omitted_count = projection.omitted_count,
+                    "research context projection cache miss"
+                );
+                projection
+            }
+        };
+        world_state.add_section(ResearchContextState::new(research_projection));
         if turn_context.config.include_environment_context {
             world_state.add_section(
                 EnvironmentsState::from_turn_context_with_environments(

@@ -5528,6 +5528,9 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         network_approval: Arc::clone(&network_approval),
         state_db: None,
         research_project_id: None,
+        research_context_cache: codex_utils_cache::BlockingLruCache::new(
+            std::num::NonZeroUsize::new(16).unwrap_or(std::num::NonZeroUsize::MIN),
+        ),
         live_thread: None,
         thread_store: Arc::new(codex_thread_store::LocalThreadStore::new(
             codex_thread_store::LocalThreadStoreConfig::from_config(config.as_ref()),
@@ -7660,6 +7663,9 @@ where
         network_approval: Arc::clone(&network_approval),
         state_db: state_db.clone(),
         research_project_id: None,
+        research_context_cache: codex_utils_cache::BlockingLruCache::new(
+            std::num::NonZeroUsize::new(16).unwrap_or(std::num::NonZeroUsize::MIN),
+        ),
         live_thread: None,
         thread_store: Arc::new(codex_thread_store::LocalThreadStore::new(
             codex_thread_store::LocalThreadStoreConfig::from_config(config.as_ref()),

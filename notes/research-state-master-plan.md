@@ -549,11 +549,17 @@ UI 只消费状态投影和事件，不为动画、展开或颜色效果修改�
   - 幂等重复 upsert：revision 1、changed false。
   - set_status supported：revision 2、changed true。
 - 独立 Research State TUI、状态符号和有界工具结果均已验证。
+- Phase 3 稳定 project identity：origin 优先、path bridge、无 remote root commit fallback。
+- SQLite migration `0041_research_state`。
+- append-only research events 与 materialized projections。
+- project revision 事务写入、幂等重放和事件重放一致性。
+- Session 启动恢复与跨线程 project scope 共享。
+- task scope 零持久化和跨会话隔离。
+- 陈旧 remote/root 强别名清理，避免共享 upstream 的 fork 错误合并。
+- Phase 3 Linux 定向测试、Windows EXE 和真实跨会话运行时验收通过。
 
 尚未完成：
 
-- 持久化。
-- 项目身份。
 - 上下文投影与缓存。
 - stakeholder/domain/global。
 - 知识提升与评价。
@@ -568,19 +574,19 @@ UI 只消费状态投影和事件，不为动画、展开或颜色效果修改�
 - GitHub 仓库已经公开，标准 GitHub-hosted runners 可用于测试和构建。
 - Windows `dev-small` 构建和 Cargo target 缓存已经建立。
 
-因此当前采用 GitHub Actions 作为真实编译测试基线，本地负责格式化、metadata、diff 和轻量静态检查。该路径已经完成 Phase 1 验证，不再阻塞 Phase 2。
+因此当前采用 GitHub Actions 作为真实编译测试基线，本地负责格式化、metadata、diff 和轻量静态检查。该路径已经完成 Phase 1、Phase 2 和 Phase 3 验证。
 
 ## 17. 下一步唯一优先事项
 
-Phase 2 已完成。现在进入 Phase 3，但不提前进入上下文投影：
+Phase 3 已完成。Phase 4 按完整闭环一次性交付，不拆分为外部子阶段：
 
-1. 定义稳定 `project_id`，覆盖 Git、无 Git、项目移动和 worktree 边界。
-2. 在 `codex-state` 增加 append-only research events 与 materialized projection。
-3. 保持 reducer 为唯一状态规则来源，数据库层不复制业务判断。
-4. 会话启动时恢复项目研究状态。
-5. 成功 delta 在同一事务中写入事件和投影。
-6. 处理 revision 并发冲突和幂等重放。
-7. 验证关闭 Codex、重新启动后 project scope 恢复，task scope 不错误泄漏。
-8. Phase 3 基线通过后再进入有界上下文投影。
+1. 从当前真实用户任务形成有界 `task_signature`。
+2. 对 project research entries 做通用相关性排序。
+3. 严格限制 entry 数、单字段 bytes 和总 projection bytes。
+4. 使用 `project_id + project_revision + task_signature + schema_version` LRU cache。
+5. 作为原生 WorldState section 和 `ContextualUserFragment` 增量接入。
+6. projection digest 不变时不重复追加，不改写历史。
+7. task scope 永不进入 Research Context。
+8. 完成 Linux 定向测试、Windows EXE 和真实模型上下文验收。
 
-Phase 3 基线未通过前，不进入 Phase 4。
+Phase 4 完整基线通过前，不进入 stakeholder/domain/global 或知识提升阶段。

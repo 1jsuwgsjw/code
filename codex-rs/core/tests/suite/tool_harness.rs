@@ -230,6 +230,128 @@ async fn update_plan_tool_emits_plan_update_event() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn update_plan_research_context_is_injected_once_for_equivalent_tasks() -> anyhow::Result<()>
+{
+    skip_if_no_network!(Ok(()));
+
+    let server = start_mock_server().await;
+    let mut builder = test_codex();
+    let TestCodex {
+        codex,
+        cwd,
+        session_configured,
+        ..
+    } = builder.build(&server).await?;
+
+    let call_id = "research-context-plan-call";
+    let plan_args = json!({
+        "plan": [{"step": "Record UI layout research", "status": "completed"}],
+        "research_delta": [{
+            "operation": "upsert",
+            "id": "ui-layout",
+            "scope": "project",
+            "kind": "decision",
+            "subject": "UI layout",
+            "statement": "Keep navigation stable while adjusting the dashboard layout",
+            "status": "supported"
+        }]
+    })
+    .to_string();
+    responses::mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-research-1"),
+            ev_function_call(call_id, "update_plan", &plan_args),
+            ev_completed("resp-research-1"),
+        ]),
+    )
+    .await;
+    responses::mount_sse_once(
+        &server,
+        sse(vec![
+            ev_assistant_message("msg-research-1", "research stored"),
+            ev_completed("resp-research-2"),
+        ]),
+    )
+    .await;
+    let layout_mock = responses::mount_sse_once(
+        &server,
+        sse(vec![
+            ev_assistant_message("msg-research-2", "layout adjusted"),
+            ev_completed("resp-research-3"),
+        ]),
+    )
+    .await;
+    let refine_mock = responses::mount_sse_once(
+        &server,
+        sse(vec![
+            ev_assistant_message("msg-research-3", "layout refined"),
+            ev_completed("resp-research-4"),
+        ]),
+    )
+    .await;
+
+    let session_model = session_configured.model.clone();
+    let cwd_path = cwd.abs();
+    let (sandbox_policy, permission_profile) =
+        turn_permission_fields(PermissionProfile::Disabled, cwd_path.as_path());
+    codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "remember project UI layout research".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                environments: Some(local_selections(cwd_path)),
+                approval_policy: Some(AskForApproval::Never),
+                sandbox_policy: Some(sandbox_policy),
+                permission_profile,
+                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
+                    mode: codex_protocol::config_types::ModeKind::Default,
+                    settings: codex_protocol::config_types::Settings {
+                        model: session_model,
+                        reasoning_effort: None,
+                        developer_instructions: None,
+                    },
+                }),
+                ..Default::default()
+            },
+        })
+        .await?;
+    wait_for_event(&codex, |event| matches!(event, EventMsg::TurnComplete(_))).await;
+
+    for task in [
+        "adjust the UI dashboard layout",
+        "refine the UI dashboard layout",
+    ] {
+        codex
+            .submit(Op::UserInput {
+                items: vec![UserInput::Text {
+                    text: task.to_string(),
+                    text_elements: Vec::new(),
+                }],
+                final_output_json_schema: None,
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: Default::default(),
+            })
+            .await?;
+        wait_for_event(&codex, |event| matches!(event, EventMsg::TurnComplete(_))).await;
+    }
+
+    for request in [layout_mock.single_request(), refine_mock.single_request()] {
+        let input = request.body_json()["input"].to_string();
+        assert_eq!(input.matches("<research_context>").count(), 1);
+        assert!(input.contains("Keep navigation stable"));
+    }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn update_plan_tool_rejects_malformed_payload() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
