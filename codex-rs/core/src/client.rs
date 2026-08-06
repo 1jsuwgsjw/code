@@ -840,18 +840,29 @@ impl ModelClient {
         }
         let tools = create_tools_json_for_responses_api(&prompt.tools)?;
         let (instructions, tools) = if model_info.use_responses_lite {
-            let prefix = vec![ResponseItem::AdditionalTools {
+            let mut prefix = vec![ResponseItem::AdditionalTools {
                 id: None,
                 role: "developer".to_string(),
                 tools,
             }];
+            if !prompt.base_instructions.text.is_empty() {
+                prefix.push(ResponseItem::Message {
+                    id: None,
+                    role: "system".to_string(),
+                    content: vec![ContentItem::InputText {
+                        text: prompt.base_instructions.text.clone(),
+                    }],
+                    phase: None,
+                    internal_chat_message_metadata_passthrough: None,
+                });
+            }
             input.splice(0..0, prefix);
             // Responses Lite carries tool definitions in the input because it does not
-            // expose the normal `tools` field. Keep the base instructions in the API's
-            // dedicated `instructions` field so a configured system prompt remains a
-            // system-level instruction instead of being silently downgraded to a
-            // developer-role message.
-            (prompt.base_instructions.text.clone(), None)
+            // expose the normal `tools` field. Use a literal system-role input item for
+            // base instructions so providers that interpret the top-level `instructions`
+            // field as developer context still receive the configured prompt at system
+            // role. Keep top-level instructions empty to avoid injecting it twice.
+            (String::new(), None)
         } else {
             (prompt.base_instructions.text.clone(), Some(tools))
         };
