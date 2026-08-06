@@ -58,7 +58,7 @@ pub fn project_research_context(
     });
 
     let candidate_count = candidates.len();
-    let mut projected_bytes = 0;
+    let mut projected_bytes: usize = 0;
     let mut projected = Vec::new();
     for (_, mut entry) in candidates {
         entry.subject = truncate_utf8(entry.subject.as_str(), MAX_SUBJECT_BYTES);

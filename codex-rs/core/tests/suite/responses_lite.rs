@@ -80,7 +80,7 @@ fn additional_tools(body: &Value) -> Result<&[Value]> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn responses_lite_uses_input_items_for_instructions_and_tools() -> Result<()> {
+async fn responses_lite_uses_top_level_instructions_and_input_tools() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = responses::start_mock_server().await;
@@ -105,7 +105,7 @@ async fn responses_lite_uses_input_items_for_instructions_and_tools() -> Result<
     test.submit_turn("hello").await?;
 
     let body = response_mock.single_request().body_json();
-    assert!(body.get("instructions").is_none());
+    assert_eq!(body["instructions"], "test instructions");
     assert!(body.get("tools").is_none());
 
     let input = body["input"]
@@ -113,17 +113,15 @@ async fn responses_lite_uses_input_items_for_instructions_and_tools() -> Result<
         .context("Responses request input should be an array")?;
     assert_eq!(input[0]["type"], "additional_tools");
     assert_eq!(input[0]["role"], "developer");
-    assert_eq!(
-        input[1],
-        serde_json::json!({
-            "type": "message",
-            "role": "developer",
-            "content": [{
-                "type": "input_text",
-                "text": "test instructions",
-            }],
-        })
-    );
+    assert!(input.iter().skip(1).all(|item| {
+        !(item.get("type").and_then(Value::as_str) == Some("message")
+            && item.get("role").and_then(Value::as_str) == Some("developer")
+            && item["content"].as_array().is_some_and(|content| {
+                content.iter().any(|part| {
+                    part.get("text").and_then(Value::as_str) == Some("test instructions")
+                })
+            }))
+    }));
 
     let tools = additional_tools(&body)?;
     assert!(!tools.is_empty());
