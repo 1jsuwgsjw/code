@@ -117,8 +117,8 @@ async fn root_tools_skip_disabled_agents() {
     );
 }
 
-#[test]
-fn worker_visibility_and_wrappers_follow_manifest_targets() {
+#[tokio::test]
+async fn worker_visibility_and_wrappers_follow_manifest_targets() {
     let project = TempDir::new().expect("project tempdir");
     let tools = vec![
         loaded_tool(
