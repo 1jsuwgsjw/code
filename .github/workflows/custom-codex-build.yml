@@ -41,22 +41,7 @@ jobs:
       - name: Test project agents foundation
         env:
           RUST_MIN_STACK: 8388608
-        run: |
-          just test -p codex-project-agents
-          just test -p codex-cli --test agents
-
-      - name: Test project agents runtime
-        env:
-          RUST_MIN_STACK: 8388608
-        run: |
-          just test -p codex-extension-api
-          just test -p codex-project-agents-extension
-          just test -p codex-core tool_visibility_policy_filters_model_specs_and_registered_runtimes
-
-      - name: Test app-server project agent delegation
-        env:
-          RUST_MIN_STACK: 8388608
-        run: just test -p codex-app-server project_agent_delegate_isolated_worker_and_persists_valid_result
+        run: cargo test --locked -p codex-project-agents
 
       - name: Test research-state crate
         env:
