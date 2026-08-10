@@ -16,7 +16,6 @@ use codex_file_system::FindUpErrorPolicy;
 use codex_file_system::find_nearest_ancestor_with_markers;
 use codex_utils_path_uri::PathUri;
 use codex_utils_path_uri::PathUriParseError;
-use serde::Serialize;
 use serde_json::Value;
 use std::io;
 use thiserror::Error;

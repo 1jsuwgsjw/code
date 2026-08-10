@@ -41,7 +41,7 @@ impl ProjectAgentStore {
             .await?;
         let mut items = Vec::with_capacity(paths.len());
         for (item_id, source_path) in paths {
-            let path = self.resolve_agent_path(agent_id, &source_path)?;
+            let path = self.maintenance_resolve_agent_path(agent_id, &source_path)?;
             let item: PendingProjectAgentItem = self
                 .read_json_bounded(file_system, scope, &path, MAX_PENDING_ITEM_BYTES)
                 .await?;
@@ -80,7 +80,9 @@ impl ProjectAgentStore {
             ProjectAgentMaintenanceItemKind::MemoryCandidate => "memory/candidates",
             ProjectAgentMaintenanceItemKind::ImprovementProposal => "proposals/pending",
         };
-        let directory = self.resolve_agent_relative(agent_id, directory_relative)?.1;
+        let directory = self
+            .maintenance_resolve_agent_relative(agent_id, directory_relative)?
+            .1;
         let mut entries = match file_system.read_directory(&directory, sandbox(scope)).await {
             Ok(entries) => entries,
             Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -138,7 +140,7 @@ impl ProjectAgentStore {
             ],
         };
         for path in paths {
-            let path = self.resolve_agent_path(agent_id, &path)?;
+            let path = self.maintenance_resolve_agent_path(agent_id, &path)?;
             match file_system.get_metadata(&path, sandbox(scope)).await {
                 Ok(_) => return Ok(true),
                 Err(source) if source.kind() == io::ErrorKind::NotFound => {}
@@ -163,7 +165,7 @@ impl ProjectAgentStore {
             Ok(path) => path,
             Err(error) => return Ok((Vec::new(), Some(error.to_string()))),
         };
-        let task_path = self.resolve_agent_path(agent_id, &task_path)?;
+        let task_path = self.maintenance_resolve_agent_path(agent_id, &task_path)?;
         let task: ProjectAgentTaskResult = match self
             .read_json_bounded(file_system, scope, &task_path, MAX_TASK_RESULT_BYTES)
             .await

@@ -1,5 +1,4 @@
 use crate::PROJECT_AGENT_SCHEMA_VERSION;
-use crate::ProjectAgentDefinition;
 use crate::ProjectAgentEntry;
 use crate::ProjectAgentFileSystemScope;
 use crate::ProjectAgentId;
@@ -151,7 +150,7 @@ impl ProjectAgentStore {
             MAINTENANCE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
         );
         let lock_directory = self
-            .resolve_agent_relative(agent_id, "maintenance/.lock")?
+            .maintenance_resolve_agent_relative(agent_id, "maintenance/.lock")?
             .1;
         self.acquire_maintenance_lock(
             file_system,
@@ -275,7 +274,7 @@ impl ProjectAgentStore {
                 )
             } else if existing_fact.is_some() {
                 return Err(ProjectAgentMaintenanceError::AcceptedPathConflict(
-                    self.resolve_agent_path(agent_id, &fact_path)?,
+                    self.maintenance_resolve_agent_path(agent_id, &fact_path)?,
                 ));
             } else if memory_state.normalized.contains_key(&normalized) {
                 (

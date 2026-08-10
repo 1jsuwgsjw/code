@@ -11,7 +11,9 @@ impl ProjectAgentStore {
         started_at_ms: i64,
         lock_directory: &PathUri,
     ) -> Result<(), ProjectAgentMaintenanceError> {
-        let maintenance_directory = self.resolve_agent_relative(agent_id, "maintenance")?.1;
+        let maintenance_directory = self
+            .maintenance_resolve_agent_relative(agent_id, "maintenance")?
+            .1;
         file_system
             .create_directory(
                 &maintenance_directory,
@@ -77,7 +79,7 @@ impl ProjectAgentStore {
         agent_id: &ProjectAgentId,
     ) -> Result<MemoryState, ProjectAgentMaintenanceError> {
         let index_path = RelativeProjectAgentPath::new("memory/index.toml")?;
-        let resolved_index_path = self.resolve_agent_path(agent_id, &index_path)?;
+        let resolved_index_path = self.maintenance_resolve_agent_path(agent_id, &index_path)?;
         let index = match self
             .read_optional_text(
                 file_system,
@@ -104,7 +106,7 @@ impl ProjectAgentStore {
         let mut normalized = BTreeMap::new();
         let mut used_tokens = 0usize;
         for item in &index.items {
-            let resolved_item_path = self.resolve_agent_path(agent_id, item)?;
+            let resolved_item_path = self.maintenance_resolve_agent_path(agent_id, item)?;
             let body = self
                 .read_optional_text(file_system, scope, agent_id, item, MAX_MEMORY_ITEM_BYTES)
                 .await?
@@ -128,7 +130,7 @@ impl ProjectAgentStore {
         agent_id: &ProjectAgentId,
     ) -> Result<BTreeSet<String>, ProjectAgentMaintenanceError> {
         let directory = self
-            .resolve_agent_relative(agent_id, "proposals/accepted")?
+            .maintenance_resolve_agent_relative(agent_id, "proposals/accepted")?
             .1;
         let entries = match file_system.read_directory(&directory, sandbox(scope)).await {
             Ok(entries) => entries,
@@ -217,7 +219,9 @@ impl ProjectAgentStore {
             "proposals/rejected",
             "maintenance/history",
         ] {
-            let path = self.resolve_agent_relative(agent_id, directory)?.1;
+            let path = self
+                .maintenance_resolve_agent_relative(agent_id, directory)?
+                .1;
             file_system
                 .create_directory(
                     &path,
@@ -228,7 +232,7 @@ impl ProjectAgentStore {
                 .map_err(|source| self.fs_error("create", &path, source))?;
         }
         for (path, body) in new_memory {
-            let resolved = self.resolve_agent_path(agent_id, path)?;
+            let resolved = self.maintenance_resolve_agent_path(agent_id, path)?;
             self.write_new(file_system, scope, &resolved, body.as_bytes().to_vec())
                 .await?;
         }
@@ -240,7 +244,7 @@ impl ProjectAgentStore {
         {
             memory_index.validate()?;
             let index_path = self
-                .resolve_agent_relative(agent_id, "memory/index.toml")?
+                .maintenance_resolve_agent_relative(agent_id, "memory/index.toml")?
                 .1;
             let contents = toml::to_string_pretty(memory_index).map_err(|source| {
                 ProjectAgentMaintenanceError::SerializeMemoryIndex {
@@ -254,7 +258,7 @@ impl ProjectAgentStore {
                 .map_err(|source| self.fs_error("write", &index_path, source))?;
         }
         for decision in decisions {
-            let path = self.resolve_agent_path(agent_id, &decision.decision_path)?;
+            let path = self.maintenance_resolve_agent_path(agent_id, &decision.decision_path)?;
             let contents = serde_json::to_vec_pretty(decision)?;
             if contents.len() > MAX_DECISION_BYTES {
                 return Err(ProjectAgentMaintenanceError::SerializedArtifactTooLarge {
@@ -301,7 +305,7 @@ impl ProjectAgentStore {
         report: &ProjectAgentMaintenanceReport,
     ) -> Result<(), ProjectAgentMaintenanceError> {
         let path = self
-            .resolve_agent_relative(
+            .maintenance_resolve_agent_relative(
                 &report.agent_id,
                 &format!("maintenance/history/{}.json", report.maintenance_id),
             )?
@@ -325,9 +329,9 @@ impl ProjectAgentStore {
         path: &RelativeProjectAgentPath,
         maximum: usize,
     ) -> Result<Option<String>, ProjectAgentMaintenanceError> {
-        let path = self.resolve_agent_path(agent_id, path)?;
+        let path = self.maintenance_resolve_agent_path(agent_id, path)?;
         match self
-            .read_text_bounded(file_system, scope, &path, maximum)
+            .maintenance_read_text_bounded(file_system, scope, &path, maximum)
             .await
         {
             Ok(contents) => Ok(Some(contents)),
@@ -348,7 +352,7 @@ impl ProjectAgentStore {
         maximum: usize,
     ) -> Result<T, ProjectAgentMaintenanceError> {
         let contents = self
-            .read_text_bounded(file_system, scope, path, maximum)
+            .maintenance_read_text_bounded(file_system, scope, path, maximum)
             .await?;
         serde_json::from_str(&contents).map_err(|source| ProjectAgentMaintenanceError::ParseJson {
             path: path.clone(),
@@ -356,7 +360,7 @@ impl ProjectAgentStore {
         })
     }
 
-    pub(super) async fn read_text_bounded(
+    pub(super) async fn maintenance_read_text_bounded(
         &self,
         file_system: &dyn ExecutorFileSystem,
         scope: ProjectAgentFileSystemScope<'_>,
@@ -416,17 +420,17 @@ impl ProjectAgentStore {
             .map_err(|source| self.fs_error("write", path, source))
     }
 
-    pub(super) fn resolve_agent_relative(
+    pub(super) fn maintenance_resolve_agent_relative(
         &self,
         agent_id: &ProjectAgentId,
         path: &str,
     ) -> Result<(RelativeProjectAgentPath, PathUri), ProjectAgentMaintenanceError> {
         let relative = RelativeProjectAgentPath::new(path)?;
-        let resolved = self.resolve_agent_path(agent_id, &relative)?;
+        let resolved = self.maintenance_resolve_agent_path(agent_id, &relative)?;
         Ok((relative, resolved))
     }
 
-    pub(super) fn resolve_agent_path(
+    pub(super) fn maintenance_resolve_agent_path(
         &self,
         agent_id: &ProjectAgentId,
         path: &RelativeProjectAgentPath,
