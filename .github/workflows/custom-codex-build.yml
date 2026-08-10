@@ -95,6 +95,17 @@ jobs:
           cargo test --locked -p codex-core responses_lite_uses_system_message_for_instructions_and_input_tools
           cargo test --locked -p codex-core responses_lite_uses_developer_message_for_non_openai_provider
 
+      - name: Generate app-server schema
+        run: cargo run --locked -p codex-app-server-protocol --bin write_schema_fixtures
+
+      - name: Upload generated app-server schema
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: app-server-schema-${{ github.sha }}
+          path: codex-rs/app-server-protocol/schema
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Test app-server research-state protocol
         env:
           RUST_MIN_STACK: 8388608
@@ -131,17 +142,6 @@ jobs:
             -p codex-rollout-trace \
             -p codex-tui \
             -- -D warnings
-
-      - name: Generate app-server schema
-        run: cargo run --locked -p codex-app-server-protocol --bin write_schema_fixtures
-
-      - name: Upload generated app-server schema
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: app-server-schema-${{ github.sha }}
-          path: codex-rs/app-server-protocol/schema
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Verify app-server schema is committed
         shell: bash
