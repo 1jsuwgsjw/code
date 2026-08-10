@@ -1108,7 +1108,7 @@ async fn cli_main(
                 root_remote_auth_token_env.as_deref(),
                 "agents",
             )?;
-            agent_cli.run(interactive.shared.cwd).await?;
+            agent_cli.run(interactive.shared.cwd.clone()).await?;
         }
         Some(Subcommand::AppServer(app_server_cli)) => {
             let AppServerCommand {
