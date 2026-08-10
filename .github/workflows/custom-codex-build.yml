@@ -38,6 +38,11 @@ jobs:
       - name: Check formatting
         run: cargo fmt -- --config imports_granularity=Item --check
 
+      - name: Test project agents foundation
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-project-agents
+
       - name: Test research-state crate
         env:
           RUST_MIN_STACK: 8388608
