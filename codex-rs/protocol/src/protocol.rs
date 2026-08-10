@@ -1357,6 +1357,9 @@ pub enum EventMsg {
     /// Updated long-running goal metadata for the thread.
     ThreadGoalUpdated(ThreadGoalUpdatedEvent),
 
+    /// Updated pending-maintenance state for project-local specialist AGENTs.
+    ThreadProjectAgentMaintenanceStatusUpdated(ThreadProjectAgentMaintenanceStatusUpdatedEvent),
+
     /// Incremental MCP startup progress updates.
     McpStartupUpdate(McpStartupUpdateEvent),
 
@@ -4031,6 +4034,16 @@ pub struct ThreadGoalUpdatedEvent {
     #[ts(optional)]
     pub turn_id: Option<String>,
     pub goal: ThreadGoal,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "protocol/")]
+pub struct ThreadProjectAgentMaintenanceStatusUpdatedEvent {
+    pub thread_id: ThreadId,
+    pub project_root: String,
+    pub pending_count: u64,
+    pub catalog_revision: u64,
 }
 
 /// User's decision in response to an ExecApprovalRequest.

@@ -5,6 +5,7 @@ use codex_analytics::AnalyticsEventsClient;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ThreadGoal;
 use codex_app_server_protocol::ThreadGoalUpdatedNotification;
+use codex_app_server_protocol::ThreadProjectAgentMaintenanceStatusUpdatedNotification;
 use codex_core::NewThread;
 use codex_core::StartThreadOptions;
 use codex_core::ThreadManager;
@@ -148,6 +149,23 @@ impl ExtensionEventSink for AppServerExtensionEventSink {
                                 goal,
                             },
                         ))
+                        .await;
+                });
+            }
+            EventMsg::ThreadProjectAgentMaintenanceStatusUpdated(status) => {
+                let outgoing = Arc::clone(&self.outgoing);
+                tokio::spawn(async move {
+                    outgoing
+                        .send_server_notification(
+                            ServerNotification::ThreadProjectAgentMaintenanceStatusUpdated(
+                                ThreadProjectAgentMaintenanceStatusUpdatedNotification {
+                                    thread_id: status.thread_id.to_string(),
+                                    project_root: status.project_root,
+                                    pending_count: status.pending_count,
+                                    catalog_revision: status.catalog_revision,
+                                },
+                            ),
+                        )
                         .await;
                 });
             }

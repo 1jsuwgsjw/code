@@ -155,6 +155,8 @@ Example with notification opt-out:
 - `thread/goal/clear` — clear the current persisted goal for a materialized thread; returns whether a goal was removed and emits `thread/goal/cleared` when state changes.
 - `thread/goal/updated` — notification emitted whenever a thread goal changes; includes the full current goal.
 - `thread/goal/cleared` — notification emitted whenever a thread goal is removed.
+- `thread/projectAgentMaintenance/run` — apply pending memory candidates and improvement proposals for every project-local specialist AGENT attached to a loaded, idle thread. The request is rejected while the thread has an active task. Returns accepted/rejected counts plus the resulting maintenance status.
+- `thread/projectAgentMaintenance/statusUpdated` — notification emitted when a project AGENT context is loaded or resumed, after a delegated result creates pending maintenance, and after maintenance runs. Includes `threadId`, the canonical `projectRoot`, aggregate `pendingCount`, and `catalogRevision`.
 - `thread/settings/updated` — experimental notification emitted to subscribed clients when a loaded thread’s effective next-turn settings change; includes `threadId` and the full `threadSettings`.
 - `thread/status/changed` — notification emitted when a loaded thread’s status changes (`threadId` + new `status`).
 - `thread/archive` — move a thread’s rollout file into the archived directory and attempt to move any spawned descendant thread rollout files; returns `{}` on success and emits `thread/archived` for each archived thread.
@@ -635,6 +637,38 @@ Use `thread/goal/clear` to remove the current goal.
 { "method": "thread/goal/clear", "id": 30, "params": { "threadId": "thr_123" } }
 { "id": 30, "result": { "cleared": true } }
 { "method": "thread/goal/cleared", "params": { "threadId": "thr_123" } }
+```
+
+### Example: Apply project AGENT maintenance
+
+Project-local specialist AGENTs persist memory candidates and improvement proposals without interrupting normal work. Clients receive the aggregate pending count through `thread/projectAgentMaintenance/statusUpdated`. Once the thread is idle, call `thread/projectAgentMaintenance/run` to evaluate and apply the pending items:
+
+```json
+{ "method": "thread/projectAgentMaintenance/statusUpdated", "params": {
+    "threadId": "thr_123",
+    "projectRoot": "file:///Users/me/project",
+    "pendingCount": 2,
+    "catalogRevision": 1
+} }
+{ "method": "thread/projectAgentMaintenance/run", "id": 31, "params": {
+    "threadId": "thr_123"
+} }
+{ "id": 31, "result": {
+    "acceptedCount": 2,
+    "rejectedCount": 0,
+    "status": {
+        "threadId": "thr_123",
+        "projectRoot": "file:///Users/me/project",
+        "pendingCount": 0,
+        "catalogRevision": 2
+    }
+} }
+{ "method": "thread/projectAgentMaintenance/statusUpdated", "params": {
+    "threadId": "thr_123",
+    "projectRoot": "file:///Users/me/project",
+    "pendingCount": 0,
+    "catalogRevision": 2
+} }
 ```
 
 ### Example: Archive a thread

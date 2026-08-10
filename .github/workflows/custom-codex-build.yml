@@ -43,6 +43,16 @@ jobs:
           RUST_MIN_STACK: 8388608
         run: cargo test --locked -p codex-project-agents
 
+      - name: Test project agents CLI
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-cli --test agents
+
+      - name: Test project agents runtime extension
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-project-agents-extension
+
       - name: Test research-state crate
         env:
           RUST_MIN_STACK: 8388608
@@ -68,6 +78,11 @@ jobs:
           RUST_MIN_STACK: 8388608
         run: cargo test --locked -p codex-core plan
 
+      - name: Test core project-agent tool visibility
+        env:
+          RUST_MIN_STACK: 8388608
+        run: cargo test --locked -p codex-core tool_visibility_policy_filters_code_mode_capabilities_before_building_transport
+
       - name: Test core research context projection
         env:
           RUST_MIN_STACK: 8388608
@@ -88,12 +103,54 @@ jobs:
       - name: Test app-server research-state projection
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-app-server test_handle_turn_research_state_update_emits_notification_for_v2
+        run: |
+          cargo test --locked -p codex-app-server test_handle_turn_research_state_update_emits_notification_for_v2
+          cargo test --locked -p codex-app-server project_agents
 
       - name: Test TUI research-state cell
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-tui research_state_update_renders_revision_and_entries
+        run: |
+          cargo test --locked -p codex-tui research_state_update_renders_revision_and_entries
+          cargo test --locked -p codex-tui project_agent_maintenance
+
+      - name: Clippy Stage 3 project-agent surfaces
+        env:
+          RUST_MIN_STACK: 8388608
+        run: |
+          cargo clippy --locked --tests \
+            -p codex-project-agents \
+            -p codex-cli \
+            -p codex-project-agents-extension \
+            -p codex-protocol \
+            -p codex-core \
+            -p codex-app-server-protocol \
+            -p codex-app-server \
+            -p codex-mcp-server \
+            -p codex-rollout \
+            -p codex-rollout-trace \
+            -p codex-tui \
+            -- -D warnings
+
+      - name: Generate app-server schema
+        run: cargo run --locked -p codex-app-server-protocol --bin write_schema_fixtures
+
+      - name: Upload generated app-server schema
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: app-server-schema-${{ github.sha }}
+          path: codex-rs/app-server-protocol/schema
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Verify app-server schema is committed
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain -- app-server-protocol/schema)" ]]; then
+            git status --short -- app-server-protocol/schema
+            git diff -- app-server-protocol/schema
+            exit 1
+          fi
 
   build-windows:
     name: Build custom codex.exe

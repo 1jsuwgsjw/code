@@ -91,19 +91,49 @@ impl ExecutorFileSystem for TestFileSystem {
 
     fn read_directory<'a>(
         &'a self,
-        _path: &'a PathUri,
+        path: &'a PathUri,
         _sandbox: Option<&'a FileSystemSandboxContext>,
     ) -> ExecutorFileSystemFuture<'a, Vec<ReadDirectoryEntry>> {
-        Box::pin(async { Err(io::Error::from(io::ErrorKind::Unsupported)) })
+        Box::pin(async move {
+            let mut read_dir = tokio::fs::read_dir(path.to_abs_path()?.as_path()).await?;
+            let mut entries = Vec::new();
+            while let Some(entry) = read_dir.next_entry().await? {
+                let file_type = entry.file_type().await?;
+                entries.push(ReadDirectoryEntry {
+                    file_name: entry.file_name().to_string_lossy().into_owned(),
+                    is_directory: file_type.is_dir(),
+                    is_file: file_type.is_file(),
+                });
+            }
+            Ok(entries)
+        })
     }
 
     fn remove<'a>(
         &'a self,
-        _path: &'a PathUri,
-        _options: RemoveOptions,
+        path: &'a PathUri,
+        options: RemoveOptions,
         _sandbox: Option<&'a FileSystemSandboxContext>,
     ) -> ExecutorFileSystemFuture<'a, ()> {
-        Box::pin(async { Err(io::Error::from(io::ErrorKind::Unsupported)) })
+        Box::pin(async move {
+            let path = path.to_abs_path()?;
+            let metadata = match tokio::fs::symlink_metadata(path.as_path()).await {
+                Ok(metadata) => metadata,
+                Err(error) if options.force && error.kind() == io::ErrorKind::NotFound => {
+                    return Ok(());
+                }
+                Err(error) => return Err(error),
+            };
+            if metadata.is_dir() {
+                if options.recursive {
+                    tokio::fs::remove_dir_all(path.as_path()).await
+                } else {
+                    tokio::fs::remove_dir(path.as_path()).await
+                }
+            } else {
+                tokio::fs::remove_file(path.as_path()).await
+            }
+        })
     }
 
     fn copy<'a>(
@@ -154,6 +184,7 @@ async fn bootstrap_resolves_root_and_preserves_existing_registry() {
     let agent_id = ProjectAgentId::new("query").expect("agent id");
     let registry = ProjectAgentRegistry {
         schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+        revision: 0,
         agents: BTreeMap::from([(
             agent_id,
             ProjectAgentRegistration {
@@ -357,6 +388,184 @@ input_schema = "tools/search.schema.json"
     ));
 }
 
+#[tokio::test]
+async fn maintenance_dry_run_and_apply_are_attributable_and_deduplicated() {
+    let temp_dir = tempdir().expect("tempdir");
+    let project_root = AbsolutePathBuf::try_from(temp_dir.path()).expect("absolute temp path");
+    let store = ProjectAgentStore::new(PathUri::from_abs_path(&project_root)).expect("store");
+    let file_system = TestFileSystem;
+    let scope = ProjectAgentFileSystemScope::Unrestricted;
+    let agent_id = ProjectAgentId::new("query").expect("agent id");
+    store
+        .create(
+            &file_system,
+            scope,
+            agent_id.clone(),
+            "Performs bounded repository queries.".to_string(),
+        )
+        .await
+        .expect("create agent");
+
+    let results = [
+        ProjectAgentTaskResult {
+            status: ProjectAgentTaskStatus::Completed,
+            agent_id: agent_id.clone(),
+            task_id: "task-1".to_string(),
+            result: "Located the navigation route.".to_string(),
+            artifacts: Vec::new(),
+            evidence: vec!["AGENTS_NAVIGATION.md:241".to_string()],
+            memory_candidates: vec!["Use focused navigation.".to_string()],
+            improvement_proposals: vec!["Add a narrow search tool.".to_string()],
+            error: None,
+        },
+        ProjectAgentTaskResult {
+            status: ProjectAgentTaskStatus::Completed,
+            agent_id: agent_id.clone(),
+            task_id: "task-2".to_string(),
+            result: "Confirmed the same route.".to_string(),
+            artifacts: Vec::new(),
+            evidence: vec!["AGENTS_NAVIGATION.md:243".to_string()],
+            memory_candidates: vec!["  use FOCUSED navigation.  ".to_string()],
+            improvement_proposals: vec!["ADD a narrow search tool.".to_string()],
+            error: None,
+        },
+        ProjectAgentTaskResult {
+            status: ProjectAgentTaskStatus::Completed,
+            agent_id: agent_id.clone(),
+            task_id: "task-3".to_string(),
+            result: "Produced an unsupported candidate.".to_string(),
+            artifacts: Vec::new(),
+            evidence: Vec::new(),
+            memory_candidates: vec!["This candidate has no evidence.".to_string()],
+            improvement_proposals: Vec::new(),
+            error: None,
+        },
+    ];
+    for result in &results {
+        store
+            .persist_result(&file_system, scope, result)
+            .await
+            .expect("persist result");
+    }
+
+    let target = ProjectAgentMaintenanceTarget::Agent(agent_id.clone());
+    assert_eq!(
+        store
+            .maintenance_status(&file_system, scope, &target)
+            .await
+            .expect("pending status"),
+        ProjectAgentMaintenanceStatus {
+            catalog_revision: 1,
+            agents: vec![ProjectAgentMaintenanceAgentStatus {
+                agent_id: agent_id.clone(),
+                pending: ProjectAgentPendingCounts {
+                    memory_candidates: 3,
+                    improvement_proposals: 2,
+                },
+            }],
+        }
+    );
+
+    let dry_run = store
+        .maintain(
+            &file_system,
+            scope,
+            target.clone(),
+            ProjectAgentMaintenanceOptions::dry_run("test-suite"),
+        )
+        .await
+        .expect("dry-run maintenance");
+    assert_eq!(dry_run.reports.len(), 1);
+    let dry_run_report = &dry_run.reports[0];
+    assert_eq!(dry_run_report.accepted_count(), 2);
+    assert_eq!(dry_run_report.rejected_count(), 3);
+    assert_eq!(dry_run_report.pending_after, dry_run_report.pending_before);
+    assert_eq!(dry_run.status.catalog_revision, 1);
+    assert_eq!(dry_run.status.pending().total(), 5);
+
+    let applied = store
+        .maintain(
+            &file_system,
+            scope,
+            target.clone(),
+            ProjectAgentMaintenanceOptions::apply("test-suite"),
+        )
+        .await
+        .expect("apply maintenance");
+    assert_eq!(applied.reports.len(), 1);
+    let report = &applied.reports[0];
+    assert_eq!(report.accepted_count(), 2);
+    assert_eq!(report.rejected_count(), 3);
+    assert_eq!(report.catalog_revision_before, 1);
+    assert_eq!(report.catalog_revision_after, 2);
+    assert_eq!(report.pending_after, ProjectAgentPendingCounts::default());
+    assert_eq!(
+        applied.status.pending(),
+        ProjectAgentPendingCounts::default()
+    );
+    assert_eq!(applied.status.catalog_revision, 2);
+
+    let accepted_memory = report
+        .decisions
+        .iter()
+        .find(|decision| {
+            decision.kind == ProjectAgentMaintenanceItemKind::MemoryCandidate
+                && decision.disposition == ProjectAgentMaintenanceDisposition::Accepted
+        })
+        .expect("accepted memory decision");
+    assert_eq!(accepted_memory.actor, "test-suite");
+    assert_eq!(
+        accepted_memory.evidence,
+        vec!["AGENTS_NAVIGATION.md:241".to_string()]
+    );
+    let accepted_path = accepted_memory
+        .accepted_path
+        .as_ref()
+        .expect("accepted memory path");
+    assert!(
+        project_root
+            .join(format!("AGENT/agents/query/{accepted_path}"))
+            .as_path()
+            .is_file()
+    );
+    assert!(
+        project_root
+            .join(format!(
+                "AGENT/agents/query/maintenance/history/{}.json",
+                report.maintenance_id
+            ))
+            .as_path()
+            .is_file()
+    );
+    for result in &results {
+        assert!(
+            project_root
+                .join(format!(
+                    "AGENT/agents/query/tasks/history/{}.json",
+                    result.task_id
+                ))
+                .as_path()
+                .is_file()
+        );
+    }
+
+    let runtime = store
+        .load_runtime(&file_system, scope, &agent_id)
+        .await
+        .expect("reload accepted memory");
+    assert_eq!(
+        runtime.accepted_memory,
+        vec!["Use focused navigation.".to_string()]
+    );
+    assert_eq!(
+        store
+            .maintenance_status(&file_system, scope, &target)
+            .await
+            .expect("settled status"),
+        applied.status
+    );
+}
+
 #[test]
 fn definitions_and_registry_paths_are_validated() {
     let definition: ProjectAgentDefinition = toml::from_str(
@@ -397,6 +606,7 @@ memory_max_tokens = 4000
     let agent_id = ProjectAgentId::new("query").expect("agent id");
     let registry = ProjectAgentRegistry {
         schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+        revision: 0,
         agents: BTreeMap::from([(
             agent_id.clone(),
             ProjectAgentRegistration {

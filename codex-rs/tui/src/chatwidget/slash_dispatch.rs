@@ -294,6 +294,17 @@ impl ChatWidget {
                     );
                 }
             }
+            SlashCommand::AgentsMaintain => {
+                if let Some(thread_id) = self.thread_id {
+                    self.app_event_tx
+                        .send(AppEvent::RunProjectAgentMaintenance { thread_id });
+                } else {
+                    self.add_error_message(
+                        "Project AGENT maintenance is unavailable before the session starts."
+                            .to_string(),
+                    );
+                }
+            }
             SlashCommand::Side | SlashCommand::Btw => {
                 self.request_empty_side_conversation(cmd);
             }
@@ -1058,6 +1069,7 @@ impl ChatWidget {
             | SlashCommand::Diff
             | SlashCommand::App
             | SlashCommand::Rename
+            | SlashCommand::AgentsMaintain
             | SlashCommand::TestApproval => QueueDrain::Continue,
             SlashCommand::Feedback
             | SlashCommand::New

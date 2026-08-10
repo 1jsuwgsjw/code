@@ -5,6 +5,8 @@ use codex_exec_server::LOCAL_FS;
 use codex_project_agents::ProjectAgentEntry;
 use codex_project_agents::ProjectAgentFileSystemScope;
 use codex_project_agents::ProjectAgentId;
+use codex_project_agents::ProjectAgentMaintenanceOptions;
+use codex_project_agents::ProjectAgentMaintenanceTarget;
 use codex_project_agents::ProjectAgentStore;
 use codex_project_agents::RelativeProjectAgentPath;
 use codex_project_agents::resolve_project_root;
@@ -29,6 +31,8 @@ enum AgentSubcommand {
     Create(AgentCreateArgs),
     /// Disable a registered project AGENT definition.
     Disable(AgentIdArgs),
+    /// Review pending memory candidates and improvement proposals.
+    Maintain(AgentMaintainArgs),
 }
 
 #[derive(Debug, Args)]
@@ -62,6 +66,16 @@ struct AgentCreateArgs {
 struct AgentIdArgs {
     /// Registered AGENT identifier.
     id: ProjectAgentId,
+}
+
+#[derive(Debug, Args)]
+struct AgentMaintainArgs {
+    /// Restrict maintenance to one registered AGENT.
+    id: Option<ProjectAgentId>,
+
+    /// Report decisions without changing accepted memory or proposal state.
+    #[arg(long)]
+    dry_run: bool,
 }
 
 impl AgentCli {
@@ -155,6 +169,59 @@ impl AgentCli {
                     )
                     .await?;
                 println!("Disabled project AGENT `{}`.", entry.definition.id);
+            }
+            AgentSubcommand::Maintain(AgentMaintainArgs { id, dry_run }) => {
+                let target = id.map_or(
+                    ProjectAgentMaintenanceTarget::All,
+                    ProjectAgentMaintenanceTarget::Agent,
+                );
+                let actor = std::env::var("USERNAME")
+                    .or_else(|_| std::env::var("USER"))
+                    .map(|user| format!("codex-cli:{user}"))
+                    .unwrap_or_else(|_| "codex-cli".to_string());
+                let options = if dry_run {
+                    ProjectAgentMaintenanceOptions::dry_run(actor)
+                } else {
+                    ProjectAgentMaintenanceOptions::apply(actor)
+                };
+                let outcome = store
+                    .maintain(
+                        LOCAL_FS.as_ref(),
+                        ProjectAgentFileSystemScope::Unrestricted,
+                        target,
+                        options,
+                    )
+                    .await?;
+                if outcome.reports.is_empty() {
+                    println!("No registered project AGENT definitions found.");
+                }
+                for report in outcome.reports {
+                    let prefix = if dry_run {
+                        "Dry-run maintenance"
+                    } else {
+                        "Maintenance"
+                    };
+                    println!(
+                        "{prefix} `{}` for `{}`: {} accepted, {} rejected; pending {} -> {}; catalog revision {} -> {}.",
+                        report.maintenance_id,
+                        report.agent_id,
+                        report.accepted_count(),
+                        report.rejected_count(),
+                        report.pending_before.total(),
+                        report.pending_after.total(),
+                        report.catalog_revision_before,
+                        report.catalog_revision_after,
+                    );
+                    for decision in report.decisions {
+                        println!(
+                            "  {} {}: {} ({})",
+                            decision.disposition.as_str(),
+                            decision.kind.as_str(),
+                            decision.item_id,
+                            decision.reason,
+                        );
+                    }
+                }
             }
         }
         Ok(())

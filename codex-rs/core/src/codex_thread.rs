@@ -599,6 +599,14 @@ impl CodexThread {
         self.codex.session.get_config().await
     }
 
+    /// Returns typed state published by an installed thread extension.
+    pub fn thread_extension<T>(&self) -> Option<Arc<T>>
+    where
+        T: Send + Sync + 'static,
+    {
+        self.codex.session.services.thread_extension_data.get::<T>()
+    }
+
     /// Resolves the MCP runtime configuration using this thread's extension data.
     pub async fn runtime_mcp_config(&self, config: &crate::config::Config) -> codex_mcp::McpConfig {
         self.codex.session.runtime_mcp_config(config).await

@@ -816,6 +816,10 @@ impl App {
             AppEvent::ClearThreadGoal { thread_id } => {
                 self.clear_thread_goal(app_server, thread_id).await;
             }
+            AppEvent::RunProjectAgentMaintenance { thread_id } => {
+                self.run_project_agent_maintenance(app_server, thread_id)
+                    .await;
+            }
             AppEvent::SendAddCreditsNudgeEmail { credit_type } => {
                 if self
                     .chat_widget

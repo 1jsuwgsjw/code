@@ -373,6 +373,8 @@ use self::plugins::PluginListFetchState;
 use self::plugins::PluginsCacheState;
 mod plan_implementation;
 use self::plan_implementation::PLAN_IMPLEMENTATION_TITLE;
+mod project_agent_maintenance;
+use self::project_agent_maintenance::ProjectAgentMaintenanceState;
 mod model_popups;
 mod notifications;
 use self::notifications::Notification;
@@ -588,6 +590,7 @@ pub(crate) struct ChatWidget {
     last_unified_wait: Option<UnifiedExecWaitState>,
     unified_exec_wait_streak: Option<UnifiedExecWaitStreak>,
     turn_lifecycle: TurnLifecycleState,
+    project_agent_maintenance: ProjectAgentMaintenanceState,
     safety_buffering: SafetyBufferingState,
     task_complete_pending: bool,
     unified_exec_processes: Vec<UnifiedExecProcessSummary>,

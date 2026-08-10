@@ -248,6 +248,8 @@ mod plan_mode;
 #[path = "tests/plugin_catalog_tests.rs"]
 mod plugin_catalog;
 mod popups_and_settings;
+#[path = "tests/project_agent_maintenance_tests.rs"]
+mod project_agent_maintenance_tests;
 mod review_mode;
 mod side;
 mod slash_commands;

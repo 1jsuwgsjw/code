@@ -551,6 +551,11 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadGoalClearResponse,
     },
+    ThreadProjectAgentMaintenanceRun => "thread/projectAgentMaintenance/run" {
+        params: v2::ThreadProjectAgentMaintenanceRunParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectAgentMaintenanceRunResponse,
+    },
     ThreadMetadataUpdate => "thread/metadata/update" {
         params: v2::ThreadMetadataUpdateParams,
         serialization: thread_id(params.thread_id),
@@ -1623,6 +1628,7 @@ server_notification_definitions! {
     ThreadNameUpdated => "thread/name/updated" (v2::ThreadNameUpdatedNotification),
     ThreadGoalUpdated => "thread/goal/updated" (v2::ThreadGoalUpdatedNotification),
     ThreadGoalCleared => "thread/goal/cleared" (v2::ThreadGoalClearedNotification),
+    ThreadProjectAgentMaintenanceStatusUpdated => "thread/projectAgentMaintenance/statusUpdated" (v2::ThreadProjectAgentMaintenanceStatusUpdatedNotification),
     #[experimental("thread/settings/updated")]
     ThreadSettingsUpdated => "thread/settings/updated" (v2::ThreadSettingsUpdatedNotification),
     ThreadTokenUsageUpdated => "thread/tokenUsage/updated" (v2::ThreadTokenUsageUpdatedNotification),

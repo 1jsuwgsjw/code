@@ -8,6 +8,7 @@ use codex_core::config::ConfigBuilder;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_extension_api::ExtensionData;
+use codex_extension_api::NoopExtensionEventSink;
 use codex_extension_api::ThreadLifecycleContributor;
 use codex_extension_api::ThreadStartInput;
 use codex_extension_api::ToolContributor;
@@ -41,6 +42,7 @@ use crate::delegate::parse_worker_result;
 use crate::delegate::prepare_worker_config;
 use crate::delegate::project_agent_result_schema;
 use crate::delegate::worker_context_prompt;
+use crate::events::ProjectAgentEventEmitter;
 use crate::state::ProjectAgentExtension;
 use crate::state::ProjectAgentRootContext;
 use crate::state::ProjectAgentWorkerContext;
@@ -84,12 +86,14 @@ async fn root_tools_skip_disabled_agents() {
         .expect("local environment")
         .get_filesystem();
     let context = ProjectAgentRootContext {
+        thread_id: ThreadId::new(),
         config,
         environments: Vec::new(),
         primary_environment_id: LOCAL_ENVIRONMENT_ID.to_string(),
         file_system,
         store: project_store(project.path()),
         enabled_agents: vec![agent_entry("enabled", true), agent_entry("disabled", false)],
+        event_emitter: ProjectAgentEventEmitter::new(Arc::new(NoopExtensionEventSink)),
     };
     let thread_store = ExtensionData::new("root-thread");
     thread_store.insert(context);
@@ -97,6 +101,7 @@ async fn root_tools_skip_disabled_agents() {
     let extension = ProjectAgentExtension::new(
         Weak::<ThreadManager>::new(),
         Arc::clone(&environment_manager),
+        Arc::new(NoopExtensionEventSink),
     );
 
     let tools = extension.tools(&session_store, &thread_store);
@@ -192,7 +197,11 @@ fn worker_visibility_and_wrappers_follow_manifest_targets() {
     let session_store = ExtensionData::new("session");
     let thread_store = ExtensionData::new("worker-thread");
     thread_store.insert((*context).clone());
-    let extension = ProjectAgentExtension::new(Weak::<ThreadManager>::new(), environment_manager);
+    let extension = ProjectAgentExtension::new(
+        Weak::<ThreadManager>::new(),
+        environment_manager,
+        Arc::new(NoopExtensionEventSink),
+    );
     assert_eq!(
         extension.visibility(&session_store, &thread_store),
         ToolVisibilityPolicy::allow_only(expected_visible)
@@ -397,6 +406,7 @@ async fn lifecycle_bootstraps_root_and_stops_recursive_worker_bootstrap() {
     let extension = ProjectAgentExtension::new(
         Weak::<ThreadManager>::new(),
         Arc::clone(&environment_manager),
+        Arc::new(NoopExtensionEventSink),
     );
     let environments = vec![TurnEnvironmentSelection {
         environment_id: LOCAL_ENVIRONMENT_ID.to_string(),
@@ -404,7 +414,7 @@ async fn lifecycle_bootstraps_root_and_stops_recursive_worker_bootstrap() {
     }];
     let session_source = SessionSource::Cli;
     let session_store = ExtensionData::new("session");
-    let root_store = ExtensionData::new("root-thread");
+    let root_store = ExtensionData::new(ThreadId::new().to_string());
 
     extension
         .on_thread_start(ThreadStartInput {

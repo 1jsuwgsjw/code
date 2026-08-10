@@ -346,6 +346,61 @@ async fn tool_visibility_policy_filters_model_specs_and_registered_runtimes() {
     assert_eq!(plan.registered_names, vec![allowed.to_string()]);
 }
 
+#[tokio::test]
+async fn tool_visibility_policy_filters_code_mode_capabilities_before_building_transport() {
+    let allowed = ToolName::namespaced("project", "allowed");
+    let denied = ToolName::namespaced("project", "denied");
+    let outside_allow = ToolName::namespaced("project", "outside_allow");
+    let mut policy = ToolVisibilityPolicy::allow_only([allowed.clone(), denied.clone()]);
+    policy.deny.insert(denied.clone());
+
+    let plan = probe_with(
+        |turn| set_features(turn, &[Feature::CodeMode, Feature::CodeModeOnly]),
+        ToolPlanInputs {
+            extension_tool_executors: vec![
+                Arc::new(TestNamespaceExtensionTool {
+                    namespace: "project",
+                    tool_name: "allowed",
+                }),
+                Arc::new(TestNamespaceExtensionTool {
+                    namespace: "project",
+                    tool_name: "denied",
+                }),
+                Arc::new(TestNamespaceExtensionTool {
+                    namespace: "project",
+                    tool_name: "outside_allow",
+                }),
+            ],
+            tool_visibility_policy: policy,
+            ..Default::default()
+        },
+    )
+    .await;
+
+    let allowed_name = allowed.to_string();
+    let denied_name = denied.to_string();
+    let outside_allow_name = outside_allow.to_string();
+
+    plan.assert_visible_contains(&[
+        codex_code_mode::PUBLIC_TOOL_NAME,
+        codex_code_mode::WAIT_TOOL_NAME,
+    ]);
+    plan.assert_visible_lacks(&["project"]);
+    plan.assert_registered_contains(&[
+        codex_code_mode::PUBLIC_TOOL_NAME,
+        codex_code_mode::WAIT_TOOL_NAME,
+        &allowed_name,
+    ]);
+    plan.assert_registered_lacks(&[&denied_name, &outside_allow_name]);
+
+    let ToolSpec::Freeform(exec) = plan.visible_spec(codex_code_mode::PUBLIC_TOOL_NAME) else {
+        panic!("expected code mode exec tool");
+    };
+    assert!(exec.description.contains("project__allowed(args:"));
+    assert!(!exec.description.contains("project__denied(args:"));
+    assert!(!exec.description.contains("project__outside_allow(args:"));
+}
+
 struct DeferredExtensionTool;
 
 impl ToolExecutor<ExtensionToolCall> for DeferredExtensionTool {

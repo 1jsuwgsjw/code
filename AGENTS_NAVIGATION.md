@@ -99,6 +99,10 @@ Important variations:
 - Representative symbols: `run_main`, `run_ratatui_app`, `App::run`
 - Main orchestration and event loop: `codex-rs/tui/src/app.rs`, `codex-rs/tui/src/app/`
 - Conversation UI: `codex-rs/tui/src/chatwidget.rs`, `codex-rs/tui/src/chatwidget/`
+- Slash-command registry and dispatch: `codex-rs/tui/src/slash_command.rs`,
+  `codex-rs/tui/src/chatwidget/slash_dispatch.rs`
+- Project AGENT maintenance UI: `codex-rs/tui/src/app/project_agent_maintenance.rs`,
+  `codex-rs/tui/src/chatwidget/project_agent_maintenance.rs`
 - Composer and approval UI: `codex-rs/tui/src/bottom_pane/`
 - Rendered history/tool cells: `codex-rs/tui/src/history_cell/`,
   `codex-rs/tui/src/exec_cell/`, `codex-rs/tui/src/diff_render.rs`
@@ -137,6 +141,8 @@ Important variations:
 - Representative symbols: `run_main`, `run_main_with_transport_options`
 - Request routing: `codex-rs/app-server/src/message_processor.rs` (`MessageProcessor`)
 - Request handlers: `codex-rs/app-server/src/request_processors.rs`
+- Project AGENT maintenance handler:
+  `codex-rs/app-server/src/request_processors/project_agent_processor.rs`
 - Event translation: `codex-rs/app-server/src/bespoke_event_handling.rs`
 - Outbound delivery: `codex-rs/app-server/src/outgoing_message.rs`
 - Thread status/state: `codex-rs/app-server/src/thread_state.rs`,
@@ -157,6 +163,10 @@ Important variations:
 - Turn API: `codex-rs/app-server-protocol/src/protocol/v2/turn.rs`
   - representative types: `TurnStartParams`, `TurnStartResponse`, `TurnSteerParams`,
     `TurnInterruptParams`;
+- Project AGENT maintenance API: `codex-rs/app-server-protocol/src/protocol/v2/project_agent.rs`
+  - representative types: `ThreadProjectAgentMaintenanceRunParams`,
+    `ThreadProjectAgentMaintenanceRunResponse`,
+    `ThreadProjectAgentMaintenanceStatusUpdatedNotification`;
 - Other API areas are split into matching files such as `command_exec.rs`, `fs.rs`, `mcp.rs`,
   `plugin.rs`, `permissions.rs`, `realtime.rs`, and `remote_control.rs`.
 - When the wire shape changes, also update `codex-rs/app-server/README.md` and generated schema
@@ -242,23 +252,31 @@ Important variations:
 
 - Foundation crate: `codex-rs/project-agents/`
   - representative symbols: `ProjectAgentRegistry`, `ProjectAgentDefinition`,
-    `ProjectAgentToolManifest`, `ProjectAgentTaskResult`, `ProjectAgentStore`, `ProjectAgentEntry`;
+    `ProjectAgentToolManifest`, `ProjectAgentTaskResult`, `ProjectAgentStore`, `ProjectAgentEntry`,
+    `ProjectAgentMaintenanceOutcome`;
+  - maintenance owner: `codex-rs/project-agents/src/maintenance_store.rs`
+    (`ProjectAgentStore::maintenance_status`, `ProjectAgentStore::maintain`);
 - CLI management: `codex-rs/cli/src/agent_cmd.rs`
   - representative symbols: `AgentCli`, `AgentSubcommand`;
-  - commands: `codex agents list`, `show`, `create`, and `disable`;
+  - commands: `codex agents list`, `show`, `create`, `disable`, and `maintain`;
 - Runtime extension: `codex-rs/ext/project-agents/`
   - representative symbols: `ProjectAgentExtension`, `ProjectAgentRootContext`,
-    `ProjectAgentWorkerContext`;
+    `ProjectAgentWorkerContext`, `maintain_thread_project_agents`;
+- App-server surface: `thread/projectAgentMaintenance/run` and
+  `thread/projectAgentMaintenance/statusUpdated`;
+- TUI surface: `/agents-maintain`, with pending-state reminders deferred while a turn is active.
 - Cross-executor project-root discovery reuses
   `codex_file_system::find_nearest_ancestor_with_markers` with `PathUri`.
 - On-disk source of truth begins at `AGENT/registry.toml`; discovery never activates an unregistered
   directory implicitly.
 - Focused tests: `codex-rs/project-agents/src/tests.rs`, `codex-rs/cli/tests/agents.rs`,
   `codex-rs/ext/project-agents/src/tests.rs`, and
-  `codex-rs/app-server/tests/suite/v2/project_agents.rs`.
+  `codex-rs/app-server/tests/suite/v2/project_agents.rs`, plus
+  `codex-rs/tui/src/chatwidget/tests/project_agent_maintenance_tests.rs`.
 - Authoritative validation runs in GitHub Actions:
   `cd codex-rs && just test -p codex-project-agents`, `just test -p codex-cli`,
-  `just test -p codex-project-agents-extension`, and `just test -p codex-app-server`.
+  `just test -p codex-project-agents-extension`, `just test -p codex-app-server-protocol`,
+  `just test -p codex-app-server`, and `just test -p codex-tui`.
 
 ## Tools and extension routes
 

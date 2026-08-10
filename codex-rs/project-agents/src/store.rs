@@ -8,6 +8,7 @@ use crate::ProjectAgentTaskResult;
 use crate::ProjectAgentToolManifest;
 use crate::ProjectAgentValidationError;
 use crate::RelativeProjectAgentPath;
+use crate::maintenance::PendingProjectAgentItem;
 use codex_file_system::CreateDirectoryOptions;
 use codex_file_system::ExecutorFileSystem;
 use codex_file_system::FileSystemSandboxContext;
@@ -74,14 +75,6 @@ pub struct ProjectAgentPersistenceOutcome {
     pub history_path: PathUri,
     pub memory_candidate_paths: Vec<PathUri>,
     pub improvement_proposal_paths: Vec<PathUri>,
-}
-
-#[derive(Serialize)]
-struct PendingProjectAgentItem<'a> {
-    schema_version: u32,
-    agent_id: &'a ProjectAgentId,
-    task_id: &'a str,
-    body: &'a str,
 }
 
 /// Selects whether project AGENT filesystem operations use a sandbox context.
@@ -323,6 +316,7 @@ impl ProjectAgentStore {
                 enabled: true,
             },
         );
+        registry.revision = registry.revision.saturating_add(1);
         self.save_registry(file_system, scope, &registry).await?;
 
         Ok(ProjectAgentEntry {
@@ -345,6 +339,7 @@ impl ProjectAgentStore {
             .ok_or_else(|| ProjectAgentStoreError::AgentNotFound(agent_id.clone()))?;
         registration.enabled = false;
         let registration = registration.clone();
+        registry.revision = registry.revision.saturating_add(1);
         self.save_registry(file_system, scope, &registry).await?;
         self.load_entry(file_system, scope, agent_id, &registration)
             .await
@@ -469,12 +464,11 @@ impl ProjectAgentStore {
                 agent_id,
                 &format!("memory/candidates/{}-{index}.json", result.task_id),
             )?;
-            let item = PendingProjectAgentItem {
-                schema_version: PROJECT_AGENT_SCHEMA_VERSION,
-                agent_id,
-                task_id: &result.task_id,
-                body,
-            };
+            let item = PendingProjectAgentItem::new(
+                agent_id.clone(),
+                result.task_id.clone(),
+                body.clone(),
+            );
             self.write_new_file(file_system, scope, &path, serde_json::to_vec_pretty(&item)?)
                 .await?;
             memory_candidate_paths.push(path);
@@ -486,12 +480,11 @@ impl ProjectAgentStore {
                 agent_id,
                 &format!("proposals/pending/{}-{index}.json", result.task_id),
             )?;
-            let item = PendingProjectAgentItem {
-                schema_version: PROJECT_AGENT_SCHEMA_VERSION,
-                agent_id,
-                task_id: &result.task_id,
-                body,
-            };
+            let item = PendingProjectAgentItem::new(
+                agent_id.clone(),
+                result.task_id.clone(),
+                body.clone(),
+            );
             self.write_new_file(file_system, scope, &path, serde_json::to_vec_pretty(&item)?)
                 .await?;
             improvement_proposal_paths.push(path);

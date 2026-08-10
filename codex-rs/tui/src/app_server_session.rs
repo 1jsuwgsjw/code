@@ -81,6 +81,8 @@ use codex_app_server_protocol::ThreadMemoryModeSetResponse;
 use codex_app_server_protocol::ThreadMetadataGitInfoUpdateParams;
 use codex_app_server_protocol::ThreadMetadataUpdateParams;
 use codex_app_server_protocol::ThreadMetadataUpdateResponse;
+use codex_app_server_protocol::ThreadProjectAgentMaintenanceRunParams;
+use codex_app_server_protocol::ThreadProjectAgentMaintenanceRunResponse;
 use codex_app_server_protocol::ThreadReadParams;
 use codex_app_server_protocol::ThreadReadResponse;
 use codex_app_server_protocol::ThreadResumeParams;
@@ -972,6 +974,22 @@ impl AppServerSession {
             })
             .await
             .wrap_err("thread/goal/clear failed in TUI")
+    }
+
+    pub(crate) async fn thread_project_agent_maintenance_run(
+        &mut self,
+        thread_id: ThreadId,
+    ) -> Result<ThreadProjectAgentMaintenanceRunResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::ThreadProjectAgentMaintenanceRun {
+                request_id,
+                params: ThreadProjectAgentMaintenanceRunParams {
+                    thread_id: thread_id.to_string(),
+                },
+            })
+            .await
+            .wrap_err("thread/projectAgentMaintenance/run failed in TUI")
     }
 
     pub(crate) async fn logout_account(&mut self) -> Result<()> {

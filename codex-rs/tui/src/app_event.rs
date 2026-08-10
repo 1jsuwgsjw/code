@@ -314,6 +314,11 @@ pub(crate) enum AppEvent {
         thread_id: ThreadId,
     },
 
+    /// Apply pending project-local specialist AGENT maintenance for an idle thread.
+    RunProjectAgentMaintenance {
+        thread_id: ThreadId,
+    },
+
     /// Result of refreshing rate limits.
     RateLimitsLoaded {
         origin: RateLimitRefreshOrigin,

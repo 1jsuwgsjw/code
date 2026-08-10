@@ -8,10 +8,12 @@ use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecutorFileSystem;
 use codex_extension_api::ContextContributor;
 use codex_extension_api::ExtensionData;
+use codex_extension_api::ExtensionEventSink;
 use codex_extension_api::ExtensionFuture;
 use codex_extension_api::ExtensionRegistryBuilder;
 use codex_extension_api::PromptFragment;
 use codex_extension_api::ThreadLifecycleContributor;
+use codex_extension_api::ThreadResumeInput;
 use codex_extension_api::ThreadStartInput;
 use codex_extension_api::ToolCall;
 use codex_extension_api::ToolContributor;
@@ -29,16 +31,42 @@ use codex_protocol::protocol::TurnEnvironmentSelection;
 
 use crate::delegate::ProjectAgentDelegateTool;
 use crate::delegate::worker_context_prompt;
+use crate::events::ProjectAgentEventEmitter;
 use crate::x_tools::project_agent_x_tools;
 use crate::x_tools::worker_visible_tool_names;
 
 pub(crate) struct ProjectAgentRootContext {
+    pub(crate) thread_id: ThreadId,
     pub(crate) config: Config,
     pub(crate) environments: Vec<TurnEnvironmentSelection>,
     pub(crate) primary_environment_id: String,
     pub(crate) file_system: Arc<dyn ExecutorFileSystem>,
     pub(crate) store: ProjectAgentStore,
     pub(crate) enabled_agents: Vec<ProjectAgentEntry>,
+    pub(crate) event_emitter: ProjectAgentEventEmitter,
+}
+
+impl ProjectAgentRootContext {
+    pub(crate) async fn emit_maintenance_status(&self) {
+        match self
+            .store
+            .maintenance_status(
+                self.file_system.as_ref(),
+                ProjectAgentFileSystemScope::Unrestricted,
+                &codex_project_agents::ProjectAgentMaintenanceTarget::All,
+            )
+            .await
+        {
+            Ok(status) => self.event_emitter.maintenance_status_updated(
+                self.thread_id,
+                self.store.project_root().to_string(),
+                &status,
+            ),
+            Err(error) => {
+                tracing::warn!(%error, "project AGENT extension could not inspect maintenance status")
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -54,16 +82,19 @@ pub(crate) struct ProjectAgentWorkerContext {
 pub(crate) struct ProjectAgentExtension {
     thread_manager: Weak<ThreadManager>,
     environment_manager: Arc<EnvironmentManager>,
+    event_emitter: ProjectAgentEventEmitter,
 }
 
 impl ProjectAgentExtension {
     pub(crate) fn new(
         thread_manager: Weak<ThreadManager>,
         environment_manager: Arc<EnvironmentManager>,
+        event_sink: Arc<dyn ExtensionEventSink>,
     ) -> Self {
         Self {
             thread_manager,
             environment_manager,
+            event_emitter: ProjectAgentEventEmitter::new(event_sink),
         }
     }
 }
@@ -81,6 +112,14 @@ impl ThreadLifecycleContributor<Config> for ProjectAgentExtension {
                 input.thread_store.insert(worker_context);
                 return;
             }
+
+            let Ok(thread_id) = ThreadId::from_string(input.thread_store.level_id()) else {
+                tracing::warn!(
+                    thread_id = input.thread_store.level_id(),
+                    "project AGENT extension received an invalid thread id"
+                );
+                return;
+            };
 
             let Some(primary_environment) = input.environments.first() else {
                 return;
@@ -151,14 +190,26 @@ impl ThreadLifecycleContributor<Config> for ProjectAgentExtension {
                     return;
                 }
             };
-            input.thread_store.insert(ProjectAgentRootContext {
+            let context = ProjectAgentRootContext {
+                thread_id,
                 config: input.config.clone(),
                 environments: input.environments.to_vec(),
                 primary_environment_id: primary_environment.environment_id.clone(),
                 file_system,
                 store,
                 enabled_agents,
-            });
+                event_emitter: self.event_emitter.clone(),
+            };
+            context.emit_maintenance_status().await;
+            input.thread_store.insert(context);
+        })
+    }
+
+    fn on_thread_resume<'a>(&'a self, input: ThreadResumeInput<'a>) -> ExtensionFuture<'a, ()> {
+        Box::pin(async move {
+            if let Some(context) = input.thread_store.get::<ProjectAgentRootContext>() {
+                context.emit_maintenance_status().await;
+            }
         })
     }
 }
@@ -233,9 +284,11 @@ pub fn install(
     thread_manager: Weak<ThreadManager>,
     environment_manager: Arc<EnvironmentManager>,
 ) {
+    let event_sink = registry.event_sink();
     let extension = Arc::new(ProjectAgentExtension::new(
         thread_manager,
         environment_manager,
+        event_sink,
     ));
     registry.thread_lifecycle_contributor(extension.clone());
     registry.prompt_contributor(extension.clone());

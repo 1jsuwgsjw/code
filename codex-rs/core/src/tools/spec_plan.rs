@@ -201,8 +201,8 @@ fn build_tool_specs_and_registry(
     add_tool_sources(&context, &mut planned_tools);
     apply_direct_model_only_namespace_overrides(turn_context, &mut planned_tools);
     append_tool_search_executor(&context, &mut planned_tools);
-    prepend_code_mode_executors(&context, &mut planned_tools);
     apply_tool_visibility_policy(context.tool_visibility_policy, &mut planned_tools);
+    prepend_code_mode_executors(&context, &mut planned_tools);
     build_model_visible_specs_and_registry(turn_context, planned_tools)
 }
 
@@ -529,6 +529,10 @@ fn build_code_mode_executors(
         .sort_by(|left, right| compare_code_mode_tools(left, right, &namespace_descriptions));
     let deferred_tools =
         collect_code_mode_exec_prompt_tool_definitions(deferred_exec_prompt_tool_specs.iter());
+
+    if code_mode_nested_tool_specs.is_empty() {
+        return Vec::new();
+    }
 
     vec![
         Arc::new(CodeModeExecuteHandler::new(

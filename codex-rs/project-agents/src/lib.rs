@@ -1,8 +1,22 @@
 //! Project-local, file-defined specialist AGENT primitives.
 
+mod maintenance;
+mod maintenance_store;
 mod store;
 mod types;
 
+pub use maintenance::ProjectAgentMaintenanceAgentStatus;
+pub use maintenance::ProjectAgentMaintenanceDecision;
+pub use maintenance::ProjectAgentMaintenanceDisposition;
+pub use maintenance::ProjectAgentMaintenanceItemKind;
+pub use maintenance::ProjectAgentMaintenanceMode;
+pub use maintenance::ProjectAgentMaintenanceOptions;
+pub use maintenance::ProjectAgentMaintenanceOutcome;
+pub use maintenance::ProjectAgentMaintenanceReport;
+pub use maintenance::ProjectAgentMaintenanceStatus;
+pub use maintenance::ProjectAgentMaintenanceTarget;
+pub use maintenance::ProjectAgentPendingCounts;
+pub use maintenance_store::ProjectAgentMaintenanceError;
 pub use store::BootstrapDisposition;
 pub use store::BootstrapOutcome;
 pub use store::LoadedProjectAgentTool;

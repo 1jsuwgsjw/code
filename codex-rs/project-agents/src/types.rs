@@ -121,6 +121,8 @@ impl<'de> Deserialize<'de> for RelativeProjectAgentPath {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProjectAgentRegistry {
     pub schema_version: u32,
+    #[serde(default)]
+    pub revision: u64,
     pub agents: BTreeMap<ProjectAgentId, ProjectAgentRegistration>,
 }
 
@@ -128,6 +130,7 @@ impl Default for ProjectAgentRegistry {
     fn default() -> Self {
         Self {
             schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+            revision: 0,
             agents: BTreeMap::new(),
         }
     }

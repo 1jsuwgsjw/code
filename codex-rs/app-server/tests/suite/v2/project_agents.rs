@@ -2,16 +2,22 @@ use anyhow::Context;
 use anyhow::Result;
 use app_test_support::TestAppServer;
 use app_test_support::to_response;
+use codex_app_server_protocol::JSONRPCNotification;
 use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::RequestId;
+use codex_app_server_protocol::ThreadProjectAgentMaintenanceRunResponse;
+use codex_app_server_protocol::ThreadProjectAgentMaintenanceStatusUpdatedNotification;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput as V2UserInput;
+use codex_utils_absolute_path::AbsolutePathBuf;
+use codex_utils_path_uri::PathUri;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
 use pretty_assertions::assert_eq;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use serde_json::json;
 use std::io::Cursor;
@@ -119,10 +125,31 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
     )
     .await??;
     let ThreadStartResponse { thread, .. } = to_response::<ThreadStartResponse>(thread_resp)?;
+    let project_root =
+        PathUri::from_abs_path(&AbsolutePathBuf::try_from(project.path())?).to_string();
+    let initial_status =
+        notification_params::<ThreadProjectAgentMaintenanceStatusUpdatedNotification>(
+            timeout(
+                DEFAULT_READ_TIMEOUT,
+                mcp.read_stream_until_notification_message(
+                    "thread/projectAgentMaintenance/statusUpdated",
+                ),
+            )
+            .await??,
+        )?;
+    assert_eq!(
+        initial_status,
+        ThreadProjectAgentMaintenanceStatusUpdatedNotification {
+            thread_id: thread.id.clone(),
+            project_root: project_root.clone(),
+            pending_count: 0,
+            catalog_revision: 1,
+        }
+    );
 
     let turn_req = mcp
         .send_turn_start_request(TurnStartParams {
-            thread_id: thread.id,
+            thread_id: thread.id.clone(),
             client_user_message_id: None,
             input: vec![V2UserInput::Text {
                 text: ROOT_ONLY_MESSAGE.to_string(),
@@ -137,6 +164,25 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
     )
     .await??;
     let _turn: TurnStartResponse = to_response::<TurnStartResponse>(turn_resp)?;
+    let pending_status =
+        notification_params::<ThreadProjectAgentMaintenanceStatusUpdatedNotification>(
+            timeout(
+                DEFAULT_READ_TIMEOUT,
+                mcp.read_stream_until_notification_message(
+                    "thread/projectAgentMaintenance/statusUpdated",
+                ),
+            )
+            .await??,
+        )?;
+    assert_eq!(
+        pending_status,
+        ThreadProjectAgentMaintenanceStatusUpdatedNotification {
+            thread_id: thread.id.clone(),
+            project_root: project_root.clone(),
+            pending_count: 2,
+            catalog_revision: 1,
+        }
+    );
     timeout(
         DEFAULT_READ_TIMEOUT,
         mcp.read_stream_until_notification_message("turn/completed"),
@@ -250,7 +296,143 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
         })
     );
 
+    let maintenance_req = mcp
+        .send_raw_request(
+            "thread/projectAgentMaintenance/run",
+            Some(json!({"threadId": thread.id.clone()})),
+        )
+        .await?;
+    let maintenance_resp: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(maintenance_req)),
+    )
+    .await??;
+    let maintenance = to_response::<ThreadProjectAgentMaintenanceRunResponse>(maintenance_resp)?;
+    let settled_status = ThreadProjectAgentMaintenanceStatusUpdatedNotification {
+        thread_id: thread.id.clone(),
+        project_root,
+        pending_count: 0,
+        catalog_revision: 2,
+    };
+    assert_eq!(
+        maintenance,
+        ThreadProjectAgentMaintenanceRunResponse {
+            accepted_count: 2,
+            rejected_count: 0,
+            status: settled_status.clone(),
+        }
+    );
+    let notified_status =
+        notification_params::<ThreadProjectAgentMaintenanceStatusUpdatedNotification>(
+            timeout(
+                DEFAULT_READ_TIMEOUT,
+                mcp.read_stream_until_notification_message(
+                    "thread/projectAgentMaintenance/statusUpdated",
+                ),
+            )
+            .await??,
+        )?;
+    assert_eq!(notified_status, settled_status);
+
     Ok(())
+}
+
+#[tokio::test]
+async fn project_agent_maintenance_rejects_while_turn_is_running() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = responses::start_mock_server().await;
+    Mock::given(method("POST"))
+        .and(path_regex(".*/responses$"))
+        .respond_with(
+            responses::sse_response(responses::sse(vec![
+                responses::ev_response_created("resp-root-delayed"),
+                responses::ev_assistant_message("msg-root-delayed", "Finished."),
+                responses::ev_completed("resp-root-delayed"),
+            ]))
+            .set_delay(Duration::from_secs(5)),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let codex_home = TempDir::new()?;
+    create_config_toml(codex_home.path(), &server.uri())?;
+    let project = TempDir::new()?;
+    create_project_agent(project.path())?;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build()
+        .await?;
+    timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
+
+    let thread_req = mcp
+        .send_thread_start_request_with_auto_env(ThreadStartParams {
+            cwd: Some(project.path().display().to_string()),
+            ..Default::default()
+        })
+        .await?;
+    let thread_resp = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(thread_req)),
+    )
+    .await??;
+    let ThreadStartResponse { thread, .. } = to_response::<ThreadStartResponse>(thread_resp)?;
+
+    let turn_req = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: thread.id.clone(),
+            client_user_message_id: None,
+            input: vec![V2UserInput::Text {
+                text: "Keep this turn active.".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let turn_resp = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(turn_req)),
+    )
+    .await??;
+    let TurnStartResponse { turn } = to_response::<TurnStartResponse>(turn_resp)?;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/started"),
+    )
+    .await??;
+
+    let maintenance_req = mcp
+        .send_raw_request(
+            "thread/projectAgentMaintenance/run",
+            Some(json!({"threadId": thread.id.clone()})),
+        )
+        .await?;
+    let error = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(maintenance_req)),
+    )
+    .await??;
+    assert_eq!(
+        error.error.message,
+        "project AGENT maintenance is unavailable while a task is running"
+    );
+
+    mcp.interrupt_turn_and_wait_for_aborted(thread.id, turn.id, DEFAULT_READ_TIMEOUT)
+        .await?;
+
+    Ok(())
+}
+
+fn notification_params<T>(notification: JSONRPCNotification) -> Result<T>
+where
+    T: DeserializeOwned,
+{
+    let params = notification
+        .params
+        .context("notification should include params")?;
+    serde_json::from_value(params).context("notification params should match the protocol type")
 }
 
 fn request_body_json(request: &wiremock::Request) -> Value {
@@ -289,6 +471,7 @@ fn create_project_agent(project_root: &Path) -> std::io::Result<()> {
     std::fs::write(
         project_root.join("AGENT/registry.toml"),
         r#"schema_version = 1
+revision = 1
 
 [agents.query]
 path = "agents/query/agent.toml"

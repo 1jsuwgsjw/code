@@ -1137,6 +1137,9 @@ pub(crate) async fn apply_bespoke_event_handling(
                 ))
                 .await;
         }
+        EventMsg::ThreadProjectAgentMaintenanceStatusUpdated(_) => {
+            // Project-agent extension events are translated by the extension event sink.
+        }
         EventMsg::ThreadSettingsApplied(thread_settings_event) => {
             let thread_settings =
                 thread_settings_from_core_snapshot(thread_settings_event.thread_settings);

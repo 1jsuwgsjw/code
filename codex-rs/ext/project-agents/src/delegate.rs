@@ -164,7 +164,10 @@ impl ToolExecutor<ToolCall> for ProjectAgentDelegateTool {
                 .persist_result(file_system.as_ref(), scope, &result)
                 .await
             {
-                Ok(_) => result,
+                Ok(_) => {
+                    context.emit_maintenance_status().await;
+                    result
+                }
                 Err(error) => host_failed_result(
                     &agent_id,
                     &task_id,

@@ -67,6 +67,9 @@ pub(super) fn server_notification_thread_target(
         ServerNotification::ThreadGoalCleared(notification) => {
             Some(notification.thread_id.as_str())
         }
+        ServerNotification::ThreadProjectAgentMaintenanceStatusUpdated(notification) => {
+            Some(notification.thread_id.as_str())
+        }
         ServerNotification::ThreadSettingsUpdated(notification) => {
             Some(notification.thread_id.as_str())
         }
@@ -204,6 +207,7 @@ mod tests {
     use codex_app_server_protocol::McpServerStartupState;
     use codex_app_server_protocol::McpServerStatusUpdatedNotification;
     use codex_app_server_protocol::ServerNotification;
+    use codex_app_server_protocol::ThreadProjectAgentMaintenanceStatusUpdatedNotification;
     use codex_app_server_protocol::ThreadSettings;
     use codex_app_server_protocol::ThreadSettingsUpdatedNotification;
     use codex_app_server_protocol::WarningNotification;
@@ -320,6 +324,23 @@ mod tests {
                 thread_id: thread_id.to_string(),
                 thread_settings: test_thread_settings(),
             });
+
+        let target = server_notification_thread_target(&notification);
+
+        assert_eq!(target, ServerNotificationThreadTarget::Thread(thread_id));
+    }
+
+    #[test]
+    fn project_agent_maintenance_notifications_route_to_threads() {
+        let thread_id = ThreadId::new();
+        let notification = ServerNotification::ThreadProjectAgentMaintenanceStatusUpdated(
+            ThreadProjectAgentMaintenanceStatusUpdatedNotification {
+                thread_id: thread_id.to_string(),
+                project_root: "/tmp/project".to_string(),
+                pending_count: 2,
+                catalog_revision: 3,
+            },
+        );
 
         let target = server_notification_thread_target(&notification);
 

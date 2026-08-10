@@ -34,6 +34,7 @@ use crate::request_processors::MarketplaceRequestProcessor;
 use crate::request_processors::McpRequestProcessor;
 use crate::request_processors::PluginRequestProcessor;
 use crate::request_processors::ProcessExecRequestProcessor;
+use crate::request_processors::ProjectAgentRequestProcessor;
 use crate::request_processors::RemoteControlRequestProcessor;
 use crate::request_processors::SearchRequestProcessor;
 use crate::request_processors::ThreadGoalRequestProcessor;
@@ -108,6 +109,7 @@ pub(crate) struct MessageProcessor {
     catalog_processor: CatalogRequestProcessor,
     command_exec_processor: CommandExecRequestProcessor,
     process_exec_processor: ProcessExecRequestProcessor,
+    project_agent_processor: ProjectAgentRequestProcessor,
     config_processor: ConfigRequestProcessor,
     environment_processor: EnvironmentRequestProcessor,
     external_agent_config_processor: ExternalAgentConfigRequestProcessor,
@@ -401,6 +403,8 @@ impl MessageProcessor {
         );
         let remote_control_processor = RemoteControlRequestProcessor::new(remote_control_handle);
         let search_processor = SearchRequestProcessor::new(outgoing.clone());
+        let project_agent_processor =
+            ProjectAgentRequestProcessor::new(Arc::clone(&thread_manager), outgoing.clone());
         let thread_goal_processor = ThreadGoalRequestProcessor::new(
             Arc::clone(&thread_manager),
             outgoing.clone(),
@@ -486,6 +490,7 @@ impl MessageProcessor {
             catalog_processor,
             command_exec_processor,
             process_exec_processor,
+            project_agent_processor,
             config_processor,
             environment_processor,
             external_agent_config_processor,
@@ -1092,6 +1097,11 @@ impl MessageProcessor {
             ClientRequest::ThreadGoalClear { params, .. } => {
                 self.thread_goal_processor
                     .thread_goal_clear(request_id.clone(), params)
+                    .await
+            }
+            ClientRequest::ThreadProjectAgentMaintenanceRun { params, .. } => {
+                self.project_agent_processor
+                    .maintenance_run(request_id.clone(), params)
                     .await
             }
             ClientRequest::ThreadMetadataUpdate { params, .. } => {

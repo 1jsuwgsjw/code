@@ -4,6 +4,7 @@ use codex_project_agents::ProjectAgentId;
 use codex_project_agents::ProjectAgentRegistration;
 use codex_project_agents::ProjectAgentRegistry;
 use codex_project_agents::RelativeProjectAgentPath;
+use predicates::str::contains;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -70,6 +71,13 @@ fn agents_cli_manages_project_registry() -> Result<()> {
     assert_eq!(shown, listed[0]);
 
     codex_command(codex_home.path(), project.path())?
+        .args(["agents", "maintain", "query", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(contains("Dry-run maintenance"))
+        .stdout(contains("0 accepted, 0 rejected"));
+
+    codex_command(codex_home.path(), project.path())?
         .args(["agents", "disable", "query"])
         .assert()
         .success()
@@ -82,6 +90,7 @@ fn agents_cli_manages_project_registry() -> Result<()> {
         registry,
         ProjectAgentRegistry {
             schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+            revision: 2,
             agents: BTreeMap::from([(
                 ProjectAgentId::new("query")?,
                 ProjectAgentRegistration {
