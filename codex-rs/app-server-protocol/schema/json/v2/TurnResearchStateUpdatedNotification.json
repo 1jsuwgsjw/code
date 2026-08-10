@@ -45,11 +45,11 @@
       },
       "required": [
         "id",
-        "scope",
         "kind",
-        "subject",
+        "scope",
         "statement",
-        "status"
+        "status",
+        "subject"
       ],
       "type": "object"
     },
@@ -87,11 +87,11 @@
     }
   },
   "required": [
-    "threadId",
-    "turnId",
-    "revision",
     "changed",
-    "entries"
+    "entries",
+    "revision",
+    "threadId",
+    "turnId"
   ],
   "title": "TurnResearchStateUpdatedNotification",
   "type": "object"

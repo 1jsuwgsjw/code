@@ -4708,6 +4708,33 @@
       ],
       "type": "object"
     },
+    "ThreadProjectAgentMaintenanceStatus": {
+      "properties": {
+        "catalogRevision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "pendingCount": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "projectRoot": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalogRevision",
+        "pendingCount",
+        "projectRoot",
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ThreadRealtimeAudioChunk": {
       "description": "EXPERIMENTAL - thread realtime audio chunk.",
       "properties": {
@@ -5442,11 +5469,11 @@
       },
       "required": [
         "id",
-        "scope",
         "kind",
-        "subject",
+        "scope",
         "statement",
-        "status"
+        "status",
+        "subject"
       ],
       "type": "object"
     },
@@ -5474,11 +5501,11 @@
         }
       },
       "required": [
-        "threadId",
-        "turnId",
-        "revision",
         "changed",
-        "entries"
+        "entries",
+        "revision",
+        "threadId",
+        "turnId"
       ],
       "type": "object"
     },
@@ -6052,6 +6079,26 @@
         "params"
       ],
       "title": "Thread/goal/clearedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "thread/projectAgentMaintenance/statusUpdated"
+          ],
+          "title": "Thread/projectAgentMaintenance/statusUpdatedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectAgentMaintenanceStatus"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectAgentMaintenance/statusUpdatedNotification",
       "type": "object"
     },
     {

@@ -4034,6 +4034,17 @@
       ],
       "type": "object"
     },
+    "ThreadProjectAgentMaintenanceRunParams": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ThreadReadParams": {
       "properties": {
         "includeTurns": {
@@ -5123,6 +5134,30 @@
         "params"
       ],
       "title": "Thread/goal/clearRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/projectAgentMaintenance/run"
+          ],
+          "title": "Thread/projectAgentMaintenance/runRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectAgentMaintenanceRunParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectAgentMaintenance/runRequest",
       "type": "object"
     },
     {

@@ -12,7 +12,8 @@ use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use codex_exec_server::CreateDirectoryOptions;
+use codex_exec_server::ExecutorFileSystem;
 use codex_utils_path_uri::PathUri;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
@@ -104,8 +105,6 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
 
     let codex_home = TempDir::new()?;
     create_config_toml(codex_home.path(), &server.uri())?;
-    let project = TempDir::new()?;
-    create_project_agent(project.path())?;
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -113,11 +112,17 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
 
+    let (file_system, project_root) = {
+        let auto_env = mcp.auto_env()?;
+        (
+            auto_env.environment().get_filesystem(),
+            auto_env.selection().cwd.clone(),
+        )
+    };
+    create_project_agent(file_system.as_ref(), &project_root).await?;
+
     let thread_req = mcp
-        .send_thread_start_request_with_auto_env(ThreadStartParams {
-            cwd: Some(project.path().display().to_string()),
-            ..Default::default()
-        })
+        .send_thread_start_request_with_auto_env(ThreadStartParams::default())
         .await?;
     let thread_resp: JSONRPCResponse = timeout(
         DEFAULT_READ_TIMEOUT,
@@ -125,8 +130,7 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
     )
     .await??;
     let ThreadStartResponse { thread, .. } = to_response::<ThreadStartResponse>(thread_resp)?;
-    let project_root =
-        PathUri::from_abs_path(&AbsolutePathBuf::try_from(project.path())?).to_string();
+    let project_root_string = project_root.to_string();
     let initial_status =
         notification_params::<ThreadProjectAgentMaintenanceStatusUpdatedNotification>(
             timeout(
@@ -141,7 +145,7 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
         initial_status,
         ThreadProjectAgentMaintenanceStatusUpdatedNotification {
             thread_id: thread.id.clone(),
-            project_root: project_root.clone(),
+            project_root: project_root_string.clone(),
             pending_count: 0,
             catalog_revision: 1,
         }
@@ -178,7 +182,7 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
         pending_status,
         ThreadProjectAgentMaintenanceStatusUpdatedNotification {
             thread_id: thread.id.clone(),
-            project_root: project_root.clone(),
+            project_root: project_root_string.clone(),
             pending_count: 2,
             catalog_revision: 1,
         }
@@ -268,17 +272,29 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
         "improvement_proposals": ["Add a narrower search helper."],
         "error": null,
     });
-    let agent_root = project.path().join("AGENT/agents/query");
+    let agent_root = project_root.join("AGENT/agents/query")?;
     assert_eq!(
-        read_json(&agent_root.join("tasks/current.json"))?,
+        read_json(
+            file_system.as_ref(),
+            &agent_root.join("tasks/current.json")?
+        )
+        .await?,
         expected_result
     );
     assert_eq!(
-        read_json(&agent_root.join(format!("tasks/history/{task_id}.json")))?,
+        read_json(
+            file_system.as_ref(),
+            &agent_root.join(format!("tasks/history/{task_id}.json"))?,
+        )
+        .await?,
         expected_result
     );
     assert_eq!(
-        read_json(&agent_root.join(format!("memory/candidates/{task_id}-0.json")))?,
+        read_json(
+            file_system.as_ref(),
+            &agent_root.join(format!("memory/candidates/{task_id}-0.json"))?,
+        )
+        .await?,
         json!({
             "schema_version": 1,
             "agent_id": "query",
@@ -287,7 +303,11 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
         })
     );
     assert_eq!(
-        read_json(&agent_root.join(format!("proposals/pending/{task_id}-0.json")))?,
+        read_json(
+            file_system.as_ref(),
+            &agent_root.join(format!("proposals/pending/{task_id}-0.json"))?,
+        )
+        .await?,
         json!({
             "schema_version": 1,
             "agent_id": "query",
@@ -310,7 +330,7 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
     let maintenance = to_response::<ThreadProjectAgentMaintenanceRunResponse>(maintenance_resp)?;
     let settled_status = ThreadProjectAgentMaintenanceStatusUpdatedNotification {
         thread_id: thread.id.clone(),
-        project_root,
+        project_root: project_root_string,
         pending_count: 0,
         catalog_revision: 2,
     };
@@ -352,14 +372,11 @@ async fn project_agent_maintenance_rejects_while_turn_is_running() -> Result<()>
             ]))
             .set_delay(Duration::from_secs(5)),
         )
-        .expect(1)
         .mount(&server)
         .await;
 
     let codex_home = TempDir::new()?;
     create_config_toml(codex_home.path(), &server.uri())?;
-    let project = TempDir::new()?;
-    create_project_agent(project.path())?;
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -367,11 +384,17 @@ async fn project_agent_maintenance_rejects_while_turn_is_running() -> Result<()>
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
 
+    let (file_system, project_root) = {
+        let auto_env = mcp.auto_env()?;
+        (
+            auto_env.environment().get_filesystem(),
+            auto_env.selection().cwd.clone(),
+        )
+    };
+    create_project_agent(file_system.as_ref(), &project_root).await?;
+
     let thread_req = mcp
-        .send_thread_start_request_with_auto_env(ThreadStartParams {
-            cwd: Some(project.path().display().to_string()),
-            ..Default::default()
-        })
+        .send_thread_start_request_with_auto_env(ThreadStartParams::default())
         .await?;
     let thread_resp = timeout(
         DEFAULT_READ_TIMEOUT,
@@ -464,23 +487,44 @@ fn has_function_call_output(body: &Value, call_id: &str) -> bool {
         })
 }
 
-fn create_project_agent(project_root: &Path) -> std::io::Result<()> {
-    std::fs::create_dir(project_root.join(".git"))?;
-    let agent_root = project_root.join("AGENT/agents/query");
-    std::fs::create_dir_all(&agent_root)?;
-    std::fs::write(
-        project_root.join("AGENT/registry.toml"),
-        r#"schema_version = 1
+async fn create_project_agent(
+    file_system: &dyn ExecutorFileSystem,
+    project_root: &PathUri,
+) -> Result<()> {
+    file_system
+        .create_directory(
+            &project_root.join(".git")?,
+            CreateDirectoryOptions { recursive: true },
+            /*sandbox*/ None,
+        )
+        .await?;
+    let agent_root = project_root.join("AGENT/agents/query")?;
+    file_system
+        .create_directory(
+            &agent_root,
+            CreateDirectoryOptions { recursive: true },
+            /*sandbox*/ None,
+        )
+        .await?;
+    file_system
+        .write_file(
+            &project_root.join("AGENT/registry.toml")?,
+            r#"schema_version = 1
 revision = 1
 
 [agents.query]
 path = "agents/query/agent.toml"
 enabled = true
-"#,
-    )?;
-    std::fs::write(
-        agent_root.join("agent.toml"),
-        r#"schema_version = 1
+"#
+            .as_bytes()
+            .to_vec(),
+            /*sandbox*/ None,
+        )
+        .await?;
+    file_system
+        .write_file(
+            &agent_root.join("agent.toml")?,
+            r#"schema_version = 1
 id = "query"
 description = "Performs bounded repository queries."
 constraints_file = "constraints.md"
@@ -490,12 +534,20 @@ model_provider = "worker_provider"
 tools = []
 memory_max_items = 16
 memory_max_tokens = 2000
-"#,
-    )?;
-    std::fs::write(
-        agent_root.join("constraints.md"),
-        "Inspect only the target named in the delegated task.",
-    )
+"#
+            .as_bytes()
+            .to_vec(),
+            /*sandbox*/ None,
+        )
+        .await?;
+    file_system
+        .write_file(
+            &agent_root.join("constraints.md")?,
+            b"Inspect only the target named in the delegated task.".to_vec(),
+            /*sandbox*/ None,
+        )
+        .await?;
+    Ok(())
 }
 
 fn create_config_toml(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {
@@ -526,6 +578,7 @@ stream_max_retries = 0
     )
 }
 
-fn read_json(path: &Path) -> Result<Value> {
-    Ok(serde_json::from_slice(&std::fs::read(path)?)?)
+async fn read_json(file_system: &dyn ExecutorFileSystem, path: &PathUri) -> Result<Value> {
+    let contents = file_system.read_file(path, /*sandbox*/ None).await?;
+    Ok(serde_json::from_slice(&contents)?)
 }

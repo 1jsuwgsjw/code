@@ -475,6 +475,30 @@
             },
             "method": {
               "enum": [
+                "thread/projectAgentMaintenance/run"
+              ],
+              "title": "Thread/projectAgentMaintenance/runRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ThreadProjectAgentMaintenanceRunParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/projectAgentMaintenance/runRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "thread/metadata/update"
               ],
               "title": "Thread/metadata/updateRequestMethod",
@@ -4326,6 +4350,26 @@
             "params"
           ],
           "title": "Thread/goal/clearedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "thread/projectAgentMaintenance/statusUpdated"
+              ],
+              "title": "Thread/projectAgentMaintenance/statusUpdatedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ThreadProjectAgentMaintenanceStatus"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/projectAgentMaintenance/statusUpdatedNotification",
           "type": "object"
         },
         {
@@ -19017,6 +19061,100 @@
         "title": "ThreadNameUpdatedNotification",
         "type": "object"
       },
+      "ThreadProjectAgentMaintenanceRunParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId"
+        ],
+        "title": "ThreadProjectAgentMaintenanceRunParams",
+        "type": "object"
+      },
+      "ThreadProjectAgentMaintenanceRunResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "acceptedCount": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "rejectedCount": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/definitions/v2/ThreadProjectAgentMaintenanceStatus"
+          }
+        },
+        "required": [
+          "acceptedCount",
+          "rejectedCount",
+          "status"
+        ],
+        "title": "ThreadProjectAgentMaintenanceRunResponse",
+        "type": "object"
+      },
+      "ThreadProjectAgentMaintenanceStatus": {
+        "properties": {
+          "catalogRevision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "pendingCount": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "projectRoot": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "catalogRevision",
+          "pendingCount",
+          "projectRoot",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "ThreadProjectAgentMaintenanceStatusUpdatedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "catalogRevision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "pendingCount": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "projectRoot": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "catalogRevision",
+          "pendingCount",
+          "projectRoot",
+          "threadId"
+        ],
+        "title": "ThreadProjectAgentMaintenanceStatus",
+        "type": "object"
+      },
       "ThreadReadParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -20535,11 +20673,11 @@
         },
         "required": [
           "id",
-          "scope",
           "kind",
-          "subject",
+          "scope",
           "statement",
-          "status"
+          "status",
+          "subject"
         ],
         "type": "object"
       },
@@ -20568,11 +20706,11 @@
           }
         },
         "required": [
-          "threadId",
-          "turnId",
-          "revision",
           "changed",
-          "entries"
+          "entries",
+          "revision",
+          "threadId",
+          "turnId"
         ],
         "title": "TurnResearchStateUpdatedNotification",
         "type": "object"

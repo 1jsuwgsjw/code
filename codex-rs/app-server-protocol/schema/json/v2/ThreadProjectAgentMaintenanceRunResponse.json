@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ThreadProjectAgentMaintenanceStatus": {
+      "properties": {
+        "catalogRevision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "pendingCount": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "projectRoot": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalogRevision",
+        "pendingCount",
+        "projectRoot",
+        "threadId"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "acceptedCount": {
+      "format": "uint64",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "rejectedCount": {
+      "format": "uint64",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "status": {
+      "$ref": "#/definitions/ThreadProjectAgentMaintenanceStatus"
+    }
+  },
+  "required": [
+    "acceptedCount",
+    "rejectedCount",
+    "status"
+  ],
+  "title": "ThreadProjectAgentMaintenanceRunResponse",
+  "type": "object"
+}
