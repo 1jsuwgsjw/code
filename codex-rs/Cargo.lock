@@ -2674,8 +2674,8 @@ dependencies = [
  "codex-plugin",
  "codex-prompts",
  "codex-protocol",
- "codex-response-debug-context",
  "codex-research-state",
+ "codex-response-debug-context",
  "codex-rmcp-client",
  "codex-rollout",
  "codex-rollout-trace",
@@ -3705,6 +3705,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-project-agents"
+version = "0.0.0"
+dependencies = [
+ "codex-file-system",
+ "codex-utils-absolute-path",
+ "codex-utils-path-uri",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.9.11+spec-1.1.0",
+]
+
+[[package]]
 name = "codex-prompts"
 version = "0.0.0"
 dependencies = [
@@ -3770,6 +3786,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-research-state"
+version = "0.0.0"
+dependencies = [
+ "codex-protocol",
+ "pretty_assertions",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "codex-response-debug-context"
 version = "0.0.0"
 dependencies = [
@@ -3778,16 +3804,6 @@ dependencies = [
  "http 1.4.0",
  "pretty_assertions",
  "serde_json",
-]
-
-[[package]]
-name = "codex-research-state"
-version = "0.0.0"
-dependencies = [
- "codex-protocol",
- "pretty_assertions",
- "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]

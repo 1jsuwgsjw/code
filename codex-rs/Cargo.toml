@@ -75,6 +75,7 @@ members = [
     "network-proxy",
     "ollama",
     "process-hardening",
+    "project-agents",
     "protocol",
     "realtime-webrtc",
     "research-state",
@@ -217,6 +218,7 @@ codex-otel = { path = "otel" }
 codex-plugin = { path = "plugin" }
 codex-model-provider = { path = "model-provider" }
 codex-process-hardening = { path = "process-hardening" }
+codex-project-agents = { path = "project-agents" }
 codex-protocol = { path = "protocol" }
 codex-prompts = { path = "prompts" }
 codex-responses-api-proxy = { path = "responses-api-proxy" }

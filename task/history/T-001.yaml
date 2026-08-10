@@ -1,0 +1,44 @@
+schema_version: 1
+task_id: T-001
+title: T-001
+status: complete
+phase: complete
+mode: use
+objective: 分析当前 D:\codex 开源仓库的现有功能层，形成后续功能修改前的分层地图。
+current_subtask: 向用户交付当前仓库的功能分层地图，并说明后续修改应从哪一层定位。
+use_contract:
+  target_output: 一份面向功能修改的 Codex 当前功能层清单，说明各层职责、代表目录/组件及主要调用关系。
+  required_information:
+  - 仓库顶层结构
+  - codex-rs 工作区 crate 结构
+  - 主要入口、协议、核心代理、工具执行、TUI/CLI/app-server 等组件关系
+  done_when: 主要运行入口、交互层、服务/协议层、代理核心层、工具与执行层、基础设施层均有仓库证据支撑，并明确下一步如何选择修改落点。
+known_information:
+- 顶层产品入口由 codex-rs/cli 统一分发：交互 TUI、非交互 exec/review、app-server、MCP server、sandbox、exec-server、会话管理、云任务等。
+- codex-rs/tui 与 codex-rs/exec 均通过 codex-app-server-client 连接嵌入式、本地或远程 app-server；app-server
+  是当前客户端共享的服务边界。
+- app-server 使用 JSON-RPC，核心对象为 Thread、Turn、Item，并暴露会话、执行、文件系统、模型、技能、插件、认证等 API。
+- codex-core 负责线程/会话、模型请求与流式事件、上下文和提示词、工具编排、审批、压缩、评审、多代理、实时会话等代理运行时逻辑。
+- 工具与扩展层包括 shell、apply_patch、MCP、skills、plugins、apps/connectors、动态工具、code-mode、计划、用户输入与权限请求等。
+- 执行与隔离层包括 exec-server、本地/远程进程和文件系统 RPC、execpolicy、Linux bubblewrap/Landlock、Windows/macOS
+  沙箱、网络代理和提权流程。
+- 持久化层由 ThreadStore 抽象、rollout JSONL、SQLite state、message history、agent graph 和两阶段
+  memories 管线组成。
+- 模型与认证层支持 OpenAI/ChatGPT、API key、Amazon Bedrock，以及 Ollama/LM Studio 等本地 OSS provider。
+- SDK 层包含 TypeScript SDK（包装 codex CLI JSONL）和 Python SDK（包装 codex app-server stdio
+  JSON-RPC）。
+- 横切层包括 config 多层合并、feature flags、协议类型、遥测/分析/反馈以及共享 utils。
+open_questions:
+- 具体要修改的功能尚未指定；本轮先建立整体分层地图。
+next_action: 用户选择要修改的具体功能后，进入需求对齐，沿对应入口到协议、core、工具/执行或持久化层定位最小修改面。
+last_result: 已完成当前 Codex 仓库功能分层与主调用链梳理，可据此选择后续功能修改落点。
+scripts: []
+artifacts: []
+context_checkpoint:
+  estimated_usage: null
+  reason: null
+  updated_at: null
+lessons: []
+created_at: '2026-08-10T10:41:12+00:00'
+updated_at: '2026-08-10T10:56:32+00:00'
+completed_at: '2026-08-10T10:56:32+00:00'

@@ -1,0 +1,38 @@
+schema_version: 1
+task_id: T-002
+title: Codex项目功能定位AGENT文档
+status: complete
+phase: complete
+mode: use
+objective: 建立项目级 AGENT 功能定位文档，沉淀仓库功能层、入口与修改落点，减少后续重复查看。
+current_subtask: 交付项目级功能导航文档。
+use_contract:
+  target_output: 根目录新增 AGENTS_NAVIGATION.md，并在现有 AGENTS.md 中加入必须优先使用及同步维护该导航的规则。
+  required_information: []
+  done_when: 导航覆盖全仓功能层和高频定位链，包含精确路径、代表性符号、测试命令与失效条件；所有引用经验证，根 AGENTS.md 引用生效。
+known_information:
+- 根 AGENTS.md 当前从 Rust/codex-rs 规则开始，适合在顶部增加仓库级导航规则。
+- 仓库内仅有另一个嵌套规则文件：codex-rs/tui/src/bottom_pane/AGENTS.md。
+- 已验证 CLI、TUI、exec、app-server/client/protocol、core、tools/MCP、执行隔离、持久化、模型认证和 SDK 的关键路径与代表性符号。
+- 现有 AGENTS.md 中 MCP 文件路径写为不存在的 mcp_connection_manager.rs；实际文件为 codex-rs/codex-mcp/src/connection_manager.rs。
+open_questions: []
+next_action: 完成任务并向用户报告交付内容。
+last_result: 已创建并验证 AGENTS_NAVIGATION.md，并在根 AGENTS.md 中加入强制优先导航与同变更维护规则；194 个路径锚点、72
+  个代表性符号及 Markdown 格式检查全部通过。
+scripts: []
+artifacts:
+- D:\codex\AGENTS.md
+- D:\codex\AGENTS_NAVIGATION.md
+context_checkpoint:
+  estimated_usage: null
+  reason: null
+  updated_at: null
+lessons: []
+created_at: '2026-08-10T10:58:57+00:00'
+updated_at: '2026-08-10T11:31:36+00:00'
+expected_output: 根 AGENTS.md 强制优先使用导航，AGENTS_NAVIGATION.md 可按功能定位源码、代表符号和验证命令。
+required_information: []
+done_when: 两份文档内容完整且格式、路径、符号和最终工作树验证通过；所有结果相关关系已有明确处置。
+known_limitations:
+- 本次仅修改文档，未运行 Rust 测试套件；task/ 为本地任务锚点状态，保持未跟踪。
+completed_at: '2026-08-10T11:31:36+00:00'
