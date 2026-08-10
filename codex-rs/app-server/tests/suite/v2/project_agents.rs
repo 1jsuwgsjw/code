@@ -284,7 +284,7 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
     assert_eq!(
         read_json(
             file_system.as_ref(),
-            &agent_root.join(format!("tasks/history/{task_id}.json"))?,
+            &agent_root.join(&format!("tasks/history/{task_id}.json"))?,
         )
         .await?,
         expected_result
@@ -292,7 +292,7 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
     assert_eq!(
         read_json(
             file_system.as_ref(),
-            &agent_root.join(format!("memory/candidates/{task_id}-0.json"))?,
+            &agent_root.join(&format!("memory/candidates/{task_id}-0.json"))?,
         )
         .await?,
         json!({
@@ -305,7 +305,7 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
     assert_eq!(
         read_json(
             file_system.as_ref(),
-            &agent_root.join(format!("proposals/pending/{task_id}-0.json"))?,
+            &agent_root.join(&format!("proposals/pending/{task_id}-0.json"))?,
         )
         .await?,
         json!({
