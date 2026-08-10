@@ -21,6 +21,7 @@ pub struct ThreadProjectAgentMaintenanceRunResponse {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
+#[schemars(rename = "ThreadProjectAgentMaintenanceStatus")]
 #[ts(export_to = "v2/")]
 pub struct ThreadProjectAgentMaintenanceStatusUpdatedNotification {
     pub thread_id: String,
