@@ -247,7 +247,7 @@ pub enum ProjectAgentTaskStatus {
     Failed,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProjectAgentTaskResult {
     pub status: ProjectAgentTaskStatus,
     pub agent_id: ProjectAgentId,
@@ -257,44 +257,15 @@ pub struct ProjectAgentTaskResult {
     pub evidence: Vec<String>,
     pub memory_candidates: Vec<String>,
     pub improvement_proposals: Vec<String>,
+    #[serde(deserialize_with = "deserialize_required_optional_string")]
     pub error: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct ProjectAgentTaskResultWire {
-    status: ProjectAgentTaskStatus,
-    agent_id: ProjectAgentId,
-    task_id: String,
-    result: String,
-    artifacts: Vec<String>,
-    evidence: Vec<String>,
-    memory_candidates: Vec<String>,
-    improvement_proposals: Vec<String>,
-    error: RequiredOption<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(transparent)]
-struct RequiredOption<T>(Option<T>);
-
-impl<'de> Deserialize<'de> for ProjectAgentTaskResult {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let wire = ProjectAgentTaskResultWire::deserialize(deserializer)?;
-        Ok(Self {
-            status: wire.status,
-            agent_id: wire.agent_id,
-            task_id: wire.task_id,
-            result: wire.result,
-            artifacts: wire.artifacts,
-            evidence: wire.evidence,
-            memory_candidates: wire.memory_candidates,
-            improvement_proposals: wire.improvement_proposals,
-            error: wire.error.0,
-        })
-    }
+fn deserialize_required_optional_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer)
 }
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
