@@ -73,10 +73,12 @@ jobs:
           RUST_MIN_STACK: 8388608
         run: cargo test --locked -p codex-core research_context
 
-      - name: Test Responses Lite system instructions
+      - name: Test Responses Lite instruction roles
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-core responses_lite_uses_system_message_for_instructions_and_input_tools
+        run: |
+          cargo test --locked -p codex-core responses_lite_uses_system_message_for_instructions_and_input_tools
+          cargo test --locked -p codex-core responses_lite_uses_developer_message_for_non_openai_provider
 
       - name: Test app-server research-state protocol
         env:

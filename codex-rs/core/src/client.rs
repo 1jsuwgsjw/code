@@ -840,6 +840,9 @@ impl ModelClient {
         }
         let tools = create_tools_json_for_responses_api(&prompt.tools)?;
         let (instructions, tools) = if model_info.use_responses_lite {
+            // OpenAI accepts base instructions as a system item. Compatible providers may still
+            // require the historical developer-role request shape.
+            let base_instructions_role = if is_openai { "system" } else { "developer" };
             let mut prefix = vec![ResponseItem::AdditionalTools {
                 id: None,
                 role: "developer".to_string(),
@@ -848,7 +851,7 @@ impl ModelClient {
             if !prompt.base_instructions.text.is_empty() {
                 prefix.push(ResponseItem::Message {
                     id: None,
-                    role: "system".to_string(),
+                    role: base_instructions_role.to_string(),
                     content: vec![ContentItem::InputText {
                         text: prompt.base_instructions.text.clone(),
                     }],
