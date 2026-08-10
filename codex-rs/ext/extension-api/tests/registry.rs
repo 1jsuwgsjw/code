@@ -20,6 +20,9 @@ use codex_extension_api::ToolCall;
 use codex_extension_api::ToolContributor;
 use codex_extension_api::ToolExecutor;
 use codex_extension_api::ToolLifecycleContributor;
+use codex_extension_api::ToolName;
+use codex_extension_api::ToolVisibilityContributor;
+use codex_extension_api::ToolVisibilityPolicy;
 use codex_extension_api::TurnContextContributionInput;
 use codex_extension_api::TurnInputContext;
 use codex_extension_api::TurnInputContributor;
@@ -84,6 +87,16 @@ impl ToolContributor for AllContributors {
 
 impl ToolLifecycleContributor for AllContributors {}
 
+impl ToolVisibilityContributor for AllContributors {
+    fn visibility(
+        &self,
+        _session_store: &ExtensionData,
+        _thread_store: &ExtensionData,
+    ) -> ToolVisibilityPolicy {
+        ToolVisibilityPolicy::default()
+    }
+}
+
 impl TurnItemContributor for AllContributors {
     fn contribute<'a>(
         &'a self,
@@ -125,6 +138,7 @@ async fn build_round_trips_every_contributor_category() {
     builder.turn_input_contributor(contributor.clone());
     builder.tool_contributor(contributor.clone());
     builder.tool_lifecycle_contributor(contributor.clone());
+    builder.tool_visibility_contributor(contributor.clone());
     builder.turn_item_contributor(contributor.clone());
     builder.approval_review_contributor(contributor);
     let registry = builder.build();
@@ -138,6 +152,13 @@ async fn build_round_trips_every_contributor_category() {
     assert_eq!(registry.turn_input_contributors().len(), 1);
     assert_eq!(registry.tool_contributors().len(), 1);
     assert_eq!(registry.tool_lifecycle_contributors().len(), 1);
+    assert_eq!(
+        registry.tool_visibility_policy(
+            &ExtensionData::new("session"),
+            &ExtensionData::new("thread"),
+        ),
+        ToolVisibilityPolicy::default()
+    );
     assert_eq!(registry.turn_item_contributors().len(), 1);
     assert_eq!(
         registry
@@ -149,6 +170,56 @@ async fn build_round_trips_every_contributor_category() {
             .await,
         Some(ReviewDecision::ApprovedForSession)
     );
+}
+
+struct StaticToolVisibilityContributor(ToolVisibilityPolicy);
+
+impl ToolVisibilityContributor for StaticToolVisibilityContributor {
+    fn visibility(
+        &self,
+        _session_store: &ExtensionData,
+        _thread_store: &ExtensionData,
+    ) -> ToolVisibilityPolicy {
+        self.0.clone()
+    }
+}
+
+#[test]
+fn tool_visibility_policies_intersect_allows_and_union_denies() {
+    let shared = ToolName::plain("shared");
+    let excluded_by_allow = ToolName::plain("excluded_by_allow");
+    let excluded_by_deny = ToolName::plain("excluded_by_deny");
+    let first = ToolVisibilityPolicy::allow_only([
+        shared.clone(),
+        excluded_by_allow.clone(),
+        excluded_by_deny.clone(),
+    ]);
+    let mut second = ToolVisibilityPolicy::allow_only([shared.clone(), excluded_by_deny.clone()]);
+    second.deny.insert(excluded_by_deny.clone());
+
+    let mut builder = ExtensionRegistryBuilder::<()>::new();
+    builder.tool_visibility_contributor(Arc::new(StaticToolVisibilityContributor(first)));
+    builder.tool_visibility_contributor(Arc::new(StaticToolVisibilityContributor(second)));
+    let policy = builder.build().tool_visibility_policy(
+        &ExtensionData::new("session"),
+        &ExtensionData::new("thread"),
+    );
+
+    assert_eq!(
+        policy.allow,
+        Some(
+            [shared.clone(), excluded_by_deny.clone()]
+                .into_iter()
+                .collect()
+        )
+    );
+    assert_eq!(
+        policy.deny,
+        [excluded_by_deny.clone()].into_iter().collect()
+    );
+    assert!(policy.allows(&shared));
+    assert!(!policy.allows(&excluded_by_allow));
+    assert!(!policy.allows(&excluded_by_deny));
 }
 
 struct NamedContextContributor(&'static str);

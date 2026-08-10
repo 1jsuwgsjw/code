@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use codex_extension_api::ToolVisibilityPolicy;
 use codex_features::Feature;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
@@ -49,6 +50,7 @@ struct ToolPlanInputs {
     deferred_mcp_tools: Option<Vec<ToolInfo>>,
     tool_suggest_candidates: Option<ToolSuggestCandidates>,
     extension_tool_executors: Vec<Arc<dyn ToolExecutor<ExtensionToolCall>>>,
+    tool_visibility_policy: ToolVisibilityPolicy,
     dynamic_tools: Vec<DynamicToolSpec>,
 }
 
@@ -190,6 +192,7 @@ async fn probe_with(
             mcp_tools: inputs.mcp_tools,
             deferred_mcp_tools: inputs.deferred_mcp_tools,
             extension_tool_executors: inputs.extension_tool_executors,
+            tool_visibility_policy: inputs.tool_visibility_policy,
             dynamic_tools: inputs.dynamic_tools.as_slice(),
         },
         &Default::default(),
@@ -303,6 +306,44 @@ impl ToolExecutor<ExtensionToolCall> for TestNamespaceExtensionTool {
             Ok(Box::new(codex_tools::JsonToolOutput::new(json!({}))) as Box<dyn ToolOutput>)
         })
     }
+}
+
+#[tokio::test]
+async fn tool_visibility_policy_filters_model_specs_and_registered_runtimes() {
+    let allowed = ToolName::namespaced("project", "allowed");
+    let denied = ToolName::namespaced("project", "denied");
+    let mut policy = ToolVisibilityPolicy::allow_only([allowed.clone(), denied.clone()]);
+    policy.deny.insert(denied.clone());
+
+    let plan = probe_with(
+        |_| {},
+        ToolPlanInputs {
+            extension_tool_executors: vec![
+                Arc::new(TestNamespaceExtensionTool {
+                    namespace: "project",
+                    tool_name: "allowed",
+                }),
+                Arc::new(TestNamespaceExtensionTool {
+                    namespace: "project",
+                    tool_name: "denied",
+                }),
+                Arc::new(TestNamespaceExtensionTool {
+                    namespace: "project",
+                    tool_name: "outside_allow",
+                }),
+            ],
+            tool_visibility_policy: policy,
+            ..Default::default()
+        },
+    )
+    .await;
+
+    assert_eq!(plan.visible_names, vec!["project"]);
+    assert_eq!(
+        plan.namespace_function_names("project"),
+        &["allowed".to_string()]
+    );
+    assert_eq!(plan.registered_names, vec![allowed.to_string()]);
 }
 
 struct DeferredExtensionTool;
@@ -681,6 +722,7 @@ async fn environment_tools_follow_the_step_context() {
             deferred_mcp_tools: None,
             tool_suggest_candidates: None,
             extension_tool_executors: Vec::new(),
+            tool_visibility_policy: Default::default(),
             dynamic_tools: &[],
         },
         &Default::default(),
@@ -815,6 +857,7 @@ async fn deferred_extension_tools_are_discoverable_with_tool_search() {
         },
         ToolPlanInputs {
             extension_tool_executors: vec![Arc::new(DeferredExtensionTool)],
+            tool_visibility_policy: Default::default(),
             ..ToolPlanInputs::default()
         },
     )
@@ -841,6 +884,7 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
             deferred_mcp_tools: Some(vec![mcp_tool("first", "mcp__first", "lookup")]),
             tool_suggest_candidates: None,
             extension_tool_executors: Vec::new(),
+            tool_visibility_policy: Default::default(),
             dynamic_tools: &[],
         },
         &cache,
@@ -858,6 +902,7 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
             deferred_mcp_tools: Some(vec![mcp_tool("second", "mcp__second", "lookup")]),
             tool_suggest_candidates: None,
             extension_tool_executors: Vec::new(),
+            tool_visibility_policy: Default::default(),
             dynamic_tools: &[],
         },
         &cache,
@@ -1520,6 +1565,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
         },
         ToolPlanInputs {
             extension_tool_executors: vec![image_generation_tool.clone()],
+            tool_visibility_policy: Default::default(),
             ..Default::default()
         },
     )
@@ -1534,6 +1580,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
         },
         ToolPlanInputs {
             extension_tool_executors: vec![image_generation_tool.clone()],
+            tool_visibility_policy: Default::default(),
             ..Default::default()
         },
     )
@@ -1547,6 +1594,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
         },
         ToolPlanInputs {
             extension_tool_executors: vec![image_generation_tool.clone()],
+            tool_visibility_policy: Default::default(),
             ..Default::default()
         },
     )
@@ -1560,6 +1608,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
         },
         ToolPlanInputs {
             extension_tool_executors: vec![image_generation_tool],
+            tool_visibility_policy: Default::default(),
             ..Default::default()
         },
     )

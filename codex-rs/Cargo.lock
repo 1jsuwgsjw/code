@@ -2011,6 +2011,7 @@ dependencies = [
  "codex-models-manager",
  "codex-otel",
  "codex-plugin",
+ "codex-project-agents-extension",
  "codex-protocol",
  "codex-rmcp-client",
  "codex-rollout",
@@ -2057,6 +2058,7 @@ dependencies = [
  "url",
  "uuid",
  "wiremock",
+ "zstd 0.13.3",
 ]
 
 [[package]]
@@ -2355,6 +2357,7 @@ dependencies = [
  "codex-model-provider",
  "codex-models-manager",
  "codex-plugin",
+ "codex-project-agents",
  "codex-protocol",
  "codex-responses-api-proxy",
  "codex-rmcp-client",
@@ -2369,6 +2372,7 @@ dependencies = [
  "codex-utils-cargo-bin",
  "codex-utils-cli",
  "codex-utils-path",
+ "codex-utils-path-uri",
  "codex-windows-sandbox",
  "crossterm",
  "http 1.4.0",
@@ -3718,6 +3722,28 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "toml 0.9.11+spec-1.1.0",
+]
+
+[[package]]
+name = "codex-project-agents-extension"
+version = "0.0.0"
+dependencies = [
+ "codex-config",
+ "codex-core",
+ "codex-exec-server",
+ "codex-extension-api",
+ "codex-project-agents",
+ "codex-protocol",
+ "codex-tools",
+ "codex-utils-path-uri",
+ "codex-utils-string",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

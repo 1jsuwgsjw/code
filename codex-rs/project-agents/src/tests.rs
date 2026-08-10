@@ -234,6 +234,9 @@ input_schema = "tools/search.schema.json"
         r#"{"status":"completed","agent_id":"query","task_id":"T-1","result":"ok","artifacts":[],"evidence":[],"memory_candidates":[],"improvement_proposals":[],"error":null}"#,
     )
     .expect("task result");
+    result
+        .validate_for(&ProjectAgentId::new("query").expect("agent id"), "T-1")
+        .expect("valid task result");
     assert_eq!(
         result,
         ProjectAgentTaskResult {
@@ -255,6 +258,103 @@ input_schema = "tools/search.schema.json"
     .expect_err("error field is required");
     assert!(missing_error.to_string().contains("error"));
     assert!(RelativeProjectAgentPath::new("../outside").is_err());
+}
+
+#[tokio::test]
+async fn runtime_loading_and_result_persistence_are_bounded_and_structured() {
+    let temp_dir = tempdir().expect("tempdir");
+    let project_root = AbsolutePathBuf::try_from(temp_dir.path()).expect("absolute temp path");
+    let store = ProjectAgentStore::new(PathUri::from_abs_path(&project_root)).expect("store");
+    let file_system = TestFileSystem;
+    let scope = ProjectAgentFileSystemScope::Unrestricted;
+    let agent_id = ProjectAgentId::new("query").expect("agent id");
+    let mut entry = store
+        .create(
+            &file_system,
+            scope,
+            agent_id.clone(),
+            "Performs bounded repository queries.".to_string(),
+        )
+        .await
+        .expect("create agent");
+    entry.definition.tools =
+        vec![RelativeProjectAgentPath::new("tools/search.x").expect("manifest path")];
+
+    let agent_root = project_root.join("AGENT/agents/query");
+    std::fs::create_dir_all(agent_root.join("tools").as_path()).expect("tools directory");
+    std::fs::create_dir_all(agent_root.join("memory/facts").as_path()).expect("memory directory");
+    std::fs::write(
+        agent_root.join("agent.toml").as_path(),
+        toml::to_string_pretty(&entry.definition).expect("definition TOML"),
+    )
+    .expect("definition");
+    std::fs::write(
+        agent_root.join("tools/search.x").as_path(),
+        r#"schema_version = 1
+id = "search"
+description = "Searches the project."
+kind = "command"
+program = "tools/search.py"
+input_schema = "tools/search.schema.json"
+"#,
+    )
+    .expect("manifest");
+    std::fs::write(
+        agent_root.join("tools/search.schema.json").as_path(),
+        r#"{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}"#,
+    )
+    .expect("schema");
+    std::fs::write(
+        agent_root.join("memory/index.toml").as_path(),
+        "schema_version = 1\nitems = [\"memory/facts/one.md\"]\n",
+    )
+    .expect("memory index");
+    std::fs::write(
+        agent_root.join("memory/facts/one.md").as_path(),
+        "Use the focused repository navigation route.",
+    )
+    .expect("memory item");
+
+    let runtime = store
+        .load_runtime(&file_system, scope, &agent_id)
+        .await
+        .expect("runtime");
+    assert_eq!(runtime.entry, entry);
+    assert_eq!(runtime.tools.len(), 1);
+    assert_eq!(
+        runtime.accepted_memory,
+        vec!["Use the focused repository navigation route.".to_string()]
+    );
+
+    let result = ProjectAgentTaskResult {
+        status: ProjectAgentTaskStatus::Completed,
+        agent_id,
+        task_id: "turn-1-call-1".to_string(),
+        result: "Located the requested symbol.".to_string(),
+        artifacts: Vec::new(),
+        evidence: vec!["src/lib.rs:42".to_string()],
+        memory_candidates: vec!["The entrypoint is src/lib.rs.".to_string()],
+        improvement_proposals: vec!["Add a narrower search helper.".to_string()],
+        error: None,
+    };
+    let persisted = store
+        .persist_result(&file_system, scope, &result)
+        .await
+        .expect("persist result");
+    assert!(
+        persisted
+            .history_path
+            .to_abs_path()
+            .expect("history path")
+            .as_path()
+            .is_file()
+    );
+    assert_eq!(persisted.memory_candidate_paths.len(), 1);
+    assert_eq!(persisted.improvement_proposal_paths.len(), 1);
+    assert!(matches!(
+        store.persist_result(&file_system, scope, &result).await,
+        Err(ProjectAgentStoreError::ArtifactAlreadyExists(_))
+    ));
 }
 
 #[test]

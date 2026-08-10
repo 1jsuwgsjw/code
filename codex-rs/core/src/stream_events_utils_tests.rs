@@ -283,6 +283,7 @@ async fn handle_output_item_done_returns_contributed_last_agent_message() {
             mcp_tools: None,
             deferred_mcp_tools: None,
             extension_tool_executors: Vec::new(),
+            tool_visibility_policy: Default::default(),
             dynamic_tools: turn_context.dynamic_tools.as_slice(),
         },
         &Default::default(),

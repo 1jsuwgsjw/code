@@ -9,6 +9,7 @@ use crate::tools::registry::AnyToolResult;
 use crate::tools::registry::ToolArgumentDiffConsumer;
 use crate::tools::registry::ToolRegistry;
 use crate::tools::spec_plan::build_tool_router;
+use codex_extension_api::ToolVisibilityPolicy;
 use codex_mcp::ToolInfo;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::models::ResponseItem;
@@ -42,6 +43,7 @@ pub(crate) struct ToolRouterParams<'a> {
     pub(crate) deferred_mcp_tools: Option<Vec<ToolInfo>>,
     pub(crate) tool_suggest_candidates: Option<ToolSuggestCandidates>,
     pub(crate) extension_tool_executors: Vec<Arc<dyn ToolExecutor<ExtensionToolCall>>>,
+    pub(crate) tool_visibility_policy: ToolVisibilityPolicy,
     pub(crate) dynamic_tools: &'a [DynamicToolSpec],
 }
 
@@ -260,6 +262,14 @@ pub(crate) fn extension_tool_executors(
             )
         })
         .collect()
+}
+
+#[instrument(level = "trace", skip_all)]
+pub(crate) fn extension_tool_visibility_policy(session: &Session) -> ToolVisibilityPolicy {
+    session.services.extensions.tool_visibility_policy(
+        &session.services.session_extension_data,
+        &session.services.thread_extension_data,
+    )
 }
 
 #[cfg(test)]

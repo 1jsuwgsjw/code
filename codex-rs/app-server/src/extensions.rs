@@ -60,6 +60,11 @@ where
         thread_store: _thread_store,
     } = dependencies;
     let mut builder = ExtensionRegistryBuilder::<Config>::with_event_sink(event_sink);
+    codex_project_agents_extension::install(
+        &mut builder,
+        thread_manager.clone(),
+        environment_manager.clone(),
+    );
     if let Some(state_db) = state_db {
         codex_goal_extension::install_with_backend(
             &mut builder,

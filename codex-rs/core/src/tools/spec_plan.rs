@@ -59,6 +59,7 @@ use crate::tools::registry::ToolRegistry;
 use crate::tools::registry::override_tool_exposure;
 use crate::tools::router::ToolRouter;
 use crate::tools::router::ToolRouterParams;
+use codex_extension_api::ToolVisibilityPolicy;
 use codex_features::Feature;
 use codex_login::AuthManager;
 use codex_mcp::ToolInfo;
@@ -149,6 +150,7 @@ struct CoreToolPlanContext<'a> {
     deferred_mcp_tools: Option<&'a [ToolInfo]>,
     tool_suggest_candidates: Option<&'a crate::tools::router::ToolSuggestCandidates>,
     extension_tool_executors: &'a [Arc<dyn ToolExecutor<ExtensionToolCall>>],
+    tool_visibility_policy: &'a ToolVisibilityPolicy,
     dynamic_tools: &'a [DynamicToolSpec],
     tool_search_handler_cache: &'a ToolSearchHandlerCache,
     default_agent_type_description: &'a str,
@@ -178,6 +180,7 @@ fn build_tool_specs_and_registry(
         deferred_mcp_tools,
         tool_suggest_candidates,
         extension_tool_executors,
+        tool_visibility_policy,
         dynamic_tools,
     } = params;
     let default_agent_type_description =
@@ -188,6 +191,7 @@ fn build_tool_specs_and_registry(
         deferred_mcp_tools: deferred_mcp_tools.as_deref(),
         tool_suggest_candidates: tool_suggest_candidates.as_ref(),
         extension_tool_executors: &extension_tool_executors,
+        tool_visibility_policy: &tool_visibility_policy,
         dynamic_tools,
         tool_search_handler_cache,
         default_agent_type_description: &default_agent_type_description,
@@ -198,7 +202,36 @@ fn build_tool_specs_and_registry(
     apply_direct_model_only_namespace_overrides(turn_context, &mut planned_tools);
     append_tool_search_executor(&context, &mut planned_tools);
     prepend_code_mode_executors(&context, &mut planned_tools);
+    apply_tool_visibility_policy(context.tool_visibility_policy, &mut planned_tools);
     build_model_visible_specs_and_registry(turn_context, planned_tools)
+}
+
+fn apply_tool_visibility_policy(policy: &ToolVisibilityPolicy, planned_tools: &mut PlannedTools) {
+    if policy == &ToolVisibilityPolicy::default() {
+        return;
+    }
+
+    planned_tools
+        .runtimes
+        .retain(|runtime| policy.allows(&runtime.tool_name()));
+    planned_tools.hosted_specs = std::mem::take(&mut planned_tools.hosted_specs)
+        .into_iter()
+        .filter_map(|spec| filter_hosted_spec(policy, spec))
+        .collect();
+}
+
+fn filter_hosted_spec(policy: &ToolVisibilityPolicy, spec: ToolSpec) -> Option<ToolSpec> {
+    match spec {
+        ToolSpec::Namespace(mut namespace) => {
+            let namespace_name = namespace.name.clone();
+            namespace.tools.retain(|tool| {
+                let ResponsesApiNamespaceTool::Function(tool) = tool;
+                policy.allows(&ToolName::namespaced(&namespace_name, &tool.name))
+            });
+            (!namespace.tools.is_empty()).then_some(ToolSpec::Namespace(namespace))
+        }
+        spec => policy.allows(&ToolName::plain(spec.name())).then_some(spec),
+    }
 }
 
 fn apply_direct_model_only_namespace_overrides(

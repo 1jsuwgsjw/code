@@ -44,6 +44,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use supports_color::Stream;
 
+mod agent_cmd;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod app_cmd;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -60,6 +61,7 @@ mod state_db_recovery;
 #[cfg(not(windows))]
 mod wsl_paths;
 
+use crate::agent_cmd::AgentCli;
 use crate::mcp_cmd::McpCli;
 use crate::plugin_cmd::PluginCli;
 use crate::plugin_cmd::PluginSubcommand;
@@ -140,6 +142,9 @@ enum Subcommand {
 
     /// Manage Codex plugins.
     Plugin(PluginCli),
+
+    /// Manage project-local specialist AGENT definitions.
+    Agents(AgentCli),
 
     /// Start Codex as an MCP server (stdio).
     McpServer(McpServerCommand),
@@ -1096,6 +1101,14 @@ async fn cli_main(
                     plugin_cmd::run_plugin_remove(overrides, args).await?;
                 }
             }
+        }
+        Some(Subcommand::Agents(agent_cli)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "agents",
+            )?;
+            agent_cli.run(interactive.shared.cwd).await?;
         }
         Some(Subcommand::AppServer(app_server_cli)) => {
             let AppServerCommand {
@@ -2124,6 +2137,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::RemoteControl(remote_control)) => Some(remote_control.subcommand_name()),
         Some(Subcommand::Mcp(_)) => Some("mcp"),
         Some(Subcommand::Plugin(_)) => Some("plugin"),
+        Some(Subcommand::Agents(_)) => Some("agents"),
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         Some(Subcommand::App(_)) => Some("app"),
         Some(Subcommand::Login(_)) => Some("login"),

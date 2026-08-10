@@ -62,6 +62,7 @@ use crate::tools::router::ToolRouterParams;
 use crate::tools::router::ToolSuggestCandidates;
 use crate::tools::router::ToolSuggestPresentation;
 use crate::tools::router::extension_tool_executors;
+use crate::tools::router::extension_tool_visibility_policy;
 use crate::tools::spec_plan::search_tool_enabled;
 use crate::tools::spec_plan::tool_suggest_enabled;
 use crate::turn_diff_tracker::TurnDiffTracker;
@@ -1345,6 +1346,7 @@ pub(crate) async fn built_tools(
             deferred_mcp_tools,
             tool_suggest_candidates,
             extension_tool_executors: extension_tool_executors(sess),
+            tool_visibility_policy: extension_tool_visibility_policy(sess),
             dynamic_tools: turn_context.dynamic_tools.as_slice(),
         },
         &sess.services.tool_search_handler_cache,

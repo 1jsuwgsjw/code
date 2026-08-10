@@ -85,6 +85,7 @@ Important variations:
 - Start: `codex-rs/cli/src/main.rs`
 - Representative symbols: `MultitoolCli`, `Subcommand`, `main`
 - Follow to:
+  - project-local specialist AGENT management: `codex-rs/cli/src/agent_cmd.rs`;
   - interactive default and session pickers: `codex-rs/tui/src/lib.rs`;
   - `codex exec` and `codex review`: `codex-rs/exec/src/lib.rs`;
   - `codex app-server`: `codex-rs/app-server/src/lib.rs`;
@@ -241,14 +242,23 @@ Important variations:
 
 - Foundation crate: `codex-rs/project-agents/`
   - representative symbols: `ProjectAgentRegistry`, `ProjectAgentDefinition`,
-    `ProjectAgentToolManifest`, `ProjectAgentTaskResult`, `ProjectAgentStore`;
+    `ProjectAgentToolManifest`, `ProjectAgentTaskResult`, `ProjectAgentStore`, `ProjectAgentEntry`;
+- CLI management: `codex-rs/cli/src/agent_cmd.rs`
+  - representative symbols: `AgentCli`, `AgentSubcommand`;
+  - commands: `codex agents list`, `show`, `create`, and `disable`;
+- Runtime extension: `codex-rs/ext/project-agents/`
+  - representative symbols: `ProjectAgentExtension`, `ProjectAgentRootContext`,
+    `ProjectAgentWorkerContext`;
 - Cross-executor project-root discovery reuses
   `codex_file_system::find_nearest_ancestor_with_markers` with `PathUri`.
 - On-disk source of truth begins at `AGENT/registry.toml`; discovery never activates an unregistered
   directory implicitly.
-- Focused tests: `codex-rs/project-agents/src/tests.rs`.
+- Focused tests: `codex-rs/project-agents/src/tests.rs`, `codex-rs/cli/tests/agents.rs`,
+  `codex-rs/ext/project-agents/src/tests.rs`, and
+  `codex-rs/app-server/tests/suite/v2/project_agents.rs`.
 - Authoritative validation runs in GitHub Actions:
-  `cd codex-rs && just test -p codex-project-agents`.
+  `cd codex-rs && just test -p codex-project-agents`, `just test -p codex-cli`,
+  `just test -p codex-project-agents-extension`, and `just test -p codex-app-server`.
 
 ## Tools and extension routes
 

@@ -2,6 +2,7 @@ mod capabilities;
 mod contributors;
 mod registry;
 mod state;
+mod tool_visibility;
 mod user_instructions;
 
 pub use capabilities::AgentSpawnFuture;
@@ -75,6 +76,8 @@ pub use registry::ExtensionRegistryBuilder;
 pub use registry::empty_extension_registry;
 pub use state::ExtensionData;
 pub use state::ExtensionDataInit;
+pub use tool_visibility::ToolVisibilityContributor;
+pub use tool_visibility::ToolVisibilityPolicy;
 pub use user_instructions::LoadUserInstructionsFuture;
 pub use user_instructions::LoadedUserInstructions;
 pub use user_instructions::UserInstructions;

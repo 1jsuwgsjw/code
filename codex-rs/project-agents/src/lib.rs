@@ -5,13 +5,18 @@ mod types;
 
 pub use store::BootstrapDisposition;
 pub use store::BootstrapOutcome;
+pub use store::LoadedProjectAgentTool;
+pub use store::ProjectAgentEntry;
 pub use store::ProjectAgentFileSystemScope;
+pub use store::ProjectAgentPersistenceOutcome;
+pub use store::ProjectAgentRuntime;
 pub use store::ProjectAgentStore;
 pub use store::ProjectAgentStoreError;
 pub use store::resolve_project_root;
 pub use types::PROJECT_AGENT_SCHEMA_VERSION;
 pub use types::ProjectAgentDefinition;
 pub use types::ProjectAgentId;
+pub use types::ProjectAgentMemoryIndex;
 pub use types::ProjectAgentRegistration;
 pub use types::ProjectAgentRegistry;
 pub use types::ProjectAgentTaskResult;

@@ -56,6 +56,7 @@ members = [
     "ext/items",
     "ext/memories",
     "ext/mcp",
+    "ext/project-agents",
     "ext/skills",
     "ext/web-search",
     "external-agent-migration",
@@ -219,6 +220,7 @@ codex-plugin = { path = "plugin" }
 codex-model-provider = { path = "model-provider" }
 codex-process-hardening = { path = "process-hardening" }
 codex-project-agents = { path = "project-agents" }
+codex-project-agents-extension = { path = "ext/project-agents" }
 codex-protocol = { path = "protocol" }
 codex-prompts = { path = "prompts" }
 codex-responses-api-proxy = { path = "responses-api-proxy" }

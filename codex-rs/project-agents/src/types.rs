@@ -11,6 +11,10 @@ use thiserror::Error;
 pub const PROJECT_AGENT_SCHEMA_VERSION: u32 = 1;
 const MAX_ID_BYTES: usize = 64;
 const MAX_RELATIVE_PATH_BYTES: usize = 512;
+const MAX_TASK_ID_BYTES: usize = 128;
+const MAX_RESULT_TEXT_BYTES: usize = 64 * 1024;
+const MAX_RESULT_LIST_ITEMS: usize = 128;
+const MAX_RESULT_LIST_ITEM_BYTES: usize = 8 * 1024;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
@@ -231,6 +235,42 @@ impl ProjectAgentToolManifest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProjectAgentMemoryIndex {
+    pub schema_version: u32,
+    #[serde(default)]
+    pub items: Vec<RelativeProjectAgentPath>,
+}
+
+impl Default for ProjectAgentMemoryIndex {
+    fn default() -> Self {
+        Self {
+            schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+            items: Vec::new(),
+        }
+    }
+}
+
+impl ProjectAgentMemoryIndex {
+    pub fn validate(&self) -> Result<(), ProjectAgentValidationError> {
+        validate_schema("memory index", self.schema_version)?;
+        let mut unique = BTreeSet::new();
+        for item in &self.items {
+            let path = item.as_str();
+            let valid_prefix = ["memory/facts/", "memory/experience/", "memory/bottlenecks/"]
+                .iter()
+                .any(|prefix| path.starts_with(prefix));
+            if !valid_prefix || !unique.insert(item) {
+                return Err(ProjectAgentValidationError::InvalidField {
+                    field: "memory.items",
+                    reason: format!("invalid or duplicate accepted-memory path `{item}`"),
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ProjectAgentToolTarget {
     Native { tool: String },
@@ -259,6 +299,71 @@ pub struct ProjectAgentTaskResult {
     pub improvement_proposals: Vec<String>,
     #[serde(deserialize_with = "deserialize_required_optional_string")]
     pub error: Option<String>,
+}
+
+impl ProjectAgentTaskResult {
+    pub fn validate_for(
+        &self,
+        expected_agent_id: &ProjectAgentId,
+        expected_task_id: &str,
+    ) -> Result<(), ProjectAgentValidationError> {
+        if &self.agent_id != expected_agent_id {
+            return Err(ProjectAgentValidationError::InvalidField {
+                field: "agent_id",
+                reason: format!(
+                    "result names `{}`, expected `{expected_agent_id}`",
+                    self.agent_id
+                ),
+            });
+        }
+        if self.task_id != expected_task_id {
+            return Err(ProjectAgentValidationError::InvalidField {
+                field: "task_id",
+                reason: format!(
+                    "result names `{}`, expected `{expected_task_id}`",
+                    self.task_id
+                ),
+            });
+        }
+        validate_task_id(&self.task_id)?;
+        validate_bounded_text(
+            "result",
+            &self.result,
+            MAX_RESULT_TEXT_BYTES,
+            /*required*/ true,
+        )?;
+        validate_result_list("artifacts", &self.artifacts)?;
+        validate_result_list("evidence", &self.evidence)?;
+        validate_result_list("memory_candidates", &self.memory_candidates)?;
+        validate_result_list("improvement_proposals", &self.improvement_proposals)?;
+        match self.status {
+            ProjectAgentTaskStatus::Failed => {
+                let error = self.error.as_deref().ok_or_else(|| {
+                    ProjectAgentValidationError::InvalidField {
+                        field: "error",
+                        reason: "is required when status is failed".to_string(),
+                    }
+                })?;
+                validate_bounded_text(
+                    "error",
+                    error,
+                    MAX_RESULT_LIST_ITEM_BYTES,
+                    /*required*/ true,
+                )
+            }
+            ProjectAgentTaskStatus::Completed
+            | ProjectAgentTaskStatus::RejectedOutOfScope
+            | ProjectAgentTaskStatus::BlockedMissingTool => {
+                if self.error.is_some() {
+                    return Err(ProjectAgentValidationError::InvalidField {
+                        field: "error",
+                        reason: "must be null unless status is failed".to_string(),
+                    });
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 fn deserialize_required_optional_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -309,6 +414,57 @@ fn validate_non_empty(field: &'static str, value: &str) -> Result<(), ProjectAge
         return Err(ProjectAgentValidationError::InvalidField {
             field,
             reason: "must not be empty".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_task_id(value: &str) -> Result<(), ProjectAgentValidationError> {
+    let valid = !value.is_empty()
+        && value.len() <= MAX_TASK_ID_BYTES
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte));
+    if !valid {
+        return Err(ProjectAgentValidationError::InvalidField {
+            field: "task_id",
+            reason: "must be a bounded ASCII identifier".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_result_list(
+    field: &'static str,
+    values: &[String],
+) -> Result<(), ProjectAgentValidationError> {
+    if values.len() > MAX_RESULT_LIST_ITEMS {
+        return Err(ProjectAgentValidationError::InvalidField {
+            field,
+            reason: format!("contains more than {MAX_RESULT_LIST_ITEMS} items"),
+        });
+    }
+    for value in values {
+        validate_bounded_text(
+            field,
+            value,
+            MAX_RESULT_LIST_ITEM_BYTES,
+            /*required*/ true,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_bounded_text(
+    field: &'static str,
+    value: &str,
+    max_bytes: usize,
+    required: bool,
+) -> Result<(), ProjectAgentValidationError> {
+    if (required && value.trim().is_empty()) || value.len() > max_bytes {
+        return Err(ProjectAgentValidationError::InvalidField {
+            field,
+            reason: format!("must be non-empty and at most {max_bytes} bytes"),
         });
     }
     Ok(())

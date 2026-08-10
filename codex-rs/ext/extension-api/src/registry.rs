@@ -14,6 +14,8 @@ use crate::ThreadLifecycleContributor;
 use crate::TokenUsageContributor;
 use crate::ToolContributor;
 use crate::ToolLifecycleContributor;
+use crate::ToolVisibilityContributor;
+use crate::ToolVisibilityPolicy;
 use crate::TurnInputContributor;
 use crate::TurnItemContributor;
 use crate::TurnLifecycleContributor;
@@ -31,6 +33,7 @@ pub struct ExtensionRegistryBuilder<C: Sync> {
     turn_input_contributors: Vec<Arc<dyn TurnInputContributor>>,
     tool_contributors: Vec<Arc<dyn ToolContributor>>,
     tool_lifecycle_contributors: Vec<Arc<dyn ToolLifecycleContributor>>,
+    tool_visibility_contributors: Vec<Arc<dyn ToolVisibilityContributor>>,
     turn_item_contributors: Vec<Arc<dyn TurnItemContributor>>,
     approval_review_contributors: Vec<Arc<dyn ApprovalReviewContributor>>,
 }
@@ -50,6 +53,7 @@ impl<C: Sync> Default for ExtensionRegistryBuilder<C> {
             turn_input_contributors: Vec::new(),
             tool_contributors: Vec::new(),
             tool_lifecycle_contributors: Vec::new(),
+            tool_visibility_contributors: Vec::new(),
             turn_item_contributors: Vec::new(),
         }
     }
@@ -135,6 +139,11 @@ impl<C: Sync> ExtensionRegistryBuilder<C> {
         self.tool_lifecycle_contributors.push(contributor);
     }
 
+    /// Registers one thread-scoped tool visibility contributor.
+    pub fn tool_visibility_contributor(&mut self, contributor: Arc<dyn ToolVisibilityContributor>) {
+        self.tool_visibility_contributors.push(contributor);
+    }
+
     /// Registers one ordered turn-item contributor.
     pub fn turn_item_contributor(&mut self, contributor: Arc<dyn TurnItemContributor>) {
         self.turn_item_contributors.push(contributor);
@@ -155,6 +164,7 @@ impl<C: Sync> ExtensionRegistryBuilder<C> {
             turn_input_contributors: self.turn_input_contributors,
             tool_contributors: self.tool_contributors,
             tool_lifecycle_contributors: self.tool_lifecycle_contributors,
+            tool_visibility_contributors: self.tool_visibility_contributors,
             turn_item_contributors: self.turn_item_contributors,
         }
     }
@@ -173,6 +183,7 @@ pub struct ExtensionRegistry<C: Sync> {
     turn_input_contributors: Vec<Arc<dyn TurnInputContributor>>,
     tool_contributors: Vec<Arc<dyn ToolContributor>>,
     tool_lifecycle_contributors: Vec<Arc<dyn ToolLifecycleContributor>>,
+    tool_visibility_contributors: Vec<Arc<dyn ToolVisibilityContributor>>,
     turn_item_contributors: Vec<Arc<dyn TurnItemContributor>>,
     approval_review_contributors: Vec<Arc<dyn ApprovalReviewContributor>>,
 }
@@ -251,6 +262,19 @@ impl<C: Sync> ExtensionRegistry<C> {
     /// Returns the registered tool-lifecycle contributors.
     pub fn tool_lifecycle_contributors(&self) -> &[Arc<dyn ToolLifecycleContributor>] {
         &self.tool_lifecycle_contributors
+    }
+
+    /// Resolves the combined tool visibility policy for one thread.
+    pub fn tool_visibility_policy(
+        &self,
+        session_store: &ExtensionData,
+        thread_store: &ExtensionData,
+    ) -> ToolVisibilityPolicy {
+        let mut policy = ToolVisibilityPolicy::default();
+        for contributor in &self.tool_visibility_contributors {
+            policy.intersect(contributor.visibility(session_store, thread_store));
+        }
+        policy
     }
 
     /// Returns the registered ordered turn-item contributors.
