@@ -9,6 +9,7 @@ pub use codex_project_agents::ProjectAgentTaskPhase as StoredProjectAgentTaskPha
 pub use codex_project_agents::ProjectAgentTaskResult;
 pub use codex_project_agents::ProjectAgentTaskStatus as StoredProjectAgentTaskStatus;
 
+mod control;
 mod delegate;
 mod events;
 mod inspection;
@@ -17,6 +18,14 @@ mod state;
 mod worker;
 mod x_tools;
 
+pub use control::ProjectAgentControlError;
+pub use control::ThreadProjectAgentRebuildOutcome;
+pub use control::ThreadProjectAgentRetryOutcome;
+pub use control::ThreadProjectAgentTaskControl;
+pub use control::follow_up_thread_project_agent;
+pub use control::rebuild_thread_project_agent_session;
+pub use control::retry_thread_project_agent;
+pub use control::terminate_thread_project_agent;
 pub use inspection::ThreadProjectAgentDetail;
 pub use inspection::ThreadProjectAgentListSnapshot;
 pub use inspection::ThreadProjectAgentSummary;

@@ -561,6 +561,26 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadProjectAgentReadResponse,
     },
+    ThreadProjectAgentFollowUp => "thread/projectAgent/followUp" {
+        params: v2::ThreadProjectAgentFollowUpParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectAgentFollowUpResponse,
+    },
+    ThreadProjectAgentTerminate => "thread/projectAgent/terminate" {
+        params: v2::ThreadProjectAgentTerminateParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectAgentTerminateResponse,
+    },
+    ThreadProjectAgentRetry => "thread/projectAgent/retry" {
+        params: v2::ThreadProjectAgentRetryParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectAgentRetryResponse,
+    },
+    ThreadProjectAgentRebuild => "thread/projectAgent/rebuild" {
+        params: v2::ThreadProjectAgentRebuildParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectAgentRebuildResponse,
+    },
     ThreadProjectAgentMaintenanceRun => "thread/projectAgentMaintenance/run" {
         params: v2::ThreadProjectAgentMaintenanceRunParams,
         serialization: thread_id(params.thread_id),

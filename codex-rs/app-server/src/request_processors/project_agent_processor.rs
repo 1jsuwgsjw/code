@@ -6,10 +6,19 @@ use codex_app_server_protocol::ProjectAgentSession;
 use codex_app_server_protocol::ProjectAgentTask;
 use codex_app_server_protocol::ProjectAgentTaskPhase;
 use codex_app_server_protocol::ProjectAgentTaskStatus;
+use codex_app_server_protocol::ThreadProjectAgentFollowUpParams;
+use codex_app_server_protocol::ThreadProjectAgentFollowUpResponse;
 use codex_app_server_protocol::ThreadProjectAgentListParams;
 use codex_app_server_protocol::ThreadProjectAgentListResponse;
 use codex_app_server_protocol::ThreadProjectAgentReadParams;
 use codex_app_server_protocol::ThreadProjectAgentReadResponse;
+use codex_app_server_protocol::ThreadProjectAgentRebuildParams;
+use codex_app_server_protocol::ThreadProjectAgentRebuildResponse;
+use codex_app_server_protocol::ThreadProjectAgentRetryParams;
+use codex_app_server_protocol::ThreadProjectAgentRetryResponse;
+use codex_app_server_protocol::ThreadProjectAgentTerminateParams;
+use codex_app_server_protocol::ThreadProjectAgentTerminateResponse;
+use codex_project_agents_extension::ProjectAgentControlError;
 use codex_project_agents_extension::ProjectAgentId;
 use codex_project_agents_extension::ProjectAgentSessionMetadata;
 use codex_project_agents_extension::ProjectAgentStoreError;
@@ -102,8 +111,7 @@ impl ProjectAgentRequestProcessor {
         params: ThreadProjectAgentReadParams,
     ) -> Result<ThreadProjectAgentReadResponse, JSONRPCErrorError> {
         let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
-        let agent_id = ProjectAgentId::new(params.agent_id.clone())
-            .map_err(|error| invalid_request(format!("invalid project AGENT id: {error}")))?;
+        let agent_id = parse_agent_id(params.agent_id)?;
         let history_limit = params
             .task_limit
             .and_then(|value| usize::try_from(value).ok())
@@ -134,6 +142,99 @@ impl ProjectAgentRequestProcessor {
             recent_tasks: detail.recent_tasks.iter().map(api_task).collect(),
             recent_results: detail.recent_results.iter().map(api_result).collect(),
         })
+    }
+
+    pub(crate) async fn follow_up(
+        &self,
+        params: ThreadProjectAgentFollowUpParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let agent_id = parse_agent_id(params.agent_id)?;
+        let outcome = codex_project_agents_extension::follow_up_thread_project_agent(
+            self.thread_manager.as_ref(),
+            thread.as_ref(),
+            &agent_id,
+            params.message,
+        )
+        .await
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectAgentFollowUpResponse {
+                task_id: outcome.task_id,
+                session_thread_id: outcome.session_thread_id,
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn terminate(
+        &self,
+        params: ThreadProjectAgentTerminateParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let agent_id = parse_agent_id(params.agent_id)?;
+        let outcome = codex_project_agents_extension::terminate_thread_project_agent(
+            self.thread_manager.as_ref(),
+            thread.as_ref(),
+            &agent_id,
+        )
+        .await
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectAgentTerminateResponse {
+                task_id: outcome.task_id,
+                session_thread_id: outcome.session_thread_id,
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn retry(
+        &self,
+        params: ThreadProjectAgentRetryParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let agent_id = parse_agent_id(params.agent_id)?;
+        let outcome = codex_project_agents_extension::retry_thread_project_agent(
+            Arc::clone(&self.thread_manager),
+            thread.as_ref(),
+            &agent_id,
+            params.task_id.as_deref(),
+        )
+        .await
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectAgentRetryResponse {
+                task: api_task(&outcome.task),
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn rebuild(
+        &self,
+        params: ThreadProjectAgentRebuildParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let agent_id = parse_agent_id(params.agent_id)?;
+        let outcome = codex_project_agents_extension::rebuild_thread_project_agent_session(
+            self.thread_manager.as_ref(),
+            thread.as_ref(),
+            &agent_id,
+        )
+        .await
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectAgentRebuildResponse {
+                previous_session_thread_id: outcome.previous_session_thread_id,
+                session: api_session(&outcome.session),
+            }
+            .into(),
+        ))
     }
 
     async fn loaded_thread(
@@ -216,6 +317,28 @@ fn parse_list_cursor(cursor: Option<&str>) -> Result<usize, JSONRPCErrorError> {
         .transpose()
         .map_err(|error| invalid_request(format!("invalid project AGENT cursor: {error}")))
         .map(Option::unwrap_or_default)
+}
+
+fn parse_agent_id(agent_id: String) -> Result<ProjectAgentId, JSONRPCErrorError> {
+    ProjectAgentId::new(agent_id)
+        .map_err(|error| invalid_request(format!("invalid project AGENT id: {error}")))
+}
+
+fn missing_context(thread_id: &str) -> JSONRPCErrorError {
+    invalid_request(format!("thread has no project AGENT context: {thread_id}"))
+}
+
+fn map_control_error(error: ProjectAgentControlError) -> JSONRPCErrorError {
+    match error {
+        ProjectAgentControlError::InvalidRequest(message) => invalid_request(message),
+        ProjectAgentControlError::Internal(message) => internal_error(message),
+        ProjectAgentControlError::Store(ProjectAgentStoreError::AgentNotFound(agent_id)) => {
+            invalid_request(format!("project AGENT `{agent_id}` is not registered"))
+        }
+        ProjectAgentControlError::Store(error) => {
+            internal_error(format!("project AGENT control failed: {error}"))
+        }
+    }
 }
 
 fn map_inspection_error(error: ProjectAgentStoreError) -> JSONRPCErrorError {

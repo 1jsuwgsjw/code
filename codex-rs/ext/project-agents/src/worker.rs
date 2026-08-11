@@ -26,6 +26,7 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::user_input::UserInput;
+use tokio::sync::OwnedSemaphorePermit;
 
 use crate::delegate::host_failed_result;
 use crate::delegate::parse_worker_result;
@@ -37,9 +38,9 @@ use crate::state::ProjectAgentWorkerContext;
 const WORKER_TURN_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 30 * 60);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 10);
 
-struct WorkerThread {
-    thread_id: ThreadId,
-    thread: Arc<CodexThread>,
+pub(crate) struct WorkerThread {
+    pub(crate) thread_id: ThreadId,
+    pub(crate) thread: Arc<CodexThread>,
 }
 
 struct WorkerExecution {
@@ -106,6 +107,28 @@ pub(crate) async fn execute_worker_task(
         )
         .await;
     }
+
+    execute_queued_worker_task(
+        thread_manager,
+        root_context,
+        metadata,
+        file_system,
+        scope,
+        _task_permit,
+    )
+    .await
+}
+
+pub(crate) async fn execute_queued_worker_task(
+    thread_manager: Option<Arc<ThreadManager>>,
+    root_context: Arc<ProjectAgentRootContext>,
+    mut metadata: ProjectAgentTaskMetadata,
+    file_system: &dyn ExecutorFileSystem,
+    scope: ProjectAgentFileSystemScope<'_>,
+    _task_permit: OwnedSemaphorePermit,
+) -> ProjectAgentTaskResult {
+    let agent_id = metadata.agent_id.clone();
+    let task_id = metadata.task_id.clone();
 
     let execution = match thread_manager {
         Some(thread_manager) => {
@@ -294,7 +317,7 @@ async fn run_worker(
     }
 }
 
-async fn load_or_start_worker(
+pub(crate) async fn load_or_start_worker(
     thread_manager: &ThreadManager,
     root_context: &ProjectAgentRootContext,
     agent_id: &ProjectAgentId,
@@ -395,7 +418,7 @@ async fn load_or_start_worker(
     })
 }
 
-async fn reusable_worker(
+pub(crate) async fn reusable_worker(
     thread_manager: &ThreadManager,
     agent_id: &ProjectAgentId,
     thread_id: ThreadId,
@@ -414,7 +437,7 @@ async fn reusable_worker(
     Some(WorkerThread { thread_id, thread })
 }
 
-async fn discard_worker(
+pub(crate) async fn discard_worker(
     thread_manager: &ThreadManager,
     root_context: &ProjectAgentRootContext,
     agent_id: &ProjectAgentId,
@@ -427,7 +450,7 @@ async fn discard_worker(
         .await;
 }
 
-async fn persist_task_phase(
+pub(crate) async fn persist_task_phase(
     root_context: &ProjectAgentRootContext,
     file_system: &dyn ExecutorFileSystem,
     scope: ProjectAgentFileSystemScope<'_>,
@@ -478,7 +501,7 @@ async fn persist_result(
     }
 }
 
-fn unix_timestamp() -> i64 {
+pub(crate) fn unix_timestamp() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| i64::try_from(duration.as_secs()).unwrap_or(i64::MAX))

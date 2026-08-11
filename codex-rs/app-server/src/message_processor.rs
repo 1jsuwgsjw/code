@@ -1105,6 +1105,18 @@ impl MessageProcessor {
             ClientRequest::ThreadProjectAgentRead { params, .. } => {
                 self.project_agent_processor.read(params).await
             }
+            ClientRequest::ThreadProjectAgentFollowUp { params, .. } => {
+                self.project_agent_processor.follow_up(params).await
+            }
+            ClientRequest::ThreadProjectAgentTerminate { params, .. } => {
+                self.project_agent_processor.terminate(params).await
+            }
+            ClientRequest::ThreadProjectAgentRetry { params, .. } => {
+                self.project_agent_processor.retry(params).await
+            }
+            ClientRequest::ThreadProjectAgentRebuild { params, .. } => {
+                self.project_agent_processor.rebuild(params).await
+            }
             ClientRequest::ThreadProjectAgentMaintenanceRun { params, .. } => {
                 self.project_agent_processor
                     .maintenance_run(request_id.clone(), params)

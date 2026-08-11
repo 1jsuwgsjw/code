@@ -54,6 +54,72 @@ pub struct ThreadProjectAgentReadResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentFollowUpParams {
+    pub thread_id: String,
+    pub agent_id: String,
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentFollowUpResponse {
+    pub task_id: String,
+    pub session_thread_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentTerminateParams {
+    pub thread_id: String,
+    pub agent_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentTerminateResponse {
+    pub task_id: String,
+    pub session_thread_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentRetryParams {
+    pub thread_id: String,
+    pub agent_id: String,
+    #[ts(optional = nullable)]
+    pub task_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentRetryResponse {
+    pub task: ProjectAgentTask,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentRebuildParams {
+    pub thread_id: String,
+    pub agent_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentRebuildResponse {
+    pub previous_session_thread_id: Option<String>,
+    pub session: ProjectAgentSession,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct ProjectAgentRosterEntry {
     pub id: String,
     pub description: String,

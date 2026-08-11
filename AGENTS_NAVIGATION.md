@@ -165,6 +165,8 @@ Important variations:
     `TurnInterruptParams`;
 - Project AGENT management API: `codex-rs/app-server-protocol/src/protocol/v2/project_agent.rs`
   - representative types: `ThreadProjectAgentListParams`, `ThreadProjectAgentReadParams`,
+    `ThreadProjectAgentFollowUpParams`, `ThreadProjectAgentTerminateParams`,
+    `ThreadProjectAgentRetryParams`, `ThreadProjectAgentRebuildParams`,
     `ThreadProjectAgentReadResponse`, `ThreadProjectAgentMaintenanceRunParams`,
     `ThreadProjectAgentMaintenanceRunResponse`,
     `ThreadProjectAgentMaintenanceStatusUpdatedNotification`;
@@ -266,11 +268,17 @@ Important variations:
 - Runtime extension: `codex-rs/ext/project-agents/`
   - representative symbols: `ProjectAgentExtension`, `ProjectAgentRootContext`,
     `ProjectAgentWorkerContext`, `list_thread_project_agents`, `read_thread_project_agent`,
+    `follow_up_thread_project_agent`, `terminate_thread_project_agent`,
+    `retry_thread_project_agent`, `rebuild_thread_project_agent_session`,
     `maintain_thread_project_agents`;
   - bounded roster/detail inspection owner: `codex-rs/ext/project-agents/src/inspection.rs`;
+  - follow-up, termination, retry, and explicit rebuild controls:
+    `codex-rs/ext/project-agents/src/control.rs`;
   - reusable worker-thread lifecycle, per-AGENT task serialization, and task/session phase
     persistence: `codex-rs/ext/project-agents/src/worker.rs`;
 - App-server surface: `thread/projectAgent/list`, `thread/projectAgent/read`,
+  `thread/projectAgent/followUp`, `thread/projectAgent/terminate`,
+  `thread/projectAgent/retry`, `thread/projectAgent/rebuild`,
   `thread/projectAgentMaintenance/run`, and `thread/projectAgentMaintenance/statusUpdated`;
 - TUI surface: `/agents-maintain`, with pending-state reminders deferred while a turn is active.
 - Cross-executor project-root discovery reuses
@@ -279,7 +287,8 @@ Important variations:
   directory implicitly.
 - Focused tests: `codex-rs/project-agents/src/tests.rs`, `codex-rs/cli/tests/agents.rs`,
   `codex-rs/ext/project-agents/src/tests.rs`, and
-  `codex-rs/app-server/tests/suite/v2/project_agents.rs`, plus
+  `codex-rs/app-server/tests/suite/v2/project_agents.rs`,
+  `codex-rs/app-server/tests/suite/v2/project_agent_controls.rs`, plus
   `codex-rs/tui/src/chatwidget/tests/project_agent_maintenance_tests.rs`.
 - Authoritative validation runs in GitHub Actions:
   `cd codex-rs && just test -p codex-project-agents`, `just test -p codex-cli`,
