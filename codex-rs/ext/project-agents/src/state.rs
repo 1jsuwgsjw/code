@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Weak;
 
@@ -22,12 +23,15 @@ use codex_extension_api::ToolVisibilityContributor;
 use codex_extension_api::ToolVisibilityPolicy;
 use codex_project_agents::ProjectAgentEntry;
 use codex_project_agents::ProjectAgentFileSystemScope;
+use codex_project_agents::ProjectAgentId;
 use codex_project_agents::ProjectAgentRuntime;
 use codex_project_agents::ProjectAgentStore;
 use codex_project_agents::RelativeProjectAgentPath;
 use codex_project_agents::resolve_project_root;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::TurnEnvironmentSelection;
+use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use crate::delegate::ProjectAgentDelegateTool;
 use crate::delegate::worker_context_prompt;
@@ -44,9 +48,38 @@ pub(crate) struct ProjectAgentRootContext {
     pub(crate) store: ProjectAgentStore,
     pub(crate) enabled_agents: Vec<ProjectAgentEntry>,
     pub(crate) event_emitter: ProjectAgentEventEmitter,
+    pub(crate) task_gates: Arc<Mutex<BTreeMap<ProjectAgentId, Arc<Mutex<()>>>>>,
+    pub(crate) active_sessions: Arc<RwLock<BTreeMap<ProjectAgentId, ThreadId>>>,
 }
 
 impl ProjectAgentRootContext {
+    pub(crate) async fn task_gate(&self, agent_id: &ProjectAgentId) -> Arc<Mutex<()>> {
+        let mut task_gates = self.task_gates.lock().await;
+        Arc::clone(
+            task_gates
+                .entry(agent_id.clone())
+                .or_insert_with(|| Arc::new(Mutex::new(()))),
+        )
+    }
+
+    pub(crate) async fn active_session(&self, agent_id: &ProjectAgentId) -> Option<ThreadId> {
+        self.active_sessions.read().await.get(agent_id).copied()
+    }
+
+    pub(crate) async fn remember_session(&self, agent_id: ProjectAgentId, thread_id: ThreadId) {
+        self.active_sessions
+            .write()
+            .await
+            .insert(agent_id, thread_id);
+    }
+
+    pub(crate) async fn forget_session(&self, agent_id: &ProjectAgentId, thread_id: ThreadId) {
+        let mut active_sessions = self.active_sessions.write().await;
+        if active_sessions.get(agent_id) == Some(&thread_id) {
+            active_sessions.remove(agent_id);
+        }
+    }
+
     pub(crate) async fn emit_maintenance_status(&self) {
         match self
             .store
@@ -74,8 +107,6 @@ pub(crate) struct ProjectAgentWorkerContext {
     pub(crate) thread_id: Option<ThreadId>,
     pub(crate) store: ProjectAgentStore,
     pub(crate) runtime: ProjectAgentRuntime,
-    pub(crate) task_id: String,
-    pub(crate) task: String,
     pub(crate) primary_environment_id: String,
 }
 
@@ -199,6 +230,8 @@ impl ThreadLifecycleContributor<Config> for ProjectAgentExtension {
                 store,
                 enabled_agents,
                 event_emitter: self.event_emitter.clone(),
+                task_gates: Arc::new(Mutex::new(BTreeMap::new())),
+                active_sessions: Arc::new(RwLock::new(BTreeMap::new())),
             };
             context.emit_maintenance_status().await;
             input.thread_store.insert(context);

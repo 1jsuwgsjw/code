@@ -1,4 +1,3 @@
-use crate::PROJECT_AGENT_SCHEMA_VERSION;
 use crate::ProjectAgentId;
 use crate::ProjectAgentValidationError;
 use crate::types::validate_bounded_text;

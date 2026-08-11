@@ -1,12 +1,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Weak;
-use std::time::Duration;
 
-use codex_core::StartThreadOptions;
 use codex_core::ThreadManager;
 use codex_core::config::Config;
-use codex_extension_api::ExtensionDataInit;
 use codex_extension_api::FunctionCallError;
 use codex_extension_api::JsonToolOutput;
 use codex_extension_api::ToolCall;
@@ -23,10 +20,6 @@ use codex_project_agents::ProjectAgentTaskResult;
 use codex_project_agents::ProjectAgentTaskStatus;
 use codex_project_agents::ProjectAgentToolTarget;
 use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiNamespace;
 use codex_tools::ResponsesApiNamespaceTool;
@@ -39,12 +32,12 @@ use uuid::Uuid;
 
 use crate::state::ProjectAgentRootContext;
 use crate::state::ProjectAgentWorkerContext;
+use crate::worker::execute_worker_task;
 
 pub(crate) const AGENT_NAMESPACE: &str = "agent";
 const MAX_TASK_BYTES: usize = 16 * 1024;
 const MAX_WORKER_PROMPT_BYTES: usize = 36 * 1024;
 const MAX_ERROR_BYTES: usize = 8 * 1024;
-const WORKER_TURN_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 #[derive(Deserialize)]
 struct DelegateArgs {
@@ -140,40 +133,16 @@ impl ToolExecutor<ToolCall> for ProjectAgentDelegateTool {
                 })
                 .unwrap_or(ProjectAgentFileSystemScope::Unrestricted);
 
-            let result = match thread_manager.upgrade() {
-                Some(thread_manager) => {
-                    run_worker(
-                        thread_manager,
-                        Arc::clone(&context),
-                        agent_id.clone(),
-                        task_id.clone(),
-                        task,
-                        file_system.as_ref(),
-                        scope,
-                    )
-                    .await
-                }
-                None => host_failed_result(
-                    &agent_id,
-                    &task_id,
-                    "project AGENT thread manager is unavailable",
-                ),
-            };
-            let result = match context
-                .store
-                .persist_result(file_system.as_ref(), scope, &result)
-                .await
-            {
-                Ok(_) => {
-                    context.emit_maintenance_status().await;
-                    result
-                }
-                Err(error) => host_failed_result(
-                    &agent_id,
-                    &task_id,
-                    &format!("failed to persist project AGENT result: {error}"),
-                ),
-            };
+            let result = execute_worker_task(
+                thread_manager.upgrade(),
+                Arc::clone(&context),
+                agent_id,
+                task_id,
+                task,
+                file_system.as_ref(),
+                scope,
+            )
+            .await;
             let value = serde_json::to_value(result).map_err(|error| {
                 FunctionCallError::Fatal(format!(
                     "failed to serialize project AGENT result: {error}"
@@ -185,115 +154,20 @@ impl ToolExecutor<ToolCall> for ProjectAgentDelegateTool {
     }
 }
 
-async fn run_worker(
-    thread_manager: Arc<ThreadManager>,
-    root_context: Arc<ProjectAgentRootContext>,
-    agent_id: ProjectAgentId,
-    task_id: String,
-    task: String,
-    file_system: &dyn codex_exec_server::ExecutorFileSystem,
-    scope: ProjectAgentFileSystemScope<'_>,
+pub(crate) fn parse_worker_result(
+    raw_result: &str,
+    agent_id: &ProjectAgentId,
+    task_id: &str,
 ) -> ProjectAgentTaskResult {
-    let runtime = match root_context
-        .store
-        .load_runtime(file_system, scope, &agent_id)
-        .await
-    {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            return host_failed_result(
-                &agent_id,
-                &task_id,
-                &format!("failed to load project AGENT runtime: {error}"),
-            );
-        }
-    };
-    let config = match prepare_worker_config(root_context.config.clone(), &runtime.entry.definition)
-    {
-        Ok(config) => config,
-        Err(error) => return host_failed_result(&agent_id, &task_id, &error),
-    };
-    let worker_context = ProjectAgentWorkerContext {
-        thread_id: None,
-        store: root_context.store.clone(),
-        runtime,
-        task_id: task_id.clone(),
-        task: task.clone(),
-        primary_environment_id: root_context.primary_environment_id.clone(),
-    };
-    let mut thread_extension_init = ExtensionDataInit::new();
-    thread_extension_init.insert(worker_context);
-    let new_thread = match thread_manager
-        .start_thread_with_options(StartThreadOptions {
-            config,
-            allow_provider_model_fallback: false,
-            initial_history: InitialHistory::New,
-            history_mode: None,
-            session_source: None,
-            thread_source: None,
-            dynamic_tools: Vec::new(),
-            metrics_service_name: None,
-            parent_trace: None,
-            environments: root_context.environments.clone(),
-            thread_extension_init,
-            supports_openai_form_elicitation: false,
-        })
-        .await
-    {
-        Ok(new_thread) => new_thread,
-        Err(error) => {
-            return host_failed_result(
-                &agent_id,
-                &task_id,
-                &format!("failed to start project AGENT worker: {error}"),
-            );
-        }
-    };
-
-    let worker_result = tokio::time::timeout(WORKER_TURN_TIMEOUT, async {
-        new_thread
-            .thread
-            .submit(Op::UserInput {
-                items: vec![UserInput::Text {
-                    text: task,
-                    text_elements: Vec::new(),
-                }],
-                final_output_json_schema: Some(project_agent_result_schema(
-                    &agent_id,
-                    Some(&task_id),
-                )),
-                responsesapi_client_metadata: None,
-                additional_context: Default::default(),
-                thread_settings: Default::default(),
-            })
-            .await
-            .map_err(|error| format!("failed to submit project AGENT task: {error}"))?;
-        loop {
-            let event = new_thread
-                .thread
-                .next_event()
-                .await
-                .map_err(|error| format!("failed to read project AGENT event: {error}"))?;
-            if let EventMsg::TurnComplete(completed) = event.msg {
-                return completed
-                    .last_agent_message
-                    .ok_or_else(|| "project AGENT worker returned no final message".to_string());
-            }
-        }
-    })
-    .await;
-    let _ = new_thread.thread.shutdown_and_wait().await;
-    thread_manager.remove_thread(&new_thread.thread_id).await;
-
-    match worker_result {
-        Ok(Ok(raw_result)) => parse_worker_result(&raw_result, &agent_id, &task_id),
-        Ok(Err(error)) => host_failed_result(&agent_id, &task_id, &error),
-        Err(_) => host_failed_result(
-            &agent_id,
-            &task_id,
-            "project AGENT worker exceeded the 30 minute turn limit",
-        ),
-    }
+    let result = serde_json::from_str::<ProjectAgentTaskResult>(raw_result)
+        .map_err(|error| format!("invalid project AGENT result JSON: {error}"))
+        .and_then(|result| {
+            result
+                .validate_for(agent_id, task_id)
+                .map(|()| result)
+                .map_err(|error| format!("invalid project AGENT result: {error}"))
+        });
+    result.unwrap_or_else(|error| host_failed_result(agent_id, task_id, &error))
 }
 
 pub(crate) fn prepare_worker_config(
@@ -335,30 +209,14 @@ pub(crate) fn prepare_worker_config(
     config.project_doc_fallback_filenames.clear();
     config.developer_instructions = None;
     config.notify = None;
-    config.ephemeral = true;
+    config.ephemeral = false;
     config.memories.generate_memories = false;
     config.memories.use_memories = false;
     config.memories.dedicated_tools = false;
     Ok(config)
 }
 
-pub(crate) fn parse_worker_result(
-    raw_result: &str,
-    agent_id: &ProjectAgentId,
-    task_id: &str,
-) -> ProjectAgentTaskResult {
-    let result = serde_json::from_str::<ProjectAgentTaskResult>(raw_result)
-        .map_err(|error| format!("invalid project AGENT result JSON: {error}"))
-        .and_then(|result| {
-            result
-                .validate_for(agent_id, task_id)
-                .map(|()| result)
-                .map_err(|error| format!("invalid project AGENT result: {error}"))
-        });
-    result.unwrap_or_else(|error| host_failed_result(agent_id, task_id, &error))
-}
-
-fn host_failed_result(
+pub(crate) fn host_failed_result(
     agent_id: &ProjectAgentId,
     task_id: &str,
     error: &str,
@@ -430,13 +288,13 @@ pub(crate) fn worker_context_prompt(context: &ProjectAgentWorkerContext) -> Stri
     append_prompt(
         &mut prompt,
         &format!(
-            "# Project specialist AGENT\n\nIdentity: {}\nDescription: {}\nTask ID: {}\nCurrent task:\n{}\n\n",
-            definition.id, definition.description, context.task_id, context.task
+            "# Project specialist AGENT\n\nIdentity: {}\nDescription: {}\n\nEach concrete task arrives as the current user turn. Keep the durable identity, constraints, registered tool help, and accepted memory below stable across turns.\n\n",
+            definition.id, definition.description
         ),
     );
     append_prompt(
         &mut prompt,
-        "# Fixed result protocol\n\nReturn exactly one JSON object. Every top-level field is required: status, agent_id, task_id, result, artifacts, evidence, memory_candidates, improvement_proposals, and error. status must be completed, rejected_out_of_scope, blocked_missing_tool, or failed. agent_id and task_id must exactly match the values above. error must be null unless status is failed. Do not wrap the JSON in Markdown.\n\n",
+        "# Fixed result protocol\n\nReturn exactly one JSON object. Every top-level field is required: status, agent_id, task_id, result, artifacts, evidence, memory_candidates, improvement_proposals, and error. status must be completed, rejected_out_of_scope, blocked_missing_tool, or failed. agent_id must match this identity and task_id must match the active turn output schema. error must be null unless status is failed. Do not wrap the JSON in Markdown.\n\n",
     );
     append_prompt(
         &mut prompt,

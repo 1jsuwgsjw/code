@@ -265,6 +265,8 @@ Important variations:
 - Runtime extension: `codex-rs/ext/project-agents/`
   - representative symbols: `ProjectAgentExtension`, `ProjectAgentRootContext`,
     `ProjectAgentWorkerContext`, `maintain_thread_project_agents`;
+  - reusable worker-thread lifecycle, per-AGENT task serialization, and task/session phase
+    persistence: `codex-rs/ext/project-agents/src/worker.rs`;
 - App-server surface: `thread/projectAgentMaintenance/run` and
   `thread/projectAgentMaintenance/statusUpdated`;
 - TUI surface: `/agents-maintain`, with pending-state reminders deferred while a turn is active.

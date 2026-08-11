@@ -4,6 +4,7 @@ mod delegate;
 mod events;
 mod maintenance;
 mod state;
+mod worker;
 mod x_tools;
 
 pub use maintenance::ThreadProjectAgentMaintenanceOutcome;

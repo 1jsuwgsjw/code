@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Weak;
@@ -37,6 +38,8 @@ use codex_utils_path_uri::PathUri;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use tempfile::TempDir;
+use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use crate::delegate::parse_worker_result;
 use crate::delegate::prepare_worker_config;
@@ -94,6 +97,8 @@ async fn root_tools_skip_disabled_agents() {
         store: project_store(project.path()),
         enabled_agents: vec![agent_entry("enabled", true), agent_entry("disabled", false)],
         event_emitter: ProjectAgentEventEmitter::new(Arc::new(NoopExtensionEventSink)),
+        task_gates: Arc::new(Mutex::new(BTreeMap::new())),
+        active_sessions: Arc::new(RwLock::new(BTreeMap::new())),
     };
     let thread_store = ExtensionData::new("root-thread");
     thread_store.insert(context);
@@ -115,6 +120,29 @@ async fn root_tools_skip_disabled_agents() {
         extension.visibility(&session_store, &thread_store),
         ToolVisibilityPolicy::default()
     );
+
+    let context = thread_store
+        .get::<ProjectAgentRootContext>()
+        .expect("root context");
+    let agent_id = agent_id("enabled");
+    let first_gate = context.task_gate(&agent_id).await;
+    let second_gate = context.task_gate(&agent_id).await;
+    assert!(Arc::ptr_eq(&first_gate, &second_gate));
+    let worker_thread_id = ThreadId::new();
+    context
+        .remember_session(agent_id.clone(), worker_thread_id)
+        .await;
+    assert_eq!(
+        context.active_session(&agent_id).await,
+        Some(worker_thread_id)
+    );
+    context.forget_session(&agent_id, ThreadId::new()).await;
+    assert_eq!(
+        context.active_session(&agent_id).await,
+        Some(worker_thread_id)
+    );
+    context.forget_session(&agent_id, worker_thread_id).await;
+    assert_eq!(context.active_session(&agent_id).await, None);
 }
 
 #[tokio::test]
@@ -211,26 +239,31 @@ async fn worker_visibility_and_wrappers_follow_manifest_targets() {
 #[test]
 fn worker_prompt_contains_runtime_contract_and_stays_bounded() {
     let project = TempDir::new().expect("project tempdir");
-    let mut context = worker_context(
-        project.path(),
-        vec![loaded_tool(
-            "lookup",
-            ProjectAgentToolTarget::Mcp {
-                server: "knowledge".to_string(),
-                tool: "lookup".to_string(),
-            },
-        )],
+    let mut lookup = loaded_tool(
+        "lookup",
+        ProjectAgentToolTarget::Mcp {
+            server: "knowledge".to_string(),
+            tool: "lookup".to_string(),
+        },
     );
+    lookup.input_schema = Some(json!({
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+        "additionalProperties": false
+    }));
+    let mut context = worker_context(project.path(), vec![lookup]);
     context.runtime.constraints = "Stay inside the assigned repository scope.".to_string();
     context.runtime.accepted_memory = vec!["The owner is src/owner.rs.".to_string()];
     let prompt = worker_context_prompt(&context);
     for expected in [
         "Identity: query",
-        "Task ID: task-1",
-        "Inspect the target",
+        "Each concrete task arrives as the current user turn.",
         "# Fixed result protocol",
         "Stay inside the assigned repository scope.",
         "route: x.lookup",
+        "input schema:",
+        "\"query\"",
         "The owner is src/owner.rs.",
     ] {
         assert!(
@@ -238,6 +271,8 @@ fn worker_prompt_contains_runtime_contract_and_stays_bounded() {
             "missing prompt fragment: {expected}"
         );
     }
+    assert!(!prompt.contains("task-1"));
+    assert!(!prompt.contains("Inspect the target"));
 
     context.runtime.constraints = "界".repeat(40_000);
     let bounded = worker_context_prompt(&context);
@@ -349,7 +384,7 @@ async fn worker_config_applies_overrides_and_disables_host_context() {
             project_doc_fallback_filenames: Vec::new(),
             developer_instructions: None,
             notify_is_none: true,
-            ephemeral: true,
+            ephemeral: false,
             generate_memories: false,
             use_memories: false,
             dedicated_memory_tools: false,
@@ -530,8 +565,6 @@ fn worker_context(
             tools,
             accepted_memory: Vec::new(),
         },
-        task_id: "task-1".to_string(),
-        task: "Inspect the target".to_string(),
         primary_environment_id: LOCAL_ENVIRONMENT_ID.to_string(),
     }
 }
