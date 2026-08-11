@@ -141,7 +141,7 @@ Important variations:
 - Representative symbols: `run_main`, `run_main_with_transport_options`
 - Request routing: `codex-rs/app-server/src/message_processor.rs` (`MessageProcessor`)
 - Request handlers: `codex-rs/app-server/src/request_processors.rs`
-- Project AGENT maintenance handler:
+- Project AGENT roster/detail and maintenance handler:
   `codex-rs/app-server/src/request_processors/project_agent_processor.rs`
 - Event translation: `codex-rs/app-server/src/bespoke_event_handling.rs`
 - Outbound delivery: `codex-rs/app-server/src/outgoing_message.rs`
@@ -163,8 +163,9 @@ Important variations:
 - Turn API: `codex-rs/app-server-protocol/src/protocol/v2/turn.rs`
   - representative types: `TurnStartParams`, `TurnStartResponse`, `TurnSteerParams`,
     `TurnInterruptParams`;
-- Project AGENT maintenance API: `codex-rs/app-server-protocol/src/protocol/v2/project_agent.rs`
-  - representative types: `ThreadProjectAgentMaintenanceRunParams`,
+- Project AGENT management API: `codex-rs/app-server-protocol/src/protocol/v2/project_agent.rs`
+  - representative types: `ThreadProjectAgentListParams`, `ThreadProjectAgentReadParams`,
+    `ThreadProjectAgentReadResponse`, `ThreadProjectAgentMaintenanceRunParams`,
     `ThreadProjectAgentMaintenanceRunResponse`,
     `ThreadProjectAgentMaintenanceStatusUpdatedNotification`;
 - Other API areas are split into matching files such as `command_exec.rs`, `fs.rs`, `mcp.rs`,
@@ -264,11 +265,13 @@ Important variations:
   - commands: `codex agents list`, `show`, `create`, `disable`, and `maintain`;
 - Runtime extension: `codex-rs/ext/project-agents/`
   - representative symbols: `ProjectAgentExtension`, `ProjectAgentRootContext`,
-    `ProjectAgentWorkerContext`, `maintain_thread_project_agents`;
+    `ProjectAgentWorkerContext`, `list_thread_project_agents`, `read_thread_project_agent`,
+    `maintain_thread_project_agents`;
+  - bounded roster/detail inspection owner: `codex-rs/ext/project-agents/src/inspection.rs`;
   - reusable worker-thread lifecycle, per-AGENT task serialization, and task/session phase
     persistence: `codex-rs/ext/project-agents/src/worker.rs`;
-- App-server surface: `thread/projectAgentMaintenance/run` and
-  `thread/projectAgentMaintenance/statusUpdated`;
+- App-server surface: `thread/projectAgent/list`, `thread/projectAgent/read`,
+  `thread/projectAgentMaintenance/run`, and `thread/projectAgentMaintenance/statusUpdated`;
 - TUI surface: `/agents-maintain`, with pending-state reminders deferred while a turn is active.
 - Cross-executor project-root discovery reuses
   `codex_file_system::find_nearest_ancestor_with_markers` with `PathUri`.

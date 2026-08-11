@@ -5,8 +5,10 @@ use app_test_support::to_response;
 use codex_app_server_protocol::JSONRPCNotification;
 use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::RequestId;
+use codex_app_server_protocol::ThreadProjectAgentListResponse;
 use codex_app_server_protocol::ThreadProjectAgentMaintenanceRunResponse;
 use codex_app_server_protocol::ThreadProjectAgentMaintenanceStatusUpdatedNotification;
+use codex_app_server_protocol::ThreadProjectAgentReadResponse;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::TurnStartParams;
@@ -315,6 +317,142 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
         })
     );
 
+    let session = read_json(file_system.as_ref(), &agent_root.join("session.json")?).await?;
+    let current_task = read_json(
+        file_system.as_ref(),
+        &agent_root.join("tasks/current-task.json")?,
+    )
+    .await?;
+    let api_session = json!({
+        "agentId": "query",
+        "threadId": session["thread_id"],
+        "generation": session["generation"],
+        "createdAt": session["created_at"],
+        "updatedAt": session["updated_at"],
+    });
+    let api_task = json!({
+        "agentId": "query",
+        "taskId": task_id,
+        "task": WORKER_TASK,
+        "phase": "completed",
+        "sessionThreadId": current_task["session_thread_id"],
+        "parentThreadId": thread.id,
+        "attempt": 1,
+        "createdAt": current_task["created_at"],
+        "updatedAt": current_task["updated_at"],
+    });
+    let api_result = json!({
+        "status": "completed",
+        "agentId": "query",
+        "taskId": task_id,
+        "result": "Located the requested symbol.",
+        "artifacts": ["artifact.txt"],
+        "evidence": ["src/lib.rs:42"],
+        "memoryCandidates": ["The entrypoint is src/lib.rs."],
+        "improvementProposals": ["Add a narrower search helper."],
+        "error": null,
+    });
+
+    let list_req = mcp
+        .send_raw_request(
+            "thread/projectAgent/list",
+            Some(json!({"threadId": thread.id.clone(), "limit": 1})),
+        )
+        .await?;
+    let list_resp: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(list_req)),
+    )
+    .await??;
+    let list = to_response::<ThreadProjectAgentListResponse>(list_resp)?;
+    assert_eq!(
+        serde_json::to_value(list)?,
+        json!({
+            "projectRoot": project_root_string,
+            "data": [{
+                "id": "query",
+                "description": "Performs bounded repository queries.",
+                "enabled": true,
+                "activeSessionThreadId": session["thread_id"],
+                "session": api_session,
+                "currentTask": api_task,
+            }],
+            "nextCursor": "1",
+            "total": 2,
+        })
+    );
+
+    let next_list_req = mcp
+        .send_raw_request(
+            "thread/projectAgent/list",
+            Some(json!({"threadId": thread.id.clone(), "cursor": "1", "limit": 1})),
+        )
+        .await?;
+    let next_list_resp: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(next_list_req)),
+    )
+    .await??;
+    let next_list = to_response::<ThreadProjectAgentListResponse>(next_list_resp)?;
+    assert_eq!(
+        serde_json::to_value(next_list)?,
+        json!({
+            "projectRoot": project_root_string,
+            "data": [{
+                "id": "writer",
+                "description": "Writes bounded reports.",
+                "enabled": false,
+                "activeSessionThreadId": null,
+                "session": null,
+                "currentTask": null,
+            }],
+            "nextCursor": null,
+            "total": 2,
+        })
+    );
+
+    let read_req = mcp
+        .send_raw_request(
+            "thread/projectAgent/read",
+            Some(json!({
+                "threadId": thread.id.clone(),
+                "agentId": "query",
+                "taskLimit": 1,
+            })),
+        )
+        .await?;
+    let read_resp: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(read_req)),
+    )
+    .await??;
+    let read = to_response::<ThreadProjectAgentReadResponse>(read_resp)?;
+    assert_eq!(
+        serde_json::to_value(read)?,
+        json!({
+            "projectRoot": project_root_string,
+            "agent": {
+                "id": "query",
+                "description": "Performs bounded repository queries.",
+                "enabled": true,
+                "definitionPath": "agents/query/agent.toml",
+                "constraintsFile": "constraints.md",
+                "model": "worker-model",
+                "modelReasoningEffort": "high",
+                "modelProvider": "worker_provider",
+                "tools": [],
+                "memoryMaxItems": 16,
+                "memoryMaxTokens": 2000,
+            },
+            "activeSessionThreadId": session["thread_id"],
+            "session": api_session,
+            "currentTask": api_task,
+            "currentResult": api_result,
+            "recentTasks": [api_task],
+            "recentResults": [api_result],
+        })
+    );
+
     let maintenance_req = mcp
         .send_raw_request(
             "thread/projectAgentMaintenance/run",
@@ -498,13 +636,16 @@ async fn create_project_agent(
         )
         .await?;
     let agent_root = project_root.join("AGENT/agents/query")?;
-    file_system
-        .create_directory(
-            &agent_root,
-            CreateDirectoryOptions { recursive: true },
-            /*sandbox*/ None,
-        )
-        .await?;
+    let writer_root = project_root.join("AGENT/agents/writer")?;
+    for directory in [&agent_root, &writer_root] {
+        file_system
+            .create_directory(
+                directory,
+                CreateDirectoryOptions { recursive: true },
+                /*sandbox*/ None,
+            )
+            .await?;
+    }
     file_system
         .write_file(
             &project_root.join("AGENT/registry.toml")?,
@@ -514,6 +655,10 @@ revision = 1
 [agents.query]
 path = "agents/query/agent.toml"
 enabled = true
+
+[agents.writer]
+path = "agents/writer/agent.toml"
+enabled = false
 "#
             .as_bytes()
             .to_vec(),
@@ -543,6 +688,29 @@ memory_max_tokens = 2000
         .write_file(
             &agent_root.join("constraints.md")?,
             b"Inspect only the target named in the delegated task.".to_vec(),
+            /*sandbox*/ None,
+        )
+        .await?;
+    file_system
+        .write_file(
+            &writer_root.join("agent.toml")?,
+            r#"schema_version = 1
+id = "writer"
+description = "Writes bounded reports."
+constraints_file = "constraints.md"
+tools = []
+memory_max_items = 8
+memory_max_tokens = 1000
+"#
+            .as_bytes()
+            .to_vec(),
+            /*sandbox*/ None,
+        )
+        .await?;
+    file_system
+        .write_file(
+            &writer_root.join("constraints.md")?,
+            b"Write only the report requested by the delegated task.".to_vec(),
             /*sandbox*/ None,
         )
         .await?;

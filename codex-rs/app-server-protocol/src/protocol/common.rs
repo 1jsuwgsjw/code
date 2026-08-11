@@ -551,6 +551,16 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadGoalClearResponse,
     },
+    ThreadProjectAgentList => "thread/projectAgent/list" {
+        params: v2::ThreadProjectAgentListParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectAgentListResponse,
+    },
+    ThreadProjectAgentRead => "thread/projectAgent/read" {
+        params: v2::ThreadProjectAgentReadParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectAgentReadResponse,
+    },
     ThreadProjectAgentMaintenanceRun => "thread/projectAgentMaintenance/run" {
         params: v2::ThreadProjectAgentMaintenanceRunParams,
         serialization: thread_id(params.thread_id),

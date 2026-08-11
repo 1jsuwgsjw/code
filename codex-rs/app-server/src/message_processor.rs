@@ -1099,6 +1099,12 @@ impl MessageProcessor {
                     .thread_goal_clear(request_id.clone(), params)
                     .await
             }
+            ClientRequest::ThreadProjectAgentList { params, .. } => {
+                self.project_agent_processor.list(params).await
+            }
+            ClientRequest::ThreadProjectAgentRead { params, .. } => {
+                self.project_agent_processor.read(params).await
+            }
             ClientRequest::ThreadProjectAgentMaintenanceRun { params, .. } => {
                 self.project_agent_processor
                     .maintenance_run(request_id.clone(), params)

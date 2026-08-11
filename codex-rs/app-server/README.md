@@ -155,6 +155,8 @@ Example with notification opt-out:
 - `thread/goal/clear` — clear the current persisted goal for a materialized thread; returns whether a goal was removed and emits `thread/goal/cleared` when state changes.
 - `thread/goal/updated` — notification emitted whenever a thread goal changes; includes the full current goal.
 - `thread/goal/cleared` — notification emitted whenever a thread goal is removed.
+- `thread/projectAgent/list` — list a bounded page of registered project-local specialist AGENTs for a loaded root thread, including enabled state, reusable worker-session metadata, live session identity, and current task metadata.
+- `thread/projectAgent/read` — read one registered project AGENT definition plus bounded recent task metadata and complete persisted result fields (`result`, artifacts, evidence, memory candidates, improvement proposals, and error).
 - `thread/projectAgentMaintenance/run` — apply pending memory candidates and improvement proposals for every project-local specialist AGENT attached to a loaded, idle thread. The request is rejected while the thread has an active task. Returns accepted/rejected counts plus the resulting maintenance status.
 - `thread/projectAgentMaintenance/statusUpdated` — notification emitted when a project AGENT context is loaded or resumed, after a delegated result creates pending maintenance, and after maintenance runs. Includes `threadId`, the canonical `projectRoot`, aggregate `pendingCount`, and `catalogRevision`.
 - `thread/settings/updated` — experimental notification emitted to subscribed clients when a loaded thread’s effective next-turn settings change; includes `threadId` and the full `threadSettings`.
@@ -637,6 +639,16 @@ Use `thread/goal/clear` to remove the current goal.
 { "method": "thread/goal/clear", "id": 30, "params": { "threadId": "thr_123" } }
 { "id": 30, "result": { "cleared": true } }
 { "method": "thread/goal/cleared", "params": { "threadId": "thr_123" } }
+```
+
+### Example: Inspect a project AGENT
+
+Use the loaded root thread id to page the roster, then read one AGENT with a bounded task/result history:
+
+```json
+{ "method": "thread/projectAgent/list", "id": 31, "params": { "threadId": "thr_123", "limit": 25 } }
+{ "id": 31, "result": { "projectRoot": "file:///Users/me/project", "data": [], "nextCursor": null, "total": 0 } }
+{ "method": "thread/projectAgent/read", "id": 32, "params": { "threadId": "thr_123", "agentId": "query", "taskLimit": 25 } }
 ```
 
 ### Example: Apply project AGENT maintenance
