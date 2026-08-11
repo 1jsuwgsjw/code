@@ -100,7 +100,7 @@ ON CONFLICT(alias) DO NOTHING
             .await?;
         }
 
-        let revision = load_project_revision(&mut *tx, project_id.as_str()).await?;
+        let revision = load_project_revision(&mut tx, project_id.as_str()).await?;
         tx.commit().await?;
         Ok(ResearchProject {
             project_id,
@@ -113,7 +113,7 @@ ON CONFLICT(alias) DO NOTHING
         project_id: &str,
     ) -> anyhow::Result<ResearchStateSnapshot> {
         let mut tx = self.pool.begin().await?;
-        let snapshot = load_project_snapshot(&mut *tx, project_id).await?;
+        let snapshot = load_project_snapshot(&mut tx, project_id).await?;
         tx.commit().await?;
         Ok(snapshot)
     }
@@ -133,7 +133,7 @@ ON CONFLICT(alias) DO NOTHING
         }
 
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let snapshot = load_project_snapshot(&mut *tx, project_id).await?;
+        let snapshot = load_project_snapshot(&mut tx, project_id).await?;
         let previous_revision = snapshot.revision;
         let mut state = ResearchState::from_snapshot(snapshot)?;
         let update = state.apply(deltas)?;
@@ -197,7 +197,7 @@ INSERT INTO research_events (
                 .iter()
                 .find(|entry| entry.scope == ResearchScope::Project && entry.id == entry_id)
             {
-                upsert_projection(&mut *tx, project_id, revision, now, entry).await?;
+                upsert_projection(&mut tx, project_id, revision, now, entry).await?;
             } else {
                 sqlx::query(
                     "DELETE FROM research_projections WHERE project_id = ? AND scope = ? AND entry_id = ?",
