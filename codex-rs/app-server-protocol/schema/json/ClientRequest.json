@@ -4034,6 +4034,33 @@
       ],
       "type": "object"
     },
+    "ThreadProjectAgentListParams": {
+      "properties": {
+        "cursor": {
+          "description": "Opaque pagination cursor returned by a previous call.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "Optional page size; the server applies a hard upper bound.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ThreadProjectAgentMaintenanceRunParams": {
       "properties": {
         "threadId": {
@@ -4041,6 +4068,30 @@
         }
       },
       "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadProjectAgentReadParams": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "taskLimit": {
+          "description": "Optional recent-task and result count; the server applies a hard upper bound.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
         "threadId"
       ],
       "type": "object"
@@ -5134,6 +5185,54 @@
         "params"
       ],
       "title": "Thread/goal/clearRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/projectAgent/list"
+          ],
+          "title": "Thread/projectAgent/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectAgentListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectAgent/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/projectAgent/read"
+          ],
+          "title": "Thread/projectAgent/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectAgentReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectAgent/readRequest",
       "type": "object"
     },
     {
