@@ -38,9 +38,9 @@ const ROOT_ONLY_MESSAGE: &str = "Delegate this root-only request.";
 const WORKER_TASK: &str = "Inspect the target";
 
 #[cfg(any(target_os = "macos", windows))]
-const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(60);
+pub(super) const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(60);
 #[cfg(not(any(target_os = "macos", windows)))]
-const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
+pub(super) const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
 
 struct ProjectAgentsResponder;
 
@@ -595,7 +595,7 @@ where
     serde_json::from_value(params).context("notification params should match the protocol type")
 }
 
-fn request_body_json(request: &wiremock::Request) -> Value {
+pub(super) fn request_body_json(request: &wiremock::Request) -> Value {
     let body = request
         .headers
         .get("content-encoding")
@@ -613,7 +613,7 @@ fn request_body_json(request: &wiremock::Request) -> Value {
     serde_json::from_slice(&body).expect("response request body should be JSON")
 }
 
-fn has_function_call_output(body: &Value, call_id: &str) -> bool {
+pub(super) fn has_function_call_output(body: &Value, call_id: &str) -> bool {
     body.get("input")
         .and_then(Value::as_array)
         .is_some_and(|items| {
@@ -624,7 +624,7 @@ fn has_function_call_output(body: &Value, call_id: &str) -> bool {
         })
 }
 
-async fn create_project_agent(
+pub(super) async fn create_project_agent(
     file_system: &dyn ExecutorFileSystem,
     project_root: &PathUri,
 ) -> Result<()> {
@@ -717,7 +717,7 @@ memory_max_tokens = 1000
     Ok(())
 }
 
-fn create_config_toml(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {
+pub(super) fn create_config_toml(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {
     std::fs::write(
         codex_home.join("config.toml"),
         format!(
@@ -745,7 +745,10 @@ stream_max_retries = 0
     )
 }
 
-async fn read_json(file_system: &dyn ExecutorFileSystem, path: &PathUri) -> Result<Value> {
+pub(super) async fn read_json(
+    file_system: &dyn ExecutorFileSystem,
+    path: &PathUri,
+) -> Result<Value> {
     let contents = file_system.read_file(path, /*sandbox*/ None).await?;
     Ok(serde_json::from_slice(&contents)?)
 }
