@@ -94,7 +94,7 @@ fn render_entry(entry: &TurnResearchStateEntry, width: u16) -> Vec<Line<'static>
 
 fn status_display(status: TurnResearchStatus) -> (&'static str, Style) {
     match status {
-        TurnResearchStatus::Open => ("?", Style::default().yellow()),
+        TurnResearchStatus::Open => ("?", Style::default().cyan()),
         TurnResearchStatus::Supported => ("✓", Style::default().green().bold()),
         TurnResearchStatus::Rejected => ("×", Style::default().red()),
         TurnResearchStatus::Resolved => ("◆", Style::default().cyan()),

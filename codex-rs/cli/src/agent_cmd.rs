@@ -86,8 +86,8 @@ impl AgentCli {
         };
         let cwd = PathUri::from_abs_path(&cwd);
         let markers = [
-            RelativeProjectAgentPath::new("AGENT").expect("valid AGENT marker"),
-            RelativeProjectAgentPath::new(".git").expect("valid Git marker"),
+            RelativeProjectAgentPath::new("AGENT")?,
+            RelativeProjectAgentPath::new(".git")?,
         ];
         let project_root = resolve_project_root(
             LOCAL_FS.as_ref(),

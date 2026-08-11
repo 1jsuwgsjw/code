@@ -458,7 +458,7 @@ pub(crate) fn worker_context_prompt(context: &ProjectAgentWorkerContext) -> Stri
             ),
         );
         if let Some(schema) = &tool.input_schema {
-            append_prompt(&mut prompt, &format!("  input schema: {}\n", schema));
+            append_prompt(&mut prompt, &format!("  input schema: {schema}\n"));
         }
     }
     append_prompt(&mut prompt, "\n# Accepted memory\n\n");

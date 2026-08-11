@@ -21,6 +21,7 @@ use dirs::home_dir;
 use pretty_assertions::assert_eq;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use ratatui::style::Color;
 use reqwest::StatusCode;
 use serde_json::json;
 use std::collections::HashMap;
@@ -2274,15 +2275,25 @@ fn research_state_update_renders_revision_and_entries() {
                 kind: codex_app_server_protocol::TurnResearchEntryKind::Hypothesis,
                 subject: "research-state runtime".to_string(),
                 statement: "The native plan tool accepts bounded research deltas".to_string(),
-                status: codex_app_server_protocol::TurnResearchStatus::Supported,
+                status: codex_app_server_protocol::TurnResearchStatus::Open,
             }],
         },
     );
 
-    let rendered = render_lines(&cell.display_lines(60)).join("\n");
+    let lines = cell.display_lines(160);
+    let status_color = lines
+        .iter()
+        .flat_map(|line| &line.spans)
+        .find(|span| span.content == "? ")
+        .and_then(|span| span.style.fg);
+    assert_eq!(status_color, Some(Color::Cyan));
+
+    let rendered = render_lines(&lines).join("\n");
+    insta::assert_snapshot!(rendered, @"• Research State · rev 2
+  └ ? Hypothesis · research-state runtime [task · open] — The native plan tool accepts bounded research deltas");
     assert!(rendered.contains("Research State · rev 2"));
     assert!(rendered.contains("Hypothesis"));
-    assert!(rendered.contains("[task · supported]"));
+    assert!(rendered.contains("[task · open]"));
     assert!(rendered.contains("native plan tool accepts"));
 }
 
