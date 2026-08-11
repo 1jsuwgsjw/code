@@ -257,7 +257,8 @@ Important variations:
 
 - Foundation crate: `codex-rs/project-agents/`
   - representative symbols: `ProjectAgentRegistry`, `ProjectAgentDefinition`,
-    `ProjectAgentToolManifest`, `ProjectAgentTaskResult`, `ProjectAgentTaskMetadata`,
+    `ProjectAgentToolManifest`, `ProjectAgentCommandToolRegistration`,
+    `ProjectAgentTaskResult`, `ProjectAgentTaskMetadata`,
     `ProjectAgentSessionMetadata`, `ProjectAgentStore`, `ProjectAgentEntry`,
     `ProjectAgentMaintenanceOutcome`;
   - task/session persistence and bounded history reads:
@@ -266,7 +267,8 @@ Important variations:
     (`ProjectAgentStore::maintenance_status`, `ProjectAgentStore::maintain`);
 - CLI management: `codex-rs/cli/src/agent_cmd.rs`
   - representative symbols: `AgentCli`, `AgentSubcommand`;
-  - commands: `codex agents list`, `show`, `create`, `disable`, and `maintain`;
+  - commands: `codex agents list`, `show`, `create`, `add-command-tool`, `disable`, and
+    `maintain`;
 - Runtime extension: `codex-rs/ext/project-agents/`
   - representative symbols: `ProjectAgentExtension`, `ProjectAgentRootContext`,
     `ProjectAgentWorkerContext`, `list_thread_project_agents`, `read_thread_project_agent`,

@@ -2,6 +2,7 @@ use anyhow::Context;
 use clap::Args;
 use clap::Parser;
 use codex_exec_server::LOCAL_FS;
+use codex_project_agents::ProjectAgentCommandToolRegistration;
 use codex_project_agents::ProjectAgentEntry;
 use codex_project_agents::ProjectAgentFileSystemScope;
 use codex_project_agents::ProjectAgentId;
@@ -29,6 +30,8 @@ enum AgentSubcommand {
     Show(AgentShowArgs),
     /// Create and register a project AGENT definition.
     Create(AgentCreateArgs),
+    /// Register one bounded command-backed tool for a project AGENT.
+    AddCommandTool(AgentAddCommandToolArgs),
     /// Disable a registered project AGENT definition.
     Disable(AgentIdArgs),
     /// Review pending memory candidates and improvement proposals.
@@ -60,6 +63,31 @@ struct AgentCreateArgs {
     /// Description used by the main AGENT to select this specialist.
     #[arg(long)]
     description: String,
+}
+
+#[derive(Debug, Args)]
+struct AgentAddCommandToolArgs {
+    /// Registered AGENT identifier.
+    agent_id: ProjectAgentId,
+
+    /// Tool identifier exposed to the worker as x.<tool-id>.
+    tool_id: ProjectAgentId,
+
+    /// Help text shown to the worker for this callable interface.
+    #[arg(long)]
+    description: String,
+
+    /// Existing program path relative to AGENT/agents/<agent-id>/.
+    #[arg(long)]
+    program: RelativeProjectAgentPath,
+
+    /// Existing bounded JSON parameter schema relative to AGENT/agents/<agent-id>/.
+    #[arg(long)]
+    input_schema: RelativeProjectAgentPath,
+
+    /// Maximum command runtime in milliseconds.
+    #[arg(long)]
+    timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Args)]
@@ -158,6 +186,33 @@ impl AgentCli {
                 println!(
                     "Created project AGENT `{}` at `AGENT/{}`.",
                     entry.definition.id, entry.path
+                );
+            }
+            AgentSubcommand::AddCommandTool(AgentAddCommandToolArgs {
+                agent_id,
+                tool_id,
+                description,
+                program,
+                input_schema,
+                timeout_ms,
+            }) => {
+                let manifest_path = RelativeProjectAgentPath::new(format!("tools/{tool_id}.x"))?;
+                store
+                    .register_command_tool(
+                        LOCAL_FS.as_ref(),
+                        ProjectAgentFileSystemScope::Unrestricted,
+                        ProjectAgentCommandToolRegistration {
+                            agent_id: agent_id.clone(),
+                            tool_id: tool_id.clone(),
+                            description,
+                            program,
+                            input_schema,
+                            timeout_ms,
+                        },
+                    )
+                    .await?;
+                println!(
+                    "Registered command tool `{tool_id}` for project AGENT `{agent_id}` at `AGENT/agents/{agent_id}/{manifest_path}`."
                 );
             }
             AgentSubcommand::Disable(AgentIdArgs { id }) => {

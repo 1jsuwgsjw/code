@@ -1,5 +1,6 @@
 //! Project-local, file-defined specialist AGENT primitives.
 
+mod command_tool;
 mod maintenance;
 mod maintenance_store;
 mod store;
@@ -49,3 +50,4 @@ pub use types::RelativeProjectAgentPath;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+pub use command_tool::ProjectAgentCommandToolRegistration;

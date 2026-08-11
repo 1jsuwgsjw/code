@@ -242,9 +242,8 @@ fn worker_prompt_contains_runtime_contract_and_stays_bounded() {
     let project = TempDir::new().expect("project tempdir");
     let mut lookup = loaded_tool(
         "lookup",
-        ProjectAgentToolTarget::Mcp {
-            server: "knowledge".to_string(),
-            tool: "lookup".to_string(),
+        ProjectAgentToolTarget::Command {
+            program: relative_path("tools/private_lookup.py"),
         },
     );
     lookup.input_schema = Some(json!({
@@ -262,6 +261,7 @@ fn worker_prompt_contains_runtime_contract_and_stays_bounded() {
         "Each concrete task arrives as the current user turn.",
         "# Fixed result protocol",
         "Stay inside the assigned repository scope.",
+        "lookup tool",
         "route: x.lookup",
         "input schema:",
         "\"query\"",
@@ -274,6 +274,7 @@ fn worker_prompt_contains_runtime_contract_and_stays_bounded() {
     }
     assert!(!prompt.contains("task-1"));
     assert!(!prompt.contains("Inspect the target"));
+    assert!(!prompt.contains("private_lookup.py"));
 
     context.runtime.constraints = "界".repeat(40_000);
     let bounded = worker_context_prompt(&context);

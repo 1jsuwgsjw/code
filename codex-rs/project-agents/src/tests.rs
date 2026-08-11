@@ -11,6 +11,7 @@ use codex_file_system::RemoveOptions;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 use pretty_assertions::assert_eq;
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::io;
 use tempfile::tempdir;
@@ -289,6 +290,145 @@ input_schema = "tools/search.schema.json"
     .expect_err("error field is required");
     assert!(missing_error.to_string().contains("error"));
     assert!(RelativeProjectAgentPath::new("../outside").is_err());
+}
+
+#[tokio::test]
+async fn command_tool_registration_writes_a_bounded_callable_contract() {
+    let temp_dir = tempdir().expect("tempdir");
+    let project_root = AbsolutePathBuf::try_from(temp_dir.path()).expect("absolute temp path");
+    let store = ProjectAgentStore::new(PathUri::from_abs_path(&project_root)).expect("store");
+    let file_system = TestFileSystem;
+    let scope = ProjectAgentFileSystemScope::Unrestricted;
+    let agent_id = ProjectAgentId::new("query").expect("agent id");
+    let entry = store
+        .create(
+            &file_system,
+            scope,
+            agent_id.clone(),
+            "Performs bounded repository queries.".to_string(),
+        )
+        .await
+        .expect("create agent");
+    let tools_directory = project_root.join("AGENT/agents/query/tools");
+    std::fs::create_dir_all(tools_directory.as_path()).expect("tools directory");
+    std::fs::write(tools_directory.join("search.py").as_path(), "print('ok')\n").expect("program");
+    let input_schema = json!({
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+        "additionalProperties": false
+    });
+    std::fs::write(
+        tools_directory.join("search.schema.json").as_path(),
+        serde_json::to_vec(&input_schema).expect("serialize input schema"),
+    )
+    .expect("input schema");
+
+    let updated = store
+        .register_command_tool(
+            &file_system,
+            scope,
+            ProjectAgentCommandToolRegistration {
+                agent_id: agent_id.clone(),
+                tool_id: ProjectAgentId::new("search").expect("tool id"),
+                description: "Runs bounded project search.".to_string(),
+                program: RelativeProjectAgentPath::new("tools/search.py").expect("program path"),
+                input_schema: RelativeProjectAgentPath::new("tools/search.schema.json")
+                    .expect("schema path"),
+                timeout_ms: Some(30_000),
+            },
+        )
+        .await
+        .expect("register command tool");
+    let manifest_path = RelativeProjectAgentPath::new("tools/search.x").expect("manifest path");
+    let expected_definition = ProjectAgentDefinition {
+        tools: vec![manifest_path.clone()],
+        ..entry.definition.clone()
+    };
+    assert_eq!(
+        updated,
+        ProjectAgentEntry {
+            definition: expected_definition.clone(),
+            ..entry.clone()
+        }
+    );
+
+    let runtime = store
+        .load_runtime(&file_system, scope, &agent_id)
+        .await
+        .expect("load runtime");
+    assert_eq!(runtime.entry.definition, expected_definition);
+    assert_eq!(
+        runtime.tools,
+        vec![LoadedProjectAgentTool {
+            manifest_path,
+            manifest: ProjectAgentToolManifest {
+                schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+                id: ProjectAgentId::new("search").expect("tool id"),
+                description: "Runs bounded project search.".to_string(),
+                target: ProjectAgentToolTarget::Command {
+                    program: RelativeProjectAgentPath::new("tools/search.py")
+                        .expect("program path"),
+                },
+                timeout_ms: Some(30_000),
+                input_schema: Some(
+                    RelativeProjectAgentPath::new("tools/search.schema.json").expect("schema path"),
+                ),
+            },
+            input_schema: Some(input_schema),
+        }]
+    );
+}
+
+#[tokio::test]
+async fn command_tool_registration_rejects_an_unbounded_parameter_contract() {
+    let temp_dir = tempdir().expect("tempdir");
+    let project_root = AbsolutePathBuf::try_from(temp_dir.path()).expect("absolute temp path");
+    let store = ProjectAgentStore::new(PathUri::from_abs_path(&project_root)).expect("store");
+    let file_system = TestFileSystem;
+    let scope = ProjectAgentFileSystemScope::Unrestricted;
+    let agent_id = ProjectAgentId::new("query").expect("agent id");
+    store
+        .create(
+            &file_system,
+            scope,
+            agent_id.clone(),
+            "Performs bounded repository queries.".to_string(),
+        )
+        .await
+        .expect("create agent");
+    let tools_directory = project_root.join("AGENT/agents/query/tools");
+    std::fs::create_dir_all(tools_directory.as_path()).expect("tools directory");
+    std::fs::write(tools_directory.join("search.py").as_path(), "print('ok')\n").expect("program");
+    std::fs::write(
+        tools_directory.join("search.schema.json").as_path(),
+        r#"{"type":"object","additionalProperties":true}"#,
+    )
+    .expect("input schema");
+
+    let error = store
+        .register_command_tool(
+            &file_system,
+            scope,
+            ProjectAgentCommandToolRegistration {
+                agent_id,
+                tool_id: ProjectAgentId::new("search").expect("tool id"),
+                description: "Runs bounded project search.".to_string(),
+                program: RelativeProjectAgentPath::new("tools/search.py").expect("program path"),
+                input_schema: RelativeProjectAgentPath::new("tools/search.schema.json")
+                    .expect("schema path"),
+                timeout_ms: None,
+            },
+        )
+        .await
+        .expect_err("unbounded schema must be rejected");
+    assert!(matches!(
+        error,
+        ProjectAgentStoreError::InvalidDefinition(ProjectAgentValidationError::InvalidField {
+            field: "input_schema",
+            ..
+        })
+    ));
 }
 
 #[tokio::test]

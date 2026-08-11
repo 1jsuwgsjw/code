@@ -3,6 +3,8 @@ use codex_project_agents::PROJECT_AGENT_SCHEMA_VERSION;
 use codex_project_agents::ProjectAgentId;
 use codex_project_agents::ProjectAgentRegistration;
 use codex_project_agents::ProjectAgentRegistry;
+use codex_project_agents::ProjectAgentToolManifest;
+use codex_project_agents::ProjectAgentToolTarget;
 use codex_project_agents::RelativeProjectAgentPath;
 use predicates::str::contains;
 use pretty_assertions::assert_eq;
@@ -35,6 +37,34 @@ fn agents_cli_manages_project_registry() -> Result<()> {
         .success()
         .stdout("Created project AGENT `query` at `AGENT/agents/query/agent.toml`.\n");
 
+    let tools_directory = project.path().join("AGENT/agents/query/tools");
+    std::fs::create_dir_all(&tools_directory)?;
+    std::fs::write(tools_directory.join("search.py"), "print('ok')\n")?;
+    std::fs::write(
+        tools_directory.join("search.schema.json"),
+        r#"{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}"#,
+    )?;
+    codex_command(codex_home.path(), project.path())?
+        .args([
+            "agents",
+            "add-command-tool",
+            "query",
+            "search",
+            "--description",
+            "Runs bounded project search.",
+            "--program",
+            "tools/search.py",
+            "--input-schema",
+            "tools/search.schema.json",
+            "--timeout-ms",
+            "30000",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            "Registered command tool `search` for project AGENT `query` at `AGENT/agents/query/tools/search.x`.\n",
+        );
+
     let list_output = codex_command(codex_home.path(), project.path())?
         .args(["agents", "list", "--json"])
         .assert()
@@ -54,7 +84,7 @@ fn agents_cli_manages_project_registry() -> Result<()> {
             "model": null,
             "modelReasoningEffort": null,
             "modelProvider": null,
-            "tools": [],
+            "tools": ["tools/search.x"],
             "memoryMaxItems": 32,
             "memoryMaxTokens": 4000
         }])
@@ -105,6 +135,21 @@ fn agents_cli_manages_project_registry() -> Result<()> {
             .path()
             .join("AGENT/agents/query/constraints.md")
             .is_file()
+    );
+    let manifest: ProjectAgentToolManifest =
+        toml::from_str(&std::fs::read_to_string(tools_directory.join("search.x"))?)?;
+    assert_eq!(
+        manifest,
+        ProjectAgentToolManifest {
+            schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+            id: ProjectAgentId::new("search")?,
+            description: "Runs bounded project search.".to_string(),
+            target: ProjectAgentToolTarget::Command {
+                program: RelativeProjectAgentPath::new("tools/search.py")?,
+            },
+            timeout_ms: Some(30_000),
+            input_schema: Some(RelativeProjectAgentPath::new("tools/search.schema.json")?),
+        }
     );
 
     Ok(())

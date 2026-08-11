@@ -26,7 +26,7 @@ const DEFAULT_MEMORY_MAX_ITEMS: u32 = 32;
 const DEFAULT_MEMORY_MAX_TOKENS: u32 = 4_000;
 const MAX_CONSTRAINTS_BYTES: usize = 32 * 1024;
 const MAX_TOOL_MANIFEST_BYTES: usize = 64 * 1024;
-const MAX_INPUT_SCHEMA_BYTES: usize = 64 * 1024;
+pub(crate) const MAX_INPUT_SCHEMA_BYTES: usize = 64 * 1024;
 const MAX_MEMORY_INDEX_BYTES: usize = 64 * 1024;
 const MAX_MEMORY_ITEM_BYTES: usize = 32 * 1024;
 const MAX_PERSISTED_RESULT_BYTES: usize = 256 * 1024;
@@ -600,7 +600,7 @@ impl ProjectAgentStore {
         })
     }
 
-    async fn write_new_file(
+    pub(crate) async fn write_new_file(
         &self,
         file_system: &dyn ExecutorFileSystem,
         scope: ProjectAgentFileSystemScope<'_>,
@@ -793,6 +793,12 @@ pub enum ProjectAgentStoreError {
     SerializeRegistry(#[from] toml::ser::Error),
     #[error("failed to serialize project AGENT definition `{path}`: {source}")]
     SerializeDefinition {
+        path: PathUri,
+        #[source]
+        source: toml::ser::Error,
+    },
+    #[error("failed to serialize project AGENT tool manifest `{path}`: {source}")]
+    SerializeToolManifest {
         path: PathUri,
         #[source]
         source: toml::ser::Error,
