@@ -39,6 +39,9 @@ pub(crate) struct Session {
     /// Serializes rebuild/apply cycles for the running proxy; each cycle
     /// rebuilds from the current SessionState while holding this lock.
     pub(super) managed_network_proxy_refresh_lock: Semaphore,
+    /// Serializes research-state validation, persistence, and projection without
+    /// holding the session-state mutex across database I/O.
+    research_state_update_lock: Semaphore,
     /// The set of enabled features should be invariant for the lifetime of the
     /// session.
     pub(super) features: ManagedFeatures,
@@ -469,6 +472,11 @@ impl Session {
         &self,
         deltas: &[ResearchDelta],
     ) -> anyhow::Result<ResearchStateUpdate> {
+        let _research_state_update_guard = self
+            .research_state_update_lock
+            .acquire()
+            .await
+            .map_err(|_| anyhow::anyhow!("research state update semaphore closed"))?;
         let (Some(state_db), Some(project_id)) = (
             self.services.state_db.as_ref(),
             self.services.research_project_id.as_deref(),
@@ -506,13 +514,16 @@ impl Session {
             .cloned()
             .collect::<Vec<_>>();
 
-        let mut state = self.state.lock().await;
-        let mut task_validation = state.research_state.clone();
-        task_validation.apply(&task_deltas)?;
+        {
+            let state = self.state.lock().await;
+            let mut task_validation = state.research_state.clone();
+            task_validation.apply(&task_deltas)?;
+        }
         let project_update = state_db
             .apply_research_project_deltas(project_id, &project_deltas)
             .await?;
         let project_revision = project_update.revision;
+        let mut state = self.state.lock().await;
         let update = state
             .research_state
             .apply_project_projection(project_update.entries, &task_deltas)?;
@@ -1268,6 +1279,7 @@ impl Session {
                 agent_status,
                 state: Mutex::new(state),
                 managed_network_proxy_refresh_lock: Semaphore::new(/*permits*/ 1),
+                research_state_update_lock: Semaphore::new(/*permits*/ 1),
                 features: config.features.clone(),
                 multi_agent_version,
                 pending_mcp_server_refresh_config: Mutex::new(None),

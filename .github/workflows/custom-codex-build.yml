@@ -128,20 +128,53 @@ jobs:
       - name: Clippy Stage 3 project-agent surfaces
         env:
           RUST_MIN_STACK: 8388608
+        shell: bash
         run: |
-          cargo clippy --locked --tests \
-            -p codex-project-agents \
-            -p codex-cli \
-            -p codex-project-agents-extension \
-            -p codex-protocol \
-            -p codex-core \
-            -p codex-app-server-protocol \
-            -p codex-app-server \
-            -p codex-mcp-server \
-            -p codex-rollout \
-            -p codex-rollout-trace \
-            -p codex-tui \
-            -- -D warnings
+          set +e
+          packages=(
+            codex-project-agents
+            codex-cli
+            codex-project-agents-extension
+            codex-protocol
+            codex-core
+            codex-app-server-protocol
+            codex-app-server
+            codex-mcp-server
+            codex-rollout
+            codex-rollout-trace
+            codex-tui
+          )
+          failed_packages=()
+          : > stage3-clippy.log
+
+          for package in "${packages[@]}"; do
+            echo "::group::Clippy ${package}" | tee -a stage3-clippy.log
+            cargo clippy --locked --tests --no-deps -p "${package}" -- -D warnings \
+              2>&1 | tee -a stage3-clippy.log
+            package_status=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            if (( package_status != 0 )); then
+              failed_packages+=("${package}")
+            fi
+          done
+
+          if (( ${#failed_packages[@]} != 0 )); then
+            printf 'Stage 3 Clippy failed packages: %s\n' "${failed_packages[*]}" \
+              | tee -a stage3-clippy.log "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "Stage 3 Clippy passed for all packages." \
+            | tee -a stage3-clippy.log "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Stage 3 Clippy log
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: stage3-clippy-${{ github.sha }}
+          path: codex-rs/stage3-clippy.log
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Verify app-server schema is committed
         shell: bash
