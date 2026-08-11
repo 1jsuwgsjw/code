@@ -134,7 +134,7 @@ async fn follow_up(
         .await
         .map_err(|error| {
             ProjectAgentControlError::InvalidRequest(format!(
-                "project AGENT `{agent_id}` could not accept the follow-up: {error}"
+                "project AGENT `{agent_id}` could not accept the follow-up: {error:?}"
             ))
         })?;
     Ok(task_control(&task, worker.thread_id))
