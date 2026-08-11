@@ -62,7 +62,7 @@ impl ChatWidget {
         ));
         if next_cursor.is_some() {
             header.push(Line::from(
-                format!("当前显示前 {shown} 个，更多结果暂未加载。").yellow(),
+                format!("当前显示前 {shown} 个，更多结果暂未加载。").magenta(),
             ));
         }
 
@@ -176,7 +176,7 @@ impl ChatWidget {
             "重建专职会话",
             "丢弃旧会话上下文并创建新一代隔离会话。",
             idle_action_disabled,
-            ProjectAgentWorkbenchAction::Rebuild(agent_id.clone()),
+            ProjectAgentWorkbenchAction::Rebuild(agent_id),
         ));
         items.push(action_item(
             thread_id,
@@ -317,7 +317,7 @@ fn result_preview(result: Option<&ProjectAgentPersistedResult>) -> String {
     let Some(result) = result else {
         return "暂无持久化响应".to_string();
     };
-    let text = result.result.replace('\r', " ").replace('\n', " ");
+    let text = result.result.replace(['\r', '\n'], " ");
     let preview = if text.trim().is_empty() {
         result.error.as_deref().unwrap_or("未返回正文")
     } else {
