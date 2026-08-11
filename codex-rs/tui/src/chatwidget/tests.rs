@@ -250,6 +250,8 @@ mod plugin_catalog;
 mod popups_and_settings;
 #[path = "tests/project_agent_maintenance_tests.rs"]
 mod project_agent_maintenance_tests;
+#[path = "tests/project_agent_workbench_tests.rs"]
+mod project_agent_workbench_tests;
 mod review_mode;
 mod side;
 mod slash_commands;

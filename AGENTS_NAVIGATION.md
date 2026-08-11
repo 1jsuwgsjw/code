@@ -103,6 +103,8 @@ Important variations:
   `codex-rs/tui/src/chatwidget/slash_dispatch.rs`
 - Project AGENT maintenance UI: `codex-rs/tui/src/app/project_agent_maintenance.rs`,
   `codex-rs/tui/src/chatwidget/project_agent_maintenance.rs`
+- Project AGENT workbench UI: `codex-rs/tui/src/app/project_agent_workbench.rs`,
+  `codex-rs/tui/src/chatwidget/project_agent_workbench.rs`
 - Composer and approval UI: `codex-rs/tui/src/bottom_pane/`
 - Rendered history/tool cells: `codex-rs/tui/src/history_cell/`,
   `codex-rs/tui/src/exec_cell/`, `codex-rs/tui/src/diff_render.rs`
@@ -280,7 +282,8 @@ Important variations:
   `thread/projectAgent/followUp`, `thread/projectAgent/terminate`,
   `thread/projectAgent/retry`, `thread/projectAgent/rebuild`,
   `thread/projectAgentMaintenance/run`, and `thread/projectAgentMaintenance/statusUpdated`;
-- TUI surface: `/agents-maintain`, with pending-state reminders deferred while a turn is active.
+- TUI surfaces: `/agents` opens a searchable `@agent-name` roster/detail/control workbench;
+  `/agents-maintain` applies pending maintenance, with reminders deferred while a turn is active.
 - Cross-executor project-root discovery reuses
   `codex_file_system::find_nearest_ancestor_with_markers` with `PathUri`.
 - On-disk source of truth begins at `AGENT/registry.toml`; discovery never activates an unregistered
@@ -289,7 +292,8 @@ Important variations:
   `codex-rs/ext/project-agents/src/tests.rs`, and
   `codex-rs/app-server/tests/suite/v2/project_agents.rs`,
   `codex-rs/app-server/tests/suite/v2/project_agent_controls.rs`, plus
-  `codex-rs/tui/src/chatwidget/tests/project_agent_maintenance_tests.rs`.
+  `codex-rs/tui/src/chatwidget/tests/project_agent_maintenance_tests.rs` and
+  `codex-rs/tui/src/chatwidget/tests/project_agent_workbench_tests.rs`.
 - Authoritative validation runs in GitHub Actions:
   `cd codex-rs && just test -p codex-project-agents`, `just test -p codex-cli`,
   `just test -p codex-project-agents-extension`, `just test -p codex-app-server-protocol`,

@@ -176,6 +176,7 @@ jobs:
         run: |
           cargo test --locked -p codex-tui research_state_update_renders_revision_and_entries
           cargo test --locked -p codex-tui project_agent_maintenance
+          cargo test --locked -p codex-tui project_agent_workbench
 
       - name: Verify app-server schema is committed
         shell: bash
