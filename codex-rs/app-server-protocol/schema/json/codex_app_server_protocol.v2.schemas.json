@@ -1561,6 +1561,102 @@
             },
             "method": {
               "enum": [
+                "thread/projectAgent/followUp"
+              ],
+              "title": "Thread/projectAgent/followUpRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadProjectAgentFollowUpParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/projectAgent/followUpRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/projectAgent/terminate"
+              ],
+              "title": "Thread/projectAgent/terminateRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadProjectAgentTerminateParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/projectAgent/terminateRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/projectAgent/retry"
+              ],
+              "title": "Thread/projectAgent/retryRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadProjectAgentRetryParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/projectAgent/retryRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/projectAgent/rebuild"
+              ],
+              "title": "Thread/projectAgent/rebuildRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadProjectAgentRebuildParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/projectAgent/rebuildRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
                 "thread/projectAgentMaintenance/run"
               ],
               "title": "Thread/projectAgentMaintenance/runRequestMethod",
@@ -17153,6 +17249,44 @@
       "title": "ThreadNameUpdatedNotification",
       "type": "object"
     },
+    "ThreadProjectAgentFollowUpParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "message",
+        "threadId"
+      ],
+      "title": "ThreadProjectAgentFollowUpParams",
+      "type": "object"
+    },
+    "ThreadProjectAgentFollowUpResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "sessionThreadId": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionThreadId",
+        "taskId"
+      ],
+      "title": "ThreadProjectAgentFollowUpResponse",
+      "type": "object"
+    },
     "ThreadProjectAgentListParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -17399,6 +17533,112 @@
         "recentTasks"
       ],
       "title": "ThreadProjectAgentReadResponse",
+      "type": "object"
+    },
+    "ThreadProjectAgentRebuildParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "threadId"
+      ],
+      "title": "ThreadProjectAgentRebuildParams",
+      "type": "object"
+    },
+    "ThreadProjectAgentRebuildResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "previousSessionThreadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session": {
+          "$ref": "#/definitions/ProjectAgentSession"
+        }
+      },
+      "required": [
+        "session"
+      ],
+      "title": "ThreadProjectAgentRebuildResponse",
+      "type": "object"
+    },
+    "ThreadProjectAgentRetryParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "threadId"
+      ],
+      "title": "ThreadProjectAgentRetryParams",
+      "type": "object"
+    },
+    "ThreadProjectAgentRetryResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "task": {
+          "$ref": "#/definitions/ProjectAgentTask"
+        }
+      },
+      "required": [
+        "task"
+      ],
+      "title": "ThreadProjectAgentRetryResponse",
+      "type": "object"
+    },
+    "ThreadProjectAgentTerminateParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "threadId"
+      ],
+      "title": "ThreadProjectAgentTerminateParams",
+      "type": "object"
+    },
+    "ThreadProjectAgentTerminateResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "sessionThreadId": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionThreadId",
+        "taskId"
+      ],
+      "title": "ThreadProjectAgentTerminateResponse",
       "type": "object"
     },
     "ThreadReadParams": {

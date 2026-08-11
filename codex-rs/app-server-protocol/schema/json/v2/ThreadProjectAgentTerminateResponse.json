@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "sessionThreadId": {
+      "type": "string"
+    },
+    "taskId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sessionThreadId",
+    "taskId"
+  ],
+  "title": "ThreadProjectAgentTerminateResponse",
+  "type": "object"
+}

@@ -439,6 +439,8 @@ export type { ThreadMetadataGitInfoUpdateParams } from "./ThreadMetadataGitInfoU
 export type { ThreadMetadataUpdateParams } from "./ThreadMetadataUpdateParams";
 export type { ThreadMetadataUpdateResponse } from "./ThreadMetadataUpdateResponse";
 export type { ThreadNameUpdatedNotification } from "./ThreadNameUpdatedNotification";
+export type { ThreadProjectAgentFollowUpParams } from "./ThreadProjectAgentFollowUpParams";
+export type { ThreadProjectAgentFollowUpResponse } from "./ThreadProjectAgentFollowUpResponse";
 export type { ThreadProjectAgentListParams } from "./ThreadProjectAgentListParams";
 export type { ThreadProjectAgentListResponse } from "./ThreadProjectAgentListResponse";
 export type { ThreadProjectAgentMaintenanceRunParams } from "./ThreadProjectAgentMaintenanceRunParams";
@@ -446,6 +448,12 @@ export type { ThreadProjectAgentMaintenanceRunResponse } from "./ThreadProjectAg
 export type { ThreadProjectAgentMaintenanceStatusUpdatedNotification } from "./ThreadProjectAgentMaintenanceStatusUpdatedNotification";
 export type { ThreadProjectAgentReadParams } from "./ThreadProjectAgentReadParams";
 export type { ThreadProjectAgentReadResponse } from "./ThreadProjectAgentReadResponse";
+export type { ThreadProjectAgentRebuildParams } from "./ThreadProjectAgentRebuildParams";
+export type { ThreadProjectAgentRebuildResponse } from "./ThreadProjectAgentRebuildResponse";
+export type { ThreadProjectAgentRetryParams } from "./ThreadProjectAgentRetryParams";
+export type { ThreadProjectAgentRetryResponse } from "./ThreadProjectAgentRetryResponse";
+export type { ThreadProjectAgentTerminateParams } from "./ThreadProjectAgentTerminateParams";
+export type { ThreadProjectAgentTerminateResponse } from "./ThreadProjectAgentTerminateResponse";
 export type { ThreadReadParams } from "./ThreadReadParams";
 export type { ThreadReadResponse } from "./ThreadReadResponse";
 export type { ThreadRealtimeAudioChunk } from "./ThreadRealtimeAudioChunk";
