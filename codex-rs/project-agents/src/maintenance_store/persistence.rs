@@ -1,6 +1,7 @@
 use super::*;
 
 impl ProjectAgentStore {
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn acquire_maintenance_lock(
         &self,
         file_system: &dyn ExecutorFileSystem,
@@ -110,7 +111,7 @@ impl ProjectAgentStore {
             let body = self
                 .read_optional_text(file_system, scope, agent_id, item, MAX_MEMORY_ITEM_BYTES)
                 .await?
-                .ok_or_else(|| ProjectAgentMaintenanceError::AcceptedMemoryMissing {
+                .ok_or(ProjectAgentMaintenanceError::AcceptedMemoryMissing {
                     path: resolved_item_path,
                 })?;
             used_tokens = used_tokens.saturating_add(approx_tokens(&body));
