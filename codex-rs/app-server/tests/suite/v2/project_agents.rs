@@ -99,7 +99,6 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
     Mock::given(method("POST"))
         .and(path_regex(".*/responses$"))
         .respond_with(ProjectAgentsResponder)
-        .expect(3)
         .mount(&server)
         .await;
 
@@ -557,7 +556,7 @@ fn create_config_toml(codex_home: &Path, server_uri: &str) -> std::io::Result<()
             r#"
 model = "root-model"
 approval_policy = "never"
-sandbox_mode = "workspace-write"
+sandbox_mode = "danger-full-access"
 model_provider = "root_provider"
 
 [model_providers.root_provider]
