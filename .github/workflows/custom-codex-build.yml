@@ -38,6 +38,58 @@ jobs:
       - name: Check formatting
         run: cargo fmt -- --config imports_granularity=Item --check
 
+      - name: Clippy Stage 3 project-agent surfaces
+        id: stage3_clippy
+        env:
+          RUST_MIN_STACK: 8388608
+        shell: bash
+        run: |
+          set +e
+          packages=(
+            codex-project-agents
+            codex-cli
+            codex-project-agents-extension
+            codex-protocol
+            codex-core
+            codex-app-server-protocol
+            codex-app-server
+            codex-mcp-server
+            codex-rollout
+            codex-rollout-trace
+            codex-tui
+          )
+          failed_packages=()
+          : > stage3-clippy.log
+
+          for package in "${packages[@]}"; do
+            echo "::group::Clippy ${package}" | tee -a stage3-clippy.log
+            cargo clippy --locked --tests --no-deps -p "${package}" -- -D warnings \
+              2>&1 | tee -a stage3-clippy.log
+            package_status=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            if (( package_status != 0 )); then
+              failed_packages+=("${package}")
+            fi
+          done
+
+          if (( ${#failed_packages[@]} != 0 )); then
+            printf 'Stage 3 Clippy failed packages: %s\n' "${failed_packages[*]}" \
+              | tee -a stage3-clippy.log "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "Stage 3 Clippy passed for all packages." \
+            | tee -a stage3-clippy.log "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Stage 3 Clippy log
+        if: ${{ always() && steps.stage3_clippy.outcome != 'skipped' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: stage3-clippy-${{ github.sha }}
+          path: codex-rs/stage3-clippy.log
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Test project agents foundation
         env:
           RUST_MIN_STACK: 8388608
@@ -124,58 +176,6 @@ jobs:
         run: |
           cargo test --locked -p codex-tui research_state_update_renders_revision_and_entries
           cargo test --locked -p codex-tui project_agent_maintenance
-
-      - name: Clippy Stage 3 project-agent surfaces
-        id: stage3_clippy
-        env:
-          RUST_MIN_STACK: 8388608
-        shell: bash
-        run: |
-          set +e
-          packages=(
-            codex-project-agents
-            codex-cli
-            codex-project-agents-extension
-            codex-protocol
-            codex-core
-            codex-app-server-protocol
-            codex-app-server
-            codex-mcp-server
-            codex-rollout
-            codex-rollout-trace
-            codex-tui
-          )
-          failed_packages=()
-          : > stage3-clippy.log
-
-          for package in "${packages[@]}"; do
-            echo "::group::Clippy ${package}" | tee -a stage3-clippy.log
-            cargo clippy --locked --tests --no-deps -p "${package}" -- -D warnings \
-              2>&1 | tee -a stage3-clippy.log
-            package_status=${PIPESTATUS[0]}
-            echo "::endgroup::"
-            if (( package_status != 0 )); then
-              failed_packages+=("${package}")
-            fi
-          done
-
-          if (( ${#failed_packages[@]} != 0 )); then
-            printf 'Stage 3 Clippy failed packages: %s\n' "${failed_packages[*]}" \
-              | tee -a stage3-clippy.log "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-
-          echo "Stage 3 Clippy passed for all packages." \
-            | tee -a stage3-clippy.log "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload Stage 3 Clippy log
-        if: ${{ always() && steps.stage3_clippy.outcome != 'skipped' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: stage3-clippy-${{ github.sha }}
-          path: codex-rs/stage3-clippy.log
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Verify app-server schema is committed
         shell: bash

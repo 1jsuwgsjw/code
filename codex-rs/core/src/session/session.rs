@@ -41,7 +41,7 @@ pub(crate) struct Session {
     pub(super) managed_network_proxy_refresh_lock: Semaphore,
     /// Serializes research-state validation, persistence, and projection without
     /// holding the session-state mutex across database I/O.
-    research_state_update_lock: Semaphore,
+    pub(super) research_state_update_lock: Semaphore,
     /// The set of enabled features should be invariant for the lifetime of the
     /// session.
     pub(super) features: ManagedFeatures,
