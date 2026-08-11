@@ -128,6 +128,7 @@ async fn root_tools_skip_disabled_agents() {
     let first_gate = context.task_gate(&agent_id).await;
     let second_gate = context.task_gate(&agent_id).await;
     assert!(Arc::ptr_eq(&first_gate, &second_gate));
+    assert_eq!(first_gate.available_permits(), 1);
     let worker_thread_id = ThreadId::new();
     context
         .remember_session(agent_id.clone(), worker_thread_id)

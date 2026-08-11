@@ -63,7 +63,16 @@ pub(crate) async fn execute_worker_task(
     scope: ProjectAgentFileSystemScope<'_>,
 ) -> ProjectAgentTaskResult {
     let task_gate = root_context.task_gate(&agent_id).await;
-    let _task_guard = task_gate.lock().await;
+    let _task_permit = match task_gate.acquire_owned().await {
+        Ok(permit) => permit,
+        Err(error) => {
+            return host_failed_result(
+                &agent_id,
+                &task_id,
+                &format!("project AGENT task gate is unavailable: {error}"),
+            );
+        }
+    };
     let created_at = unix_timestamp();
     let mut metadata = ProjectAgentTaskMetadata {
         schema_version: PROJECT_AGENT_SCHEMA_VERSION,

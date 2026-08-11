@@ -32,6 +32,7 @@ use codex_protocol::ThreadId;
 use codex_protocol::protocol::TurnEnvironmentSelection;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
+use tokio::sync::Semaphore;
 
 use crate::delegate::ProjectAgentDelegateTool;
 use crate::delegate::worker_context_prompt;
@@ -48,17 +49,17 @@ pub(crate) struct ProjectAgentRootContext {
     pub(crate) store: ProjectAgentStore,
     pub(crate) enabled_agents: Vec<ProjectAgentEntry>,
     pub(crate) event_emitter: ProjectAgentEventEmitter,
-    pub(crate) task_gates: Arc<Mutex<BTreeMap<ProjectAgentId, Arc<Mutex<()>>>>>,
+    pub(crate) task_gates: Arc<Mutex<BTreeMap<ProjectAgentId, Arc<Semaphore>>>>,
     pub(crate) active_sessions: Arc<RwLock<BTreeMap<ProjectAgentId, ThreadId>>>,
 }
 
 impl ProjectAgentRootContext {
-    pub(crate) async fn task_gate(&self, agent_id: &ProjectAgentId) -> Arc<Mutex<()>> {
+    pub(crate) async fn task_gate(&self, agent_id: &ProjectAgentId) -> Arc<Semaphore> {
         let mut task_gates = self.task_gates.lock().await;
         Arc::clone(
             task_gates
                 .entry(agent_id.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(()))),
+                .or_insert_with(|| Arc::new(Semaphore::new(/*permits*/ 1))),
         )
     }
 
