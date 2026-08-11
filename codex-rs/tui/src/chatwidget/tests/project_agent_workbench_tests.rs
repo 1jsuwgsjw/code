@@ -10,6 +10,7 @@ use codex_app_server_protocol::ProjectAgentTaskStatus;
 use codex_app_server_protocol::ThreadProjectAgentListResponse;
 use codex_app_server_protocol::ThreadProjectAgentReadResponse;
 use pretty_assertions::assert_eq;
+use unicode_width::UnicodeWidthChar;
 
 #[tokio::test]
 async fn agents_commands_target_the_current_thread() {
@@ -117,10 +118,7 @@ async fn project_agent_controls_emit_typed_actions() {
         }
     );
     chat.show_project_agent_follow_up_prompt(thread_id, "query".to_string());
-
-    for ch in "add evidence".chars() {
-        chat.handle_key_event(KeyEvent::from(KeyCode::Char(ch)));
-    }
+    chat.handle_paste("add evidence".to_string());
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
     assert_eq!(
@@ -149,11 +147,15 @@ fn next_workbench_action(
 }
 
 fn popup_lines(popup: &str, needles: &[&str]) -> String {
+    let lines = popup
+        .lines()
+        .map(remove_wide_char_spacers)
+        .collect::<Vec<_>>();
     needles
         .iter()
         .map(|needle| {
-            let line = popup
-                .lines()
+            let line = lines
+                .iter()
                 .find(|line| line.contains(needle))
                 .unwrap_or_else(|| panic!("expected popup line containing {needle:?}:\n{popup}"));
             let start = line.find(needle).expect("needle should be present");
@@ -164,6 +166,18 @@ fn popup_lines(popup: &str, needles: &[&str]) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn remove_wide_char_spacers(line: &str) -> String {
+    let mut chars = line.chars().peekable();
+    let mut normalized = String::with_capacity(line.len());
+    while let Some(ch) = chars.next() {
+        normalized.push(ch);
+        if ch.width().is_some_and(|width| width > 1) && chars.peek() == Some(&' ') {
+            let _ = chars.next();
+        }
+    }
+    normalized
 }
 
 fn test_read_response(phase: ProjectAgentTaskPhase) -> ThreadProjectAgentReadResponse {
