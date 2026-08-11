@@ -377,6 +377,7 @@ mod project_agent_maintenance;
 use self::project_agent_maintenance::ProjectAgentMaintenanceState;
 mod model_popups;
 mod notifications;
+mod project_agent_workbench;
 use self::notifications::Notification;
 mod permission_popups;
 mod permissions_menu;

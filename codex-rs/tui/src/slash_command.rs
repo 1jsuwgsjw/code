@@ -40,6 +40,7 @@ pub enum SlashCommand {
     Compact,
     Plan,
     Goal,
+    Agents,
     AgentsMaintain,
     Agent,
     Side,
@@ -121,6 +122,7 @@ impl SlashCommand {
             SlashCommand::Personality => "choose a communication style for Codex",
             SlashCommand::Plan => "switch to Plan mode",
             SlashCommand::Goal => "set or view the goal for a long-running task",
+            SlashCommand::Agents => "open the project AGENT workbench",
             SlashCommand::AgentsMaintain => "apply pending project AGENT memory and improvements",
             SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
             SlashCommand::Side | SlashCommand::Btw => {
@@ -159,6 +161,7 @@ impl SlashCommand {
                 | SlashCommand::Rename
                 | SlashCommand::Plan
                 | SlashCommand::Goal
+                | SlashCommand::Agents
                 | SlashCommand::Ide
                 | SlashCommand::Keymap
                 | SlashCommand::Mcp
@@ -227,6 +230,7 @@ impl SlashCommand {
             | SlashCommand::Stop
             | SlashCommand::App
             | SlashCommand::Goal
+            | SlashCommand::Agents
             | SlashCommand::Mcp
             | SlashCommand::Apps
             | SlashCommand::Plugins

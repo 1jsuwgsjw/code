@@ -52,6 +52,7 @@ use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort;
 
 use crate::history_cell::HistoryCell;
+use crate::project_agent_workbench::ProjectAgentWorkbenchAction;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ThreadGoalSetMode {
@@ -317,6 +318,12 @@ pub(crate) enum AppEvent {
     /// Apply pending project-local specialist AGENT maintenance for an idle thread.
     RunProjectAgentMaintenance {
         thread_id: ThreadId,
+    },
+
+    /// Inspect or control project-local specialist AGENTs for a thread.
+    ProjectAgentWorkbench {
+        thread_id: ThreadId,
+        action: ProjectAgentWorkbenchAction,
     },
 
     /// Result of refreshing rate limits.

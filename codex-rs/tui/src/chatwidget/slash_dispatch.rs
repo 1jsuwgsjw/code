@@ -305,6 +305,7 @@ impl ChatWidget {
                     );
                 }
             }
+            SlashCommand::Agents => self.dispatch_project_agent_workbench(""),
             SlashCommand::Side | SlashCommand::Btw => {
                 self.request_empty_side_conversation(cmd);
             }
@@ -901,6 +902,7 @@ impl ChatWidget {
             SlashCommand::Pets if !trimmed.is_empty() => {
                 self.select_pet_by_id(args);
             }
+            SlashCommand::Agents => self.dispatch_project_agent_workbench(trimmed),
             _ => self.dispatch_command(cmd),
         }
         if source == SlashCommandDispatchSource::Live && cmd != SlashCommand::Goal {
@@ -1088,6 +1090,7 @@ impl ChatWidget {
             | SlashCommand::Side
             | SlashCommand::Btw
             | SlashCommand::Keymap
+            | SlashCommand::Agents
             | SlashCommand::Agent
             | SlashCommand::MultiAgents
             | SlashCommand::Permissions

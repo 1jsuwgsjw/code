@@ -213,6 +213,7 @@ mod pets;
 mod platform_actions;
 mod plugin_mentions;
 mod project_agent_maintenance;
+mod project_agent_workbench;
 mod replay_filter;
 mod resize_reflow;
 mod session_lifecycle;

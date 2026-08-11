@@ -820,6 +820,10 @@ impl App {
                 self.run_project_agent_maintenance(app_server, thread_id)
                     .await;
             }
+            AppEvent::ProjectAgentWorkbench { thread_id, action } => {
+                self.handle_project_agent_workbench_action(app_server, thread_id, action)
+                    .await;
+            }
             AppEvent::SendAddCreditsNudgeEmail { credit_type } => {
                 if self
                     .chat_widget
