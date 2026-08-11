@@ -398,7 +398,7 @@ pub enum ProjectAgentValidationError {
     },
 }
 
-fn validate_schema(
+pub(crate) fn validate_schema(
     document: &'static str,
     schema_version: u32,
 ) -> Result<(), ProjectAgentValidationError> {
@@ -422,7 +422,7 @@ fn validate_non_empty(field: &'static str, value: &str) -> Result<(), ProjectAge
     Ok(())
 }
 
-fn validate_task_id(value: &str) -> Result<(), ProjectAgentValidationError> {
+pub(crate) fn validate_task_id(value: &str) -> Result<(), ProjectAgentValidationError> {
     let valid = !value.is_empty()
         && value.len() <= MAX_TASK_ID_BYTES
         && value
@@ -458,7 +458,7 @@ fn validate_result_list(
     Ok(())
 }
 
-fn validate_bounded_text(
+pub(crate) fn validate_bounded_text(
     field: &'static str,
     value: &str,
     max_bytes: usize,

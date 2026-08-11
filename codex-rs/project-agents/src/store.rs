@@ -85,7 +85,7 @@ pub enum ProjectAgentFileSystemScope<'a> {
 }
 
 impl<'a> ProjectAgentFileSystemScope<'a> {
-    fn sandbox(self) -> Option<&'a FileSystemSandboxContext> {
+    pub(crate) fn sandbox(self) -> Option<&'a FileSystemSandboxContext> {
         match self {
             Self::Unrestricted => None,
             Self::Sandboxed(sandbox) => Some(sandbox),
@@ -552,7 +552,7 @@ impl ProjectAgentStore {
         self.resolve_agent_relative(agent_id, path.as_str())
     }
 
-    fn resolve_agent_relative(
+    pub(crate) fn resolve_agent_relative(
         &self,
         agent_id: &ProjectAgentId,
         path: &str,
@@ -562,7 +562,7 @@ impl ProjectAgentStore {
         ))?)
     }
 
-    async fn read_text_bounded(
+    pub(crate) async fn read_text_bounded(
         &self,
         file_system: &dyn ExecutorFileSystem,
         scope: ProjectAgentFileSystemScope<'_>,
@@ -665,7 +665,7 @@ impl ProjectAgentStore {
         })
     }
 
-    fn file_system_error(
+    pub(crate) fn file_system_error(
         &self,
         operation: &'static str,
         path: &PathUri,
@@ -779,6 +779,14 @@ pub enum ProjectAgentStoreError {
     ArtifactAlreadyExists(PathUri),
     #[error("serialized project AGENT result is {actual} bytes; maximum is {maximum}")]
     PersistedResultTooLarge { actual: usize, maximum: usize },
+    #[error("serialized project AGENT {document} is {actual} bytes; maximum is {maximum}")]
+    PersistedDocumentTooLarge {
+        document: &'static str,
+        actual: usize,
+        maximum: usize,
+    },
+    #[error("project AGENT task directory `{path}` exceeds {maximum} entries")]
+    TooManyTaskEntries { path: PathUri, maximum: usize },
     #[error("failed to serialize project AGENT JSON: {0}")]
     SerializeJson(#[from] serde_json::Error),
     #[error("failed to serialize project AGENT registry: {0}")]

@@ -3,6 +3,8 @@
 mod maintenance;
 mod maintenance_store;
 mod store;
+mod task;
+mod task_store;
 mod types;
 
 pub use maintenance::ProjectAgentMaintenanceAgentStatus;
@@ -27,6 +29,10 @@ pub use store::ProjectAgentRuntime;
 pub use store::ProjectAgentStore;
 pub use store::ProjectAgentStoreError;
 pub use store::resolve_project_root;
+pub use task::ProjectAgentSessionMetadata;
+pub use task::ProjectAgentTaskListLimit;
+pub use task::ProjectAgentTaskMetadata;
+pub use task::ProjectAgentTaskPhase;
 pub use types::PROJECT_AGENT_SCHEMA_VERSION;
 pub use types::ProjectAgentDefinition;
 pub use types::ProjectAgentId;

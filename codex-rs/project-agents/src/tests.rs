@@ -625,3 +625,152 @@ memory_max_tokens = 4000
         }
     );
 }
+
+#[tokio::test]
+async fn reusable_session_and_task_metadata_round_trip_in_recent_first_order() {
+    let temp_dir = tempdir().expect("tempdir");
+    let project_root = AbsolutePathBuf::try_from(temp_dir.path()).expect("absolute temp path");
+    let store = ProjectAgentStore::new(PathUri::from_abs_path(&project_root)).expect("store");
+    let file_system = TestFileSystem;
+    let scope = ProjectAgentFileSystemScope::Unrestricted;
+    let agent_id = ProjectAgentId::new("query").expect("agent id");
+    let session = ProjectAgentSessionMetadata {
+        schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+        agent_id: agent_id.clone(),
+        thread_id: "019f0000-0000-7000-8000-000000000001".to_string(),
+        generation: 1,
+        created_at: 10,
+        updated_at: 12,
+    };
+    store
+        .persist_session_metadata(&file_system, scope, &session)
+        .await
+        .expect("persist session metadata");
+
+    let first = ProjectAgentTaskMetadata {
+        schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+        agent_id: agent_id.clone(),
+        task_id: "019f0000-0000-7000-8000-000000000001".to_string(),
+        task: "Inspect the first bounded target.".to_string(),
+        phase: ProjectAgentTaskPhase::Completed,
+        session_thread_id: Some(session.thread_id.clone()),
+        parent_thread_id: "019f0000-0000-7000-8000-000000000000".to_string(),
+        attempt: 1,
+        created_at: 10,
+        updated_at: 11,
+    };
+    let second = ProjectAgentTaskMetadata {
+        schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+        agent_id: agent_id.clone(),
+        task_id: "019f0000-0000-7000-8000-000000000002".to_string(),
+        task: "Continue in the reusable session.".to_string(),
+        phase: ProjectAgentTaskPhase::Running,
+        session_thread_id: Some(session.thread_id.clone()),
+        parent_thread_id: "019f0000-0000-7000-8000-000000000000".to_string(),
+        attempt: 1,
+        created_at: 12,
+        updated_at: 12,
+    };
+    store
+        .persist_task_metadata(&file_system, scope, &first)
+        .await
+        .expect("persist first task metadata");
+    store
+        .persist_task_metadata(&file_system, scope, &second)
+        .await
+        .expect("persist second task metadata");
+
+    assert_eq!(
+        store
+            .session_metadata(&file_system, scope, &agent_id)
+            .await
+            .expect("read session metadata"),
+        Some(session)
+    );
+    assert_eq!(
+        store
+            .current_task_metadata(&file_system, scope, &agent_id)
+            .await
+            .expect("read current task metadata"),
+        Some(second.clone())
+    );
+    assert_eq!(
+        store
+            .list_task_metadata(
+                &file_system,
+                scope,
+                &agent_id,
+                ProjectAgentTaskListLimit::new(1),
+            )
+            .await
+            .expect("list task metadata"),
+        vec![second]
+    );
+    assert_eq!(
+        store
+            .task_metadata(&file_system, scope, &agent_id, &first.task_id)
+            .await
+            .expect("read first task metadata"),
+        Some(first)
+    );
+}
+
+#[tokio::test]
+async fn persisted_results_can_be_read_as_current_and_recent_history() {
+    let temp_dir = tempdir().expect("tempdir");
+    let project_root = AbsolutePathBuf::try_from(temp_dir.path()).expect("absolute temp path");
+    let store = ProjectAgentStore::new(PathUri::from_abs_path(&project_root)).expect("store");
+    let file_system = TestFileSystem;
+    let scope = ProjectAgentFileSystemScope::Unrestricted;
+    let agent_id = ProjectAgentId::new("query").expect("agent id");
+    let first = ProjectAgentTaskResult {
+        status: ProjectAgentTaskStatus::Completed,
+        agent_id: agent_id.clone(),
+        task_id: "019f0000-0000-7000-8000-000000000001".to_string(),
+        result: "first".to_string(),
+        artifacts: Vec::new(),
+        evidence: vec!["first.txt".to_string()],
+        memory_candidates: Vec::new(),
+        improvement_proposals: Vec::new(),
+        error: None,
+    };
+    let second = ProjectAgentTaskResult {
+        status: ProjectAgentTaskStatus::Completed,
+        agent_id: agent_id.clone(),
+        task_id: "019f0000-0000-7000-8000-000000000002".to_string(),
+        result: "second".to_string(),
+        artifacts: Vec::new(),
+        evidence: vec!["second.txt".to_string()],
+        memory_candidates: Vec::new(),
+        improvement_proposals: Vec::new(),
+        error: None,
+    };
+    store
+        .persist_result(&file_system, scope, &first)
+        .await
+        .expect("persist first result");
+    store
+        .persist_result(&file_system, scope, &second)
+        .await
+        .expect("persist second result");
+
+    assert_eq!(
+        store
+            .current_task_result(&file_system, scope, &agent_id)
+            .await
+            .expect("read current result"),
+        Some(second.clone())
+    );
+    assert_eq!(
+        store
+            .list_task_results(
+                &file_system,
+                scope,
+                &agent_id,
+                ProjectAgentTaskListLimit::new(2),
+            )
+            .await
+            .expect("list task results"),
+        vec![second, first]
+    );
+}

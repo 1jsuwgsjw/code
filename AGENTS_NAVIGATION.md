@@ -252,8 +252,11 @@ Important variations:
 
 - Foundation crate: `codex-rs/project-agents/`
   - representative symbols: `ProjectAgentRegistry`, `ProjectAgentDefinition`,
-    `ProjectAgentToolManifest`, `ProjectAgentTaskResult`, `ProjectAgentStore`, `ProjectAgentEntry`,
+    `ProjectAgentToolManifest`, `ProjectAgentTaskResult`, `ProjectAgentTaskMetadata`,
+    `ProjectAgentSessionMetadata`, `ProjectAgentStore`, `ProjectAgentEntry`,
     `ProjectAgentMaintenanceOutcome`;
+  - task/session persistence and bounded history reads:
+    `codex-rs/project-agents/src/task_store.rs`;
   - maintenance owner: `codex-rs/project-agents/src/maintenance_store.rs`
     (`ProjectAgentStore::maintenance_status`, `ProjectAgentStore::maintain`);
 - CLI management: `codex-rs/cli/src/agent_cmd.rs`
