@@ -3,7 +3,7 @@ setlocal EnableExtensions
 chcp 65001 >nul
 title Codex Agent Test
 
-set "CODEX_EXE=D:\codex\task\artifacts\codex-custom-windows-x64-2f6d6ddc9\codex-custom.exe"
+set "CODEX_EXE=D:\codex\task\artifacts\codex-custom-current\codex-custom.exe"
 set "TEST_DIR=D:\codex-agent-test"
 set "TEST_HOME=D:\codex-agent-test\.codex-home"
 set "SOURCE_HOME=%USERPROFILE%\.codex"
@@ -158,6 +158,14 @@ if errorlevel 1 (
 )
 call :prepare_project
 if errorlevel 1 (
+  pause
+  goto menu
+)
+
+if exist "%RESULT_FILE%" del /q "%RESULT_FILE%"
+if exist "%RESULT_FILE%" (
+  echo [ERROR] Could not remove the previous persisted AGENT result:
+  echo %RESULT_FILE%
   pause
   goto menu
 )
