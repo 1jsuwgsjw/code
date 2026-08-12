@@ -51,7 +51,7 @@ pub(crate) struct ProjectAgentRootContext {
     pub(crate) event_emitter: ProjectAgentEventEmitter,
     pub(crate) task_gates: Arc<Mutex<BTreeMap<ProjectAgentId, Arc<Semaphore>>>>,
     pub(crate) active_sessions: Arc<RwLock<BTreeMap<ProjectAgentId, ThreadId>>>,
-    pub(crate) task_workspace_gate: Arc<Mutex<()>>,
+    pub(crate) task_workspace_gate: Arc<Semaphore>,
 }
 
 impl ProjectAgentRootContext {
@@ -116,7 +116,7 @@ pub(crate) struct ProjectAgentExtension {
     thread_manager: Weak<ThreadManager>,
     environment_manager: Arc<EnvironmentManager>,
     event_emitter: ProjectAgentEventEmitter,
-    task_workspace_gates: Arc<Mutex<BTreeMap<String, Weak<Mutex<()>>>>>,
+    task_workspace_gates: Arc<Mutex<BTreeMap<String, Weak<Semaphore>>>>,
 }
 
 impl ProjectAgentExtension {
@@ -133,13 +133,13 @@ impl ProjectAgentExtension {
         }
     }
 
-    async fn task_workspace_gate(&self, project_root: String) -> Arc<Mutex<()>> {
+    async fn task_workspace_gate(&self, project_root: String) -> Arc<Semaphore> {
         let mut gates = self.task_workspace_gates.lock().await;
         gates.retain(|_, gate| gate.strong_count() != 0);
         if let Some(gate) = gates.get(&project_root).and_then(Weak::upgrade) {
             return gate;
         }
-        let gate = Arc::new(Mutex::new(()));
+        let gate = Arc::new(Semaphore::new(/*permits*/ 1));
         gates.insert(project_root, Arc::downgrade(&gate));
         gate
     }

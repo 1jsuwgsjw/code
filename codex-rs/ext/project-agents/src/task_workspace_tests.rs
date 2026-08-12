@@ -16,6 +16,7 @@ use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
+use tokio::sync::Semaphore;
 
 use super::*;
 use crate::events::ProjectAgentEventEmitter;
@@ -238,7 +239,7 @@ impl TaskWorkspaceFixture {
             event_emitter: ProjectAgentEventEmitter::new(Arc::new(NoopExtensionEventSink)),
             task_gates: Arc::new(Mutex::new(BTreeMap::new())),
             active_sessions: Arc::new(RwLock::new(BTreeMap::new())),
-            task_workspace_gate: Arc::new(Mutex::new(())),
+            task_workspace_gate: Arc::new(Semaphore::new(/*permits*/ 1)),
         });
         Self {
             _project: project,

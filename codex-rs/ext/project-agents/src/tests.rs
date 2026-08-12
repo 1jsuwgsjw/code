@@ -40,6 +40,7 @@ use serde_json::json;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
+use tokio::sync::Semaphore;
 
 use crate::delegate::parse_worker_result;
 use crate::delegate::prepare_worker_config;
@@ -99,7 +100,7 @@ async fn root_tools_skip_disabled_agents() {
         event_emitter: ProjectAgentEventEmitter::new(Arc::new(NoopExtensionEventSink)),
         task_gates: Arc::new(Mutex::new(BTreeMap::new())),
         active_sessions: Arc::new(RwLock::new(BTreeMap::new())),
-        task_workspace_gate: Arc::new(Mutex::new(())),
+        task_workspace_gate: Arc::new(Semaphore::new(/*permits*/ 1)),
     };
     let thread_store = ExtensionData::new("root-thread");
     thread_store.insert(context);

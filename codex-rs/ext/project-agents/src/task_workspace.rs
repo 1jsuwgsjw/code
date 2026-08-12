@@ -109,7 +109,7 @@ pub async fn evaluate_thread_project_task(
 async fn read_workspace(
     context: &ProjectAgentRootContext,
 ) -> Result<ProjectTaskWorkspace, ProjectAgentControlError> {
-    let _guard = context.task_workspace_gate.lock().await;
+    let _permit = workspace_permit(context).await?;
     Ok(context
         .store
         .task_workspace(
@@ -126,7 +126,7 @@ async fn create_task(
     objective: String,
     executor: ProjectTaskExecutor,
 ) -> Result<ProjectTaskNode, ProjectAgentControlError> {
-    let _guard = context.task_workspace_gate.lock().await;
+    let _permit = workspace_permit(context).await?;
     let mut workspace = load_workspace(context).await?;
     let task_id = ProjectTaskId::new(Uuid::now_v7().to_string()).map_err(workspace_error)?;
     workspace
@@ -139,10 +139,7 @@ async fn create_task(
             unix_timestamp(),
         )
         .map_err(workspace_error)?;
-    let task = workspace
-        .task(&task_id)
-        .expect("newly created semantic task must exist")
-        .clone();
+    let task = task(&workspace, &task_id)?.clone();
     persist_workspace(context, &workspace).await?;
     Ok(task)
 }
@@ -152,7 +149,7 @@ async fn append_requirement(
     task_id: &ProjectTaskId,
     requirement: String,
 ) -> Result<ProjectTaskNode, ProjectAgentControlError> {
-    let _guard = context.task_workspace_gate.lock().await;
+    let _permit = workspace_permit(context).await?;
     let mut workspace = load_workspace(context).await?;
     let updated_at = task_update_timestamp(&workspace, task_id)?;
     workspace
@@ -178,7 +175,7 @@ async fn start_execution(
     })?;
     let execution_task_id = Uuid::now_v7().to_string();
     let (task, execution) = {
-        let _guard = context.task_workspace_gate.lock().await;
+        let _permit = workspace_permit(&context).await?;
         let mut workspace = load_workspace(&context).await?;
         let semantic_task = task(&workspace, task_id)?.clone();
         ensure_executor_matches(&semantic_task, agent_id)?;
@@ -238,7 +235,7 @@ async fn record_result(
     task_id: &ProjectTaskId,
     result: ProjectTaskResult,
 ) -> Result<ProjectTaskNode, ProjectAgentControlError> {
-    let _guard = context.task_workspace_gate.lock().await;
+    let _permit = workspace_permit(context).await?;
     let mut workspace = load_workspace(context).await?;
     workspace
         .record_result(task_id, result)
@@ -253,7 +250,7 @@ async fn set_evaluation(
     task_id: &ProjectTaskId,
     evaluation: ProjectTaskEvaluation,
 ) -> Result<ProjectTaskNode, ProjectAgentControlError> {
-    let _guard = context.task_workspace_gate.lock().await;
+    let _permit = workspace_permit(context).await?;
     let mut workspace = load_workspace(context).await?;
     workspace
         .set_evaluation(task_id, evaluation)
@@ -268,7 +265,7 @@ async fn write_back_worker_result(
     task_id: &ProjectTaskId,
     result: ProjectAgentTaskResult,
 ) -> Result<(), ProjectAgentControlError> {
-    let _guard = context.task_workspace_gate.lock().await;
+    let _permit = workspace_permit(context).await?;
     let mut workspace = load_workspace(context).await?;
     let completed_at = task_update_timestamp(&workspace, task_id)?;
     workspace
@@ -321,6 +318,19 @@ async fn load_workspace(
             ProjectAgentFileSystemScope::Unrestricted,
         )
         .await?)
+}
+
+async fn workspace_permit(
+    context: &ProjectAgentRootContext,
+) -> Result<tokio::sync::OwnedSemaphorePermit, ProjectAgentControlError> {
+    Arc::clone(&context.task_workspace_gate)
+        .acquire_owned()
+        .await
+        .map_err(|error| {
+            ProjectAgentControlError::Internal(format!(
+                "semantic task workspace gate is unavailable: {error}"
+            ))
+        })
 }
 
 async fn persist_workspace(
