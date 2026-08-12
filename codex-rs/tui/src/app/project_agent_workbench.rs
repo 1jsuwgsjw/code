@@ -1,4 +1,5 @@
 use super::App;
+use crate::app_event::AppEvent;
 use crate::app_server_session::AppServerSession;
 use crate::project_agent_workbench::ProjectAgentWorkbenchAction;
 use codex_app_server_client::AppServerRequestHandle;
