@@ -180,14 +180,14 @@ async fn start_execution(
     let (task, execution) = {
         let _guard = context.task_workspace_gate.lock().await;
         let mut workspace = load_workspace(&context).await?;
-        let task = task(&workspace, task_id)?.clone();
-        ensure_executor_matches(&task, agent_id)?;
-        let created_at = unix_timestamp().max(task.updated_at);
+        let semantic_task = task(&workspace, task_id)?.clone();
+        ensure_executor_matches(&semantic_task, agent_id)?;
+        let created_at = unix_timestamp().max(semantic_task.updated_at);
         let mut execution = ProjectAgentTaskMetadata {
             schema_version: PROJECT_AGENT_SCHEMA_VERSION,
             agent_id: agent_id.clone(),
             task_id: execution_task_id.clone(),
-            task: task_prompt(&task),
+            task: task_prompt(&semantic_task),
             phase: ProjectAgentTaskPhase::Queued,
             session_thread_id: None,
             parent_thread_id: context.thread_id.to_string(),
