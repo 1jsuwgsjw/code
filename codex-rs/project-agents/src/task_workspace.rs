@@ -183,10 +183,10 @@ impl ProjectTaskWorkspace {
         if self.task(&task_id).is_some() {
             return Err(ProjectTaskWorkspaceError::TaskAlreadyExists(task_id));
         }
-        if let Some(parent_id) = parent_task_id.as_ref() {
-            if self.depth(parent_id)? == MAX_DEPTH {
-                return Err(ProjectTaskWorkspaceError::Limit("task depth"));
-            }
+        if let Some(parent_id) = parent_task_id.as_ref()
+            && self.depth(parent_id)? == MAX_DEPTH
+        {
+            return Err(ProjectTaskWorkspaceError::Limit("task depth"));
         }
         validate_bounded_text("title", &title, MAX_TITLE_BYTES, /*required*/ true)?;
         validate_bounded_text(
@@ -394,10 +394,10 @@ impl ProjectTaskNode {
             }
             _ => return invalid("status", "does not match the task result"),
         }
-        if let Some(result) = self.result.as_ref() {
-            if result.completed_at < self.created_at || result.completed_at > self.updated_at {
-                return invalid("completed_at", "falls outside the task lifetime");
-            }
+        if let Some(result) = self.result.as_ref()
+            && (result.completed_at < self.created_at || result.completed_at > self.updated_at)
+        {
+            return invalid("completed_at", "falls outside the task lifetime");
         }
         if let Some(evaluation) = self.evaluation.as_ref() {
             if self.result.is_none() {
