@@ -452,6 +452,8 @@ export type { ThreadProjectAgentRebuildParams } from "./ThreadProjectAgentRebuil
 export type { ThreadProjectAgentRebuildResponse } from "./ThreadProjectAgentRebuildResponse";
 export type { ThreadProjectAgentRetryParams } from "./ThreadProjectAgentRetryParams";
 export type { ThreadProjectAgentRetryResponse } from "./ThreadProjectAgentRetryResponse";
+export type { ThreadProjectAgentStartParams } from "./ThreadProjectAgentStartParams";
+export type { ThreadProjectAgentStartResponse } from "./ThreadProjectAgentStartResponse";
 export type { ThreadProjectAgentTerminateParams } from "./ThreadProjectAgentTerminateParams";
 export type { ThreadProjectAgentTerminateResponse } from "./ThreadProjectAgentTerminateResponse";
 export type { ThreadReadParams } from "./ThreadReadParams";
