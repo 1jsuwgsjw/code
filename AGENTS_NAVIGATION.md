@@ -280,6 +280,10 @@ Important variations:
 - Runtime extension: `codex-rs/ext/project-agents/`
   - representative symbols: `ProjectAgentExtension`, `ProjectAgentRootContext`,
     `ProjectAgentWorkerContext`, `list_thread_project_agents`, `read_thread_project_agent`,
+    `read_thread_project_task_workspace`, `create_thread_project_root_task`,
+    `create_thread_project_child_task`, `append_thread_project_task_requirement`,
+    `start_thread_project_task_execution`, `record_thread_project_task_result`,
+    `evaluate_thread_project_task`,
     `start_thread_project_agent_task`,
     `follow_up_thread_project_agent`, `terminate_thread_project_agent`,
     `retry_thread_project_agent`, `rebuild_thread_project_agent_session`,
@@ -289,6 +293,8 @@ Important variations:
     `codex-rs/ext/project-agents/src/control.rs`;
   - reusable worker-thread lifecycle, per-AGENT task serialization, and task/session phase
     persistence: `codex-rs/ext/project-agents/src/worker.rs`;
+  - semantic task-workspace mutation, execution binding, and result writeback:
+    `codex-rs/ext/project-agents/src/task_workspace.rs`;
 - App-server surface: `thread/projectAgent/list`, `thread/projectAgent/read`,
   `thread/projectAgent/start`,
   `thread/projectAgent/followUp`, `thread/projectAgent/terminate`,
@@ -301,7 +307,8 @@ Important variations:
 - On-disk source of truth begins at `AGENT/registry.toml`; discovery never activates an unregistered
   directory implicitly.
 - Focused tests: `codex-rs/project-agents/src/tests.rs`, `codex-rs/cli/tests/agents.rs`,
-  `codex-rs/ext/project-agents/src/tests.rs`, and
+  `codex-rs/ext/project-agents/src/tests.rs`,
+  `codex-rs/ext/project-agents/src/task_workspace_tests.rs`, and
   `codex-rs/app-server/tests/suite/v2/project_agents.rs`,
   `codex-rs/app-server/tests/suite/v2/project_agent_controls.rs`, plus
   `codex-rs/tui/src/chatwidget/tests/project_agent_maintenance_tests.rs` and

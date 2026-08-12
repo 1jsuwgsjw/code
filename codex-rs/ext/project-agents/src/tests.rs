@@ -99,6 +99,7 @@ async fn root_tools_skip_disabled_agents() {
         event_emitter: ProjectAgentEventEmitter::new(Arc::new(NoopExtensionEventSink)),
         task_gates: Arc::new(Mutex::new(BTreeMap::new())),
         active_sessions: Arc::new(RwLock::new(BTreeMap::new())),
+        task_workspace_gate: Arc::new(Mutex::new(())),
     };
     let thread_store = ExtensionData::new("root-thread");
     thread_store.insert(context);

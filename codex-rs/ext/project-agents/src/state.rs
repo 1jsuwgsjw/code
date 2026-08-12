@@ -51,6 +51,7 @@ pub(crate) struct ProjectAgentRootContext {
     pub(crate) event_emitter: ProjectAgentEventEmitter,
     pub(crate) task_gates: Arc<Mutex<BTreeMap<ProjectAgentId, Arc<Semaphore>>>>,
     pub(crate) active_sessions: Arc<RwLock<BTreeMap<ProjectAgentId, ThreadId>>>,
+    pub(crate) task_workspace_gate: Arc<Mutex<()>>,
 }
 
 impl ProjectAgentRootContext {
@@ -115,6 +116,7 @@ pub(crate) struct ProjectAgentExtension {
     thread_manager: Weak<ThreadManager>,
     environment_manager: Arc<EnvironmentManager>,
     event_emitter: ProjectAgentEventEmitter,
+    task_workspace_gates: Arc<Mutex<BTreeMap<String, Weak<Mutex<()>>>>>,
 }
 
 impl ProjectAgentExtension {
@@ -127,7 +129,19 @@ impl ProjectAgentExtension {
             thread_manager,
             environment_manager,
             event_emitter: ProjectAgentEventEmitter::new(event_sink),
+            task_workspace_gates: Arc::new(Mutex::new(BTreeMap::new())),
         }
+    }
+
+    async fn task_workspace_gate(&self, project_root: String) -> Arc<Mutex<()>> {
+        let mut gates = self.task_workspace_gates.lock().await;
+        gates.retain(|_, gate| gate.strong_count() != 0);
+        if let Some(gate) = gates.get(&project_root).and_then(Weak::upgrade) {
+            return gate;
+        }
+        let gate = Arc::new(Mutex::new(()));
+        gates.insert(project_root, Arc::downgrade(&gate));
+        gate
     }
 }
 
@@ -222,6 +236,9 @@ impl ThreadLifecycleContributor<Config> for ProjectAgentExtension {
                     return;
                 }
             };
+            let task_workspace_gate = self
+                .task_workspace_gate(store.project_root().to_string())
+                .await;
             let context = ProjectAgentRootContext {
                 thread_id,
                 config: input.config.clone(),
@@ -233,6 +250,7 @@ impl ThreadLifecycleContributor<Config> for ProjectAgentExtension {
                 event_emitter: self.event_emitter.clone(),
                 task_gates: Arc::new(Mutex::new(BTreeMap::new())),
                 active_sessions: Arc::new(RwLock::new(BTreeMap::new())),
+                task_workspace_gate,
             };
             context.emit_maintenance_status().await;
             input.thread_store.insert(context);

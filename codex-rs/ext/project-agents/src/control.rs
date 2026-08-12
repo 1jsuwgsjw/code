@@ -434,7 +434,7 @@ async fn active_worker(
     )))
 }
 
-async fn ensure_enabled(
+pub(crate) async fn ensure_enabled(
     context: &ProjectAgentRootContext,
     agent_id: &ProjectAgentId,
 ) -> Result<(), ProjectAgentControlError> {
