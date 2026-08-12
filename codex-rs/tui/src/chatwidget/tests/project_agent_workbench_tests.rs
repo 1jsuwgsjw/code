@@ -181,6 +181,8 @@ async fn project_agent_direct_task_history_snapshot() {
 • 项目 AGENT @query 已开始
   任务：核对当前项目的索引状态，并把证据和异常一起返回。
   状态：排队中 · task task-1
+
+
 • 项目 AGENT @query 已完成
   你好
   状态：已完成 · task task-1
