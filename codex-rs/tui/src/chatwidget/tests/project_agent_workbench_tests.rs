@@ -109,7 +109,7 @@ async fn project_agent_detail_popup_snapshot() {
     会话：第 2 代 · worker-query
     当前任务 执行中 · 第 1 次 · 核对当前项目的索引状态，并把证据和异常一起返回。 · 父线程 parent-thread
     持久化响应 已完成 · 索引已核对。 发现一条需要主 AGENT 决策的异常。
-    发起新任务 直接把任务交给这个专职 AGENT，不经过主模型代答。
+    发起新任务 (disabled) 直接把任务交给这个专职 AGENT，不经过主模型代答。 (disabled: 活动任务结束后才能执行此操作。)
     追加跟进 向正在执行的专职任务补充上下文。
     终止当前任务 中断当前专职任务并保留可重试的持久化状态。
     "###
@@ -124,6 +124,7 @@ async fn project_agent_controls_emit_typed_actions() {
         thread_id,
         test_read_response(ProjectAgentTaskPhase::Interrupted),
     );
+    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     assert_eq!(
         next_workbench_action(&mut rx, thread_id),
@@ -174,8 +175,7 @@ async fn project_agent_direct_task_history_snapshot() {
         .map(|lines| lines_to_single_string(lines))
         .collect::<Vec<_>>()
         .join("\n");
-    assert_chatwidget_snapshot!(
-        "project_agent_direct_task_history",
+    insta::assert_snapshot!(
         rendered,
         @r###"
 • 项目 AGENT @query 已开始
