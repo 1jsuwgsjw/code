@@ -43,6 +43,26 @@ impl AppServerSession {
             .wrap_err("thread/projectAgent/read failed in TUI")
     }
 
+    pub(crate) async fn thread_project_agent_start(
+        &mut self,
+        thread_id: ThreadId,
+        agent_id: &str,
+        task: String,
+    ) -> Result<protocol::ThreadProjectAgentStartResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::ThreadProjectAgentStart {
+                request_id,
+                params: protocol::ThreadProjectAgentStartParams {
+                    thread_id: thread_id.to_string(),
+                    agent_id: agent_id.to_string(),
+                    task,
+                },
+            })
+            .await
+            .wrap_err("thread/projectAgent/start failed in TUI")
+    }
+
     pub(crate) async fn thread_project_agent_follow_up(
         &mut self,
         thread_id: ThreadId,

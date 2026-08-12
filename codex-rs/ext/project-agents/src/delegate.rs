@@ -35,7 +35,7 @@ use crate::state::ProjectAgentWorkerContext;
 use crate::worker::execute_worker_task;
 
 pub(crate) const AGENT_NAMESPACE: &str = "agent";
-const MAX_TASK_BYTES: usize = 16 * 1024;
+pub(crate) const MAX_TASK_BYTES: usize = 16 * 1024;
 const MAX_WORKER_PROMPT_BYTES: usize = 36 * 1024;
 const MAX_ERROR_BYTES: usize = 8 * 1024;
 

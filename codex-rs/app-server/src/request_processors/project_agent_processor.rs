@@ -16,6 +16,8 @@ use codex_app_server_protocol::ThreadProjectAgentRebuildParams;
 use codex_app_server_protocol::ThreadProjectAgentRebuildResponse;
 use codex_app_server_protocol::ThreadProjectAgentRetryParams;
 use codex_app_server_protocol::ThreadProjectAgentRetryResponse;
+use codex_app_server_protocol::ThreadProjectAgentStartParams;
+use codex_app_server_protocol::ThreadProjectAgentStartResponse;
 use codex_app_server_protocol::ThreadProjectAgentTerminateParams;
 use codex_app_server_protocol::ThreadProjectAgentTerminateResponse;
 use codex_project_agents_extension::ProjectAgentControlError;
@@ -142,6 +144,29 @@ impl ProjectAgentRequestProcessor {
             recent_tasks: detail.recent_tasks.iter().map(api_task).collect(),
             recent_results: detail.recent_results.iter().map(api_result).collect(),
         })
+    }
+
+    pub(crate) async fn start(
+        &self,
+        params: ThreadProjectAgentStartParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let agent_id = parse_agent_id(params.agent_id)?;
+        let outcome = codex_project_agents_extension::start_thread_project_agent_task(
+            Arc::clone(&self.thread_manager),
+            thread.as_ref(),
+            &agent_id,
+            params.task,
+        )
+        .await
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectAgentStartResponse {
+                task: api_task(&outcome.task),
+            }
+            .into(),
+        ))
     }
 
     pub(crate) async fn follow_up(

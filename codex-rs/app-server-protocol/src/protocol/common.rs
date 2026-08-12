@@ -561,6 +561,11 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadProjectAgentReadResponse,
     },
+    ThreadProjectAgentStart => "thread/projectAgent/start" {
+        params: v2::ThreadProjectAgentStartParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectAgentStartResponse,
+    },
     ThreadProjectAgentFollowUp => "thread/projectAgent/followUp" {
         params: v2::ThreadProjectAgentFollowUpParams,
         serialization: thread_id(params.thread_id),

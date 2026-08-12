@@ -54,6 +54,22 @@ pub struct ThreadProjectAgentReadResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentStartParams {
+    pub thread_id: String,
+    pub agent_id: String,
+    pub task: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectAgentStartResponse {
+    pub task: ProjectAgentTask,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct ThreadProjectAgentFollowUpParams {
     pub thread_id: String,
     pub agent_id: String,

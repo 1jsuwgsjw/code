@@ -157,6 +157,7 @@ Example with notification opt-out:
 - `thread/goal/cleared` — notification emitted whenever a thread goal is removed.
 - `thread/projectAgent/list` — list a bounded page of registered project-local specialist AGENTs for a loaded root thread, including enabled state, reusable worker-session metadata, live session identity, and current task metadata.
 - `thread/projectAgent/read` — read one registered project AGENT definition plus bounded recent task metadata and complete persisted result fields (`result`, artifacts, evidence, memory candidates, improvement proposals, and error).
+- `thread/projectAgent/start` — queue a new bounded task directly for one named project AGENT without relying on the root model to select its delegation tool.
 - `thread/projectAgent/followUp` — add a bounded user message to the currently active project AGENT turn without creating a replacement worker session.
 - `thread/projectAgent/terminate` — interrupt the currently active project AGENT task; the worker loop durably records the task phase as `interrupted`.
 - `thread/projectAgent/retry` — queue a new attempt for a specified task, or the latest task when `taskId` is omitted, while reusing the existing worker session by default.
@@ -659,6 +660,7 @@ While an AGENT task is active, clients can supplement or interrupt it. Retrying 
 worker thread and its prompt cache unless the client deliberately requests a rebuild:
 
 ```json
+{ "method": "thread/projectAgent/start", "id": 32, "params": { "threadId": "thr_123", "agentId": "query", "task": "Inspect the Windows path." } }
 { "method": "thread/projectAgent/followUp", "id": 33, "params": { "threadId": "thr_123", "agentId": "query", "message": "Also inspect the Windows path." } }
 { "method": "thread/projectAgent/terminate", "id": 34, "params": { "threadId": "thr_123", "agentId": "query" } }
 { "method": "thread/projectAgent/retry", "id": 35, "params": { "threadId": "thr_123", "agentId": "query", "taskId": "019f..." } }

@@ -2,6 +2,8 @@
 pub(crate) enum ProjectAgentWorkbenchAction {
     List,
     Read(String),
+    PromptStart(String),
+    Start { agent_id: String, task: String },
     PromptFollowUp(String),
     FollowUp { agent_id: String, message: String },
     Terminate(String),

@@ -29,6 +29,19 @@ async fn agents_commands_target_the_current_thread() {
         next_workbench_action(&mut rx, thread_id),
         ProjectAgentWorkbenchAction::Read("query".to_string())
     );
+
+    chat.dispatch_command_with_args(
+        SlashCommand::Agents,
+        "@query 回复一句你好".to_string(),
+        Vec::new(),
+    );
+    assert_eq!(
+        next_workbench_action(&mut rx, thread_id),
+        ProjectAgentWorkbenchAction::Start {
+            agent_id: "query".to_string(),
+            task: "回复一句你好".to_string(),
+        }
+    );
 }
 
 #[tokio::test]
@@ -86,6 +99,7 @@ async fn project_agent_detail_popup_snapshot() {
                 "会话：",
                 "当前任务",
                 "持久化响应",
+                "发起新任务",
                 "追加跟进",
                 "终止当前任务",
             ],
@@ -95,6 +109,7 @@ async fn project_agent_detail_popup_snapshot() {
     会话：第 2 代 · worker-query
     当前任务 执行中 · 第 1 次 · 核对当前项目的索引状态，并把证据和异常一起返回。 · 父线程 parent-thread
     持久化响应 已完成 · 索引已核对。 发现一条需要主 AGENT 决策的异常。
+    发起新任务 直接把任务交给这个专职 AGENT，不经过主模型代答。
     追加跟进 向正在执行的专职任务补充上下文。
     终止当前任务 中断当前专职任务并保留可重试的持久化状态。
     "###
@@ -127,6 +142,49 @@ async fn project_agent_controls_emit_typed_actions() {
             agent_id: "query".to_string(),
             message: "add evidence".to_string(),
         }
+    );
+
+    chat.show_project_agent_start_prompt(thread_id, "query".to_string());
+    chat.handle_paste("回复一句你好".to_string());
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert_eq!(
+        next_workbench_action(&mut rx, thread_id),
+        ProjectAgentWorkbenchAction::Start {
+            agent_id: "query".to_string(),
+            task: "回复一句你好".to_string(),
+        }
+    );
+}
+
+#[tokio::test]
+async fn project_agent_direct_task_history_snapshot() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let task = test_task(ProjectAgentTaskPhase::Queued);
+    chat.show_project_agent_task_started(&task);
+
+    let mut completed = test_read_response(ProjectAgentTaskPhase::Completed);
+    completed.current_result = Some(ProjectAgentPersistedResult {
+        result: "你好".to_string(),
+        ..test_result()
+    });
+    chat.show_project_agent_task_finished("query", &task.task_id, completed);
+
+    let rendered = drain_insert_history(&mut rx)
+        .iter()
+        .map(|lines| lines_to_single_string(lines))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_chatwidget_snapshot!(
+        "project_agent_direct_task_history",
+        rendered,
+        @r###"
+• 项目 AGENT @query 已开始
+  任务：核对当前项目的索引状态，并把证据和异常一起返回。
+  状态：排队中 · task task-1
+• 项目 AGENT @query 已完成
+  你好
+  状态：已完成 · task task-1
+"###
     );
 }
 

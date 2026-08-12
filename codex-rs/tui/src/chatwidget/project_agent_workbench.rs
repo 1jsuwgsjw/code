@@ -19,7 +19,7 @@ use ratatui::style::Stylize;
 use ratatui::text::Line;
 
 const PROJECT_AGENT_WORKBENCH_VIEW_ID: &str = "project-agent-workbench";
-const PROJECT_AGENT_USAGE: &str = "用法：/agents 或 /agents @agent-name";
+const PROJECT_AGENT_USAGE: &str = "用法：/agents、/agents @agent-name 或 /agents @agent-name 任务";
 
 impl ChatWidget {
     pub(super) fn dispatch_project_agent_workbench(&mut self, args: &str) {
@@ -28,15 +28,27 @@ impl ChatWidget {
             return;
         };
         let trimmed = args.trim();
-        let action = match trimmed.strip_prefix('@') {
-            None if trimmed.is_empty() => ProjectAgentWorkbenchAction::List,
-            Some(agent_id) if !agent_id.is_empty() && !agent_id.contains(char::is_whitespace) => {
-                ProjectAgentWorkbenchAction::Read(agent_id.to_string())
-            }
-            _ => {
+        let action = if trimmed.is_empty() {
+            ProjectAgentWorkbenchAction::List
+        } else if let Some(agent_task) = trimmed.strip_prefix('@') {
+            let mut parts = agent_task.splitn(2, char::is_whitespace);
+            let agent_id = parts.next().unwrap_or_default();
+            let task = parts.next().map(str::trim).unwrap_or_default();
+            if agent_id.is_empty() {
                 self.add_error_message(PROJECT_AGENT_USAGE.to_string());
                 return;
             }
+            if task.is_empty() {
+                ProjectAgentWorkbenchAction::Read(agent_id.to_string())
+            } else {
+                ProjectAgentWorkbenchAction::Start {
+                    agent_id: agent_id.to_string(),
+                    task: task.to_string(),
+                }
+            }
+        } else {
+            self.add_error_message(PROJECT_AGENT_USAGE.to_string());
+            return;
         };
         self.app_event_tx
             .send(AppEvent::ProjectAgentWorkbench { thread_id, action });
@@ -117,6 +129,7 @@ impl ChatWidget {
         } else {
             task_is_active.then(|| "活动任务结束后才能执行此操作。".to_string())
         };
+        let start_action_disabled = idle_action_disabled.clone();
 
         let mut header = ColumnRenderable::new();
         header.push(Line::from(
@@ -129,7 +142,11 @@ impl ChatWidget {
         header.push(Line::from(format!("项目：{project_root}").dim()));
         let session_label = session
             .as_ref()
-            .map(|session| format!("第 {} 代 · {}", session.generation, session.thread_id))
+            .map(|session| {
+                let generation = session.generation;
+                let thread_id = &session.thread_id;
+                format!("第 {generation} 代 · {thread_id}")
+            })
             .or(active_session_thread_id)
             .unwrap_or_else(|| "尚未创建".to_string());
         header.push(Line::from(format!("会话：{session_label}").dim()));
@@ -145,6 +162,13 @@ impl ChatWidget {
             ),
             detail_item("持久化响应", result_preview(latest_result)),
         ];
+        items.push(action_item(
+            thread_id,
+            "发起新任务",
+            "直接把任务交给这个专职 AGENT，不经过主模型代答。",
+            start_action_disabled,
+            ProjectAgentWorkbenchAction::PromptStart(agent_id.clone()),
+        ));
         items.push(action_item(
             thread_id,
             "追加跟进",
@@ -222,6 +246,103 @@ impl ChatWidget {
             }),
         );
         self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn show_project_agent_start_prompt(
+        &mut self,
+        thread_id: ThreadId,
+        agent_id: String,
+    ) {
+        let tx = self.app_event_tx.clone();
+        let view = CustomPromptView::new(
+            "发起项目 AGENT 任务".to_string(),
+            "输入任务并按 Enter 直接交给此 AGENT".to_string(),
+            /*initial_text*/ String::new(),
+            /*context_label*/ Some(format!("执行者：@{agent_id}")),
+            Box::new(move |task| {
+                tx.send(AppEvent::ProjectAgentWorkbench {
+                    thread_id,
+                    action: ProjectAgentWorkbenchAction::Start {
+                        agent_id: agent_id.clone(),
+                        task,
+                    },
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn show_project_agent_task_started(&mut self, task: &ProjectAgentTask) {
+        let agent_id = &task.agent_id;
+        let task_body = &task.task;
+        let task_id = &task.task_id;
+        self.add_plain_history_lines(vec![
+            vec![
+                "• ".into(),
+                format!("项目 AGENT @{agent_id}").cyan().bold(),
+                " 已开始".green(),
+            ]
+            .into(),
+            format!("  任务：{task_body}").into(),
+            format!("  状态：排队中 · task {task_id}").dim().into(),
+        ]);
+    }
+
+    pub(crate) fn show_project_agent_task_finished(
+        &mut self,
+        agent_id: &str,
+        task_id: &str,
+        response: ThreadProjectAgentReadResponse,
+    ) {
+        let task = response
+            .current_task
+            .as_ref()
+            .filter(|task| task.task_id == task_id)
+            .or_else(|| {
+                response
+                    .recent_tasks
+                    .iter()
+                    .find(|task| task.task_id == task_id)
+            });
+        let result = response
+            .current_result
+            .as_ref()
+            .filter(|result| result.task_id == task_id)
+            .or_else(|| {
+                response
+                    .recent_results
+                    .iter()
+                    .find(|result| result.task_id == task_id)
+            });
+        let phase = task
+            .map(|task| task_phase_label(task.phase))
+            .unwrap_or("已结束");
+        let (status, body) = match result {
+            Some(result) => {
+                let body = if result.result.trim().is_empty() {
+                    result.error.as_deref().unwrap_or("未返回正文")
+                } else {
+                    result.result.trim()
+                };
+                (task_status_label(result.status), body)
+            }
+            None => {
+                self.add_error_message(format!(
+                    "项目 AGENT @{agent_id} 任务 {task_id} 已结束，但未找到持久化响应。"
+                ));
+                return;
+            }
+        };
+        self.add_plain_history_lines(vec![
+            vec![
+                "• ".into(),
+                format!("项目 AGENT @{agent_id}").cyan().bold(),
+                format!(" {phase}").green(),
+            ]
+            .into(),
+            format!("  {body}").into(),
+            format!("  状态：{status} · task {task_id}").dim().into(),
+        ]);
     }
 }
 

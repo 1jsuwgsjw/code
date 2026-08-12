@@ -42,6 +42,7 @@ pub enum SlashCommand {
     Goal,
     Agents,
     AgentsMaintain,
+    #[strum(to_string = "agent", serialize = "subagent")]
     Agent,
     Side,
     Btw,
@@ -122,9 +123,11 @@ impl SlashCommand {
             SlashCommand::Personality => "choose a communication style for Codex",
             SlashCommand::Plan => "switch to Plan mode",
             SlashCommand::Goal => "set or view the goal for a long-running task",
-            SlashCommand::Agents => "open the project AGENT workbench",
+            SlashCommand::Agents => "open or directly task a project AGENT",
             SlashCommand::AgentsMaintain => "apply pending project AGENT memory and improvements",
-            SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
+            SlashCommand::Agent | SlashCommand::MultiAgents => {
+                "show generic collaboration subagents (project AGENTs use /agents)"
+            }
             SlashCommand::Side | SlashCommand::Btw => {
                 "start a side conversation in an ephemeral fork"
             }
@@ -290,6 +293,13 @@ mod tests {
     fn pet_alias_parses_to_pets_command() {
         assert_eq!(SlashCommand::Pets.command(), "pets");
         assert_eq!(SlashCommand::from_str("pet"), Ok(SlashCommand::Pets));
+    }
+
+    #[test]
+    fn subagent_alias_preserves_agent_as_the_canonical_command() {
+        assert_eq!(SlashCommand::Agent.command(), "agent");
+        assert_eq!(SlashCommand::from_str("agent"), Ok(SlashCommand::Agent));
+        assert_eq!(SlashCommand::from_str("subagent"), Ok(SlashCommand::Agent));
     }
 
     #[test]

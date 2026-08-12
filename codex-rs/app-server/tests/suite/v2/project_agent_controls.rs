@@ -15,6 +15,7 @@ use codex_app_server_protocol::ThreadProjectAgentFollowUpResponse;
 use codex_app_server_protocol::ThreadProjectAgentReadResponse;
 use codex_app_server_protocol::ThreadProjectAgentRebuildResponse;
 use codex_app_server_protocol::ThreadProjectAgentRetryResponse;
+use codex_app_server_protocol::ThreadProjectAgentStartResponse;
 use codex_app_server_protocol::ThreadProjectAgentTerminateResponse;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
@@ -159,6 +160,44 @@ async fn project_agent_follow_up_reaches_the_active_reused_worker() -> Result<()
     assert_eq!(
         detail.active_session_thread_id,
         Some(follow_up.session_thread_id)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn project_agent_start_directly_queues_a_named_worker_task() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let worker_requests = Arc::new(AtomicUsize::new(0));
+    let (_server, mut mcp, thread_id, _codex_home) =
+        start_control_app(Arc::clone(&worker_requests), Duration::ZERO).await?;
+    let started: ThreadProjectAgentStartResponse = send_request(
+        &mut mcp,
+        "thread/projectAgent/start",
+        json!({
+            "threadId": thread_id,
+            "agentId": "query",
+            "task": CONTROL_TASK,
+        }),
+    )
+    .await?;
+    assert_eq!(started.task.agent_id, "query");
+    assert_eq!(started.task.task, CONTROL_TASK);
+    assert_eq!(started.task.attempt, 1);
+    wait_for_worker_requests(&worker_requests, /*expected*/ 1).await?;
+    let completed = wait_for_task_id(
+        &mut mcp,
+        &thread_id,
+        &started.task.task_id,
+        ProjectAgentTaskPhase::Completed,
+    )
+    .await?;
+    assert_eq!(
+        completed
+            .current_result
+            .as_ref()
+            .map(|result| result.agent_id.as_str()),
+        Some("query")
     );
     Ok(())
 }

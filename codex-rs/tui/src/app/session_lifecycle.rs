@@ -8,6 +8,14 @@ use super::*;
 
 impl App {
     pub(super) async fn open_agent_picker(&mut self, app_server: &mut AppServerSession) {
+        if let Some(thread_id) = self.current_displayed_thread_id()
+            && let Ok(response) = app_server.thread_project_agent_list(thread_id).await
+            && response.total > 0
+        {
+            self.chat_widget
+                .show_project_agent_roster(thread_id, response);
+            return;
+        }
         self.backfill_loaded_subagent_threads(app_server).await;
         // V2 subagents are identified by canonical paths observed from activity events or loaded
         // thread metadata. Prefer local buffered turn state for liveness, and fall back to

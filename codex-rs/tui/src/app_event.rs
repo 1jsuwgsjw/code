@@ -326,6 +326,14 @@ pub(crate) enum AppEvent {
         action: ProjectAgentWorkbenchAction,
     },
 
+    /// Completion of a directly started named project AGENT task.
+    ProjectAgentTaskFinished {
+        thread_id: ThreadId,
+        agent_id: String,
+        task_id: String,
+        result: Result<codex_app_server_protocol::ThreadProjectAgentReadResponse, String>,
+    },
+
     /// Result of refreshing rate limits.
     RateLimitsLoaded {
         origin: RateLimitRefreshOrigin,

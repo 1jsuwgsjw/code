@@ -1105,6 +1105,9 @@ impl MessageProcessor {
             ClientRequest::ThreadProjectAgentRead { params, .. } => {
                 self.project_agent_processor.read(params).await
             }
+            ClientRequest::ThreadProjectAgentStart { params, .. } => {
+                self.project_agent_processor.start(params).await
+            }
             ClientRequest::ThreadProjectAgentFollowUp { params, .. } => {
                 self.project_agent_processor.follow_up(params).await
             }

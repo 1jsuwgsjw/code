@@ -15,6 +15,7 @@ use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use uuid::Uuid;
 
+use crate::delegate::MAX_TASK_BYTES;
 use crate::state::ProjectAgentRootContext;
 use crate::worker::WorkerThread;
 use crate::worker::discard_worker;
@@ -31,6 +32,12 @@ const MAX_FOLLOW_UP_BYTES: usize = 16 * 1024;
 pub struct ThreadProjectAgentTaskControl {
     pub task_id: String,
     pub session_thread_id: String,
+}
+
+/// A newly queued task for one named project AGENT.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ThreadProjectAgentStartOutcome {
+    pub task: ProjectAgentTaskMetadata,
 }
 
 /// A newly queued retry that continues on the reusable worker session by default.
@@ -77,6 +84,16 @@ pub async fn follow_up_thread_project_agent(
 ) -> Option<Result<ThreadProjectAgentTaskControl, ProjectAgentControlError>> {
     let context = thread.thread_extension::<ProjectAgentRootContext>()?;
     Some(follow_up(thread_manager, &context, agent_id, message).await)
+}
+
+pub async fn start_thread_project_agent_task(
+    thread_manager: Arc<ThreadManager>,
+    thread: &CodexThread,
+    agent_id: &ProjectAgentId,
+    task: String,
+) -> Option<Result<ThreadProjectAgentStartOutcome, ProjectAgentControlError>> {
+    let context = thread.thread_extension::<ProjectAgentRootContext>()?;
+    Some(start(thread_manager, context, agent_id, task).await)
 }
 
 pub async fn terminate_thread_project_agent(
@@ -138,6 +155,64 @@ async fn follow_up(
             ))
         })?;
     Ok(task_control(&task, worker.thread_id))
+}
+
+async fn start(
+    thread_manager: Arc<ThreadManager>,
+    context: Arc<ProjectAgentRootContext>,
+    agent_id: &ProjectAgentId,
+    task: String,
+) -> Result<ThreadProjectAgentStartOutcome, ProjectAgentControlError> {
+    if task.trim().is_empty() || task.len() > MAX_TASK_BYTES {
+        return Err(ProjectAgentControlError::InvalidRequest(format!(
+            "project AGENT task must be non-empty and at most {MAX_TASK_BYTES} bytes"
+        )));
+    }
+    ensure_enabled(&context, agent_id).await?;
+    let task_gate = context.task_gate(agent_id).await;
+    let task_permit = task_gate.try_acquire_owned().map_err(|_| {
+        ProjectAgentControlError::InvalidRequest(format!(
+            "project AGENT `{agent_id}` already has an active task"
+        ))
+    })?;
+    let created_at = unix_timestamp();
+    let mut metadata = ProjectAgentTaskMetadata {
+        schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+        agent_id: agent_id.clone(),
+        task_id: Uuid::now_v7().to_string(),
+        task,
+        phase: ProjectAgentTaskPhase::Queued,
+        session_thread_id: None,
+        parent_thread_id: context.thread_id.to_string(),
+        attempt: 1,
+        created_at,
+        updated_at: created_at,
+    };
+    persist_task_phase(
+        context.as_ref(),
+        context.file_system.as_ref(),
+        ProjectAgentFileSystemScope::Unrestricted,
+        &mut metadata,
+        ProjectAgentTaskPhase::Queued,
+    )
+    .await
+    .map_err(ProjectAgentControlError::Internal)?;
+    let outcome = ThreadProjectAgentStartOutcome {
+        task: metadata.clone(),
+    };
+    let file_system = Arc::clone(&context.file_system);
+    tokio::spawn(async move {
+        let _ = execute_queued_worker_task(
+            Some(thread_manager),
+            context,
+            metadata,
+            file_system.as_ref(),
+            ProjectAgentFileSystemScope::Unrestricted,
+            task_permit,
+        )
+        .await;
+    });
+    Ok(outcome)
 }
 
 async fn terminate(

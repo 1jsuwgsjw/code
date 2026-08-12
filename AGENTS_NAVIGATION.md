@@ -105,6 +105,9 @@ Important variations:
   `codex-rs/tui/src/chatwidget/project_agent_maintenance.rs`
 - Project AGENT workbench UI: `codex-rs/tui/src/app/project_agent_workbench.rs`,
   `codex-rs/tui/src/chatwidget/project_agent_workbench.rs`
+  - direct named-task API: `thread/projectAgent/start` in
+    `codex-rs/app-server-protocol/src/protocol/v2/project_agent.rs` and
+    `codex-rs/app-server/src/request_processors/project_agent_processor.rs`;
 - Composer and approval UI: `codex-rs/tui/src/bottom_pane/`
 - Rendered history/tool cells: `codex-rs/tui/src/history_cell/`,
   `codex-rs/tui/src/exec_cell/`, `codex-rs/tui/src/diff_render.rs`
@@ -167,6 +170,7 @@ Important variations:
     `TurnInterruptParams`;
 - Project AGENT management API: `codex-rs/app-server-protocol/src/protocol/v2/project_agent.rs`
   - representative types: `ThreadProjectAgentListParams`, `ThreadProjectAgentReadParams`,
+    `ThreadProjectAgentStartParams`, `ThreadProjectAgentStartResponse`,
     `ThreadProjectAgentFollowUpParams`, `ThreadProjectAgentTerminateParams`,
     `ThreadProjectAgentRetryParams`, `ThreadProjectAgentRebuildParams`,
     `ThreadProjectAgentReadResponse`, `ThreadProjectAgentMaintenanceRunParams`,
@@ -272,6 +276,7 @@ Important variations:
 - Runtime extension: `codex-rs/ext/project-agents/`
   - representative symbols: `ProjectAgentExtension`, `ProjectAgentRootContext`,
     `ProjectAgentWorkerContext`, `list_thread_project_agents`, `read_thread_project_agent`,
+    `start_thread_project_agent_task`,
     `follow_up_thread_project_agent`, `terminate_thread_project_agent`,
     `retry_thread_project_agent`, `rebuild_thread_project_agent_session`,
     `maintain_thread_project_agents`;
@@ -281,6 +286,7 @@ Important variations:
   - reusable worker-thread lifecycle, per-AGENT task serialization, and task/session phase
     persistence: `codex-rs/ext/project-agents/src/worker.rs`;
 - App-server surface: `thread/projectAgent/list`, `thread/projectAgent/read`,
+  `thread/projectAgent/start`,
   `thread/projectAgent/followUp`, `thread/projectAgent/terminate`,
   `thread/projectAgent/retry`, `thread/projectAgent/rebuild`,
   `thread/projectAgentMaintenance/run`, and `thread/projectAgentMaintenance/statusUpdated`;
