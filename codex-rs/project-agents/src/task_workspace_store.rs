@@ -16,7 +16,7 @@ impl ProjectAgentStore {
         scope: ProjectAgentFileSystemScope<'_>,
     ) -> Result<ProjectTaskWorkspace, ProjectAgentStoreError> {
         let path = self.resolve(&RelativeProjectAgentPath::new(TASK_WORKSPACE_PATH)?)?;
-        let workspace = self
+        let workspace: ProjectTaskWorkspace = self
             .read_optional_json(file_system, scope, &path, MAX_TASK_WORKSPACE_BYTES)
             .await?
             .unwrap_or_default();
