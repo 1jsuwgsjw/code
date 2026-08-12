@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::io;
 use tempfile::tempdir;
 
-struct TestFileSystem;
+pub(super) struct TestFileSystem;
 
 impl ExecutorFileSystem for TestFileSystem {
     fn canonicalize<'a>(

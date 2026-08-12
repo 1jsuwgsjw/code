@@ -253,7 +253,7 @@ impl ProjectAgentStore {
             .collect())
     }
 
-    async fn read_optional_json<T>(
+    pub(crate) async fn read_optional_json<T>(
         &self,
         file_system: &dyn ExecutorFileSystem,
         scope: ProjectAgentFileSystemScope<'_>,
@@ -278,7 +278,7 @@ impl ProjectAgentStore {
         Ok(Some(serde_json::from_str(&contents)?))
     }
 
-    async fn write_json_document<T>(
+    pub(crate) async fn write_json_document<T>(
         &self,
         file_system: &dyn ExecutorFileSystem,
         scope: ProjectAgentFileSystemScope<'_>,

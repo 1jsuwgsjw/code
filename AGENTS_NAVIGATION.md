@@ -263,8 +263,12 @@ Important variations:
   - representative symbols: `ProjectAgentRegistry`, `ProjectAgentDefinition`,
     `ProjectAgentToolManifest`, `ProjectAgentCommandToolRegistration`,
     `ProjectAgentTaskResult`, `ProjectAgentTaskMetadata`,
+    `ProjectTaskWorkspace`, `ProjectTaskNode`, `ProjectTaskEvaluation`,
     `ProjectAgentSessionMetadata`, `ProjectAgentStore`, `ProjectAgentEntry`,
     `ProjectAgentMaintenanceOutcome`;
+  - semantic task-tree model and project-level persistence:
+    `codex-rs/project-agents/src/task_workspace.rs` and
+    `codex-rs/project-agents/src/task_workspace_store.rs`;
   - task/session persistence and bounded history reads:
     `codex-rs/project-agents/src/task_store.rs`;
   - maintenance owner: `codex-rs/project-agents/src/maintenance_store.rs`
