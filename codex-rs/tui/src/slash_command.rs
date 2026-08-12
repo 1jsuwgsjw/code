@@ -40,9 +40,10 @@ pub enum SlashCommand {
     Compact,
     Plan,
     Goal,
+    #[strum(to_string = "agent", serialize = "agents")]
     Agents,
     AgentsMaintain,
-    #[strum(to_string = "agent", serialize = "subagent")]
+    #[strum(to_string = "subagent")]
     Agent,
     Side,
     Btw,
@@ -123,10 +124,10 @@ impl SlashCommand {
             SlashCommand::Personality => "choose a communication style for Codex",
             SlashCommand::Plan => "switch to Plan mode",
             SlashCommand::Goal => "set or view the goal for a long-running task",
-            SlashCommand::Agents => "open or directly task a project AGENT",
+            SlashCommand::Agents => "open the project task workspace",
             SlashCommand::AgentsMaintain => "apply pending project AGENT memory and improvements",
             SlashCommand::Agent | SlashCommand::MultiAgents => {
-                "show generic collaboration subagents (project AGENTs use /agents)"
+                "legacy alias for the project task workspace"
             }
             SlashCommand::Side | SlashCommand::Btw => {
                 "start a side conversation in an ephemeral fork"
@@ -259,6 +260,7 @@ impl SlashCommand {
             SlashCommand::Copy => !cfg!(target_os = "android"),
             SlashCommand::App => cfg!(any(target_os = "macos", target_os = "windows")),
             SlashCommand::Rollout | SlashCommand::TestApproval => cfg!(debug_assertions),
+            SlashCommand::Agent | SlashCommand::MultiAgents => false,
             _ => true,
         }
     }
@@ -296,10 +298,21 @@ mod tests {
     }
 
     #[test]
-    fn subagent_alias_preserves_agent_as_the_canonical_command() {
-        assert_eq!(SlashCommand::Agent.command(), "agent");
-        assert_eq!(SlashCommand::from_str("agent"), Ok(SlashCommand::Agent));
+    fn agent_command_owns_the_workspace_and_legacy_subagent_alias_still_parses() {
+        assert_eq!(SlashCommand::Agents.command(), "agent");
+        assert_eq!(SlashCommand::from_str("agent"), Ok(SlashCommand::Agents));
+        assert_eq!(SlashCommand::from_str("agents"), Ok(SlashCommand::Agents));
+        assert_eq!(SlashCommand::Agent.command(), "subagent");
         assert_eq!(SlashCommand::from_str("subagent"), Ok(SlashCommand::Agent));
+        assert_eq!(
+            SlashCommand::from_str("subagents"),
+            Ok(SlashCommand::MultiAgents)
+        );
+        assert!(
+            super::built_in_slash_commands()
+                .into_iter()
+                .all(|(command, _)| !matches!(command, "subagent" | "subagents"))
+        );
     }
 
     #[test]

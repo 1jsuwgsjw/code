@@ -1,305 +1,210 @@
+use codex_app_server_protocol::ProjectAgentRosterEntry;
+use codex_app_server_protocol::ProjectTask;
+use codex_app_server_protocol::ProjectTaskEvaluation;
+use codex_app_server_protocol::ProjectTaskEvaluationVerdict;
+use codex_app_server_protocol::ProjectTaskExecutor;
+use codex_app_server_protocol::ProjectTaskResult;
+use codex_app_server_protocol::ProjectTaskResultStatus;
+use codex_app_server_protocol::ProjectTaskStatus;
+use codex_app_server_protocol::ProjectTaskSuggestedChild;
+use codex_app_server_protocol::ProjectTaskWorkspace;
+use insta::assert_snapshot;
+use pretty_assertions::assert_eq;
+
 use super::*;
 use crate::project_agent_workbench::ProjectAgentWorkbenchAction;
-use codex_app_server_protocol::ProjectAgentDefinition;
-use codex_app_server_protocol::ProjectAgentPersistedResult;
-use codex_app_server_protocol::ProjectAgentRosterEntry;
-use codex_app_server_protocol::ProjectAgentSession;
-use codex_app_server_protocol::ProjectAgentTask;
-use codex_app_server_protocol::ProjectAgentTaskPhase;
-use codex_app_server_protocol::ProjectAgentTaskStatus;
-use codex_app_server_protocol::ThreadProjectAgentListResponse;
-use codex_app_server_protocol::ThreadProjectAgentReadResponse;
-use pretty_assertions::assert_eq;
-use unicode_width::UnicodeWidthChar;
 
 #[tokio::test]
-async fn agents_commands_target_the_current_thread() {
+async fn agent_command_opens_semantic_task_workspace() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     let thread_id = ThreadId::new();
     chat.thread_id = Some(thread_id);
 
     chat.dispatch_command(SlashCommand::Agents);
-    assert_eq!(
-        next_workbench_action(&mut rx, thread_id),
-        ProjectAgentWorkbenchAction::List
-    );
 
-    chat.dispatch_command_with_args(SlashCommand::Agents, "@query".to_string(), Vec::new());
     assert_eq!(
-        next_workbench_action(&mut rx, thread_id),
-        ProjectAgentWorkbenchAction::Read("query".to_string())
-    );
-
-    chat.dispatch_command_with_args(
-        SlashCommand::Agents,
-        "@query 回复一句你好".to_string(),
-        Vec::new(),
-    );
-    assert_eq!(
-        next_workbench_action(&mut rx, thread_id),
-        ProjectAgentWorkbenchAction::Start {
-            agent_id: "query".to_string(),
-            task: "回复一句你好".to_string(),
-        }
+        next_workbench_action(&mut rx),
+        (
+            thread_id,
+            ProjectAgentWorkbenchAction::Open {
+                selected_task_id: None
+            }
+        )
     );
 }
 
 #[tokio::test]
-async fn project_agent_roster_popup_snapshot() {
+async fn agent_command_accepts_task_id() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let thread_id = ThreadId::new();
+    chat.thread_id = Some(thread_id);
+
+    chat.dispatch_command_with_args(SlashCommand::Agents, "task-root".to_string(), Vec::new());
+
+    assert_eq!(
+        next_workbench_action(&mut rx),
+        (
+            thread_id,
+            ProjectAgentWorkbenchAction::Open {
+                selected_task_id: Some("task-root".to_string())
+            }
+        )
+    );
+}
+
+#[tokio::test]
+async fn task_workspace_renders_tree_and_selected_task_detail_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     let thread_id = ThreadId::new();
-
-    chat.show_project_agent_roster(
+    chat.show_project_task_workspace(
         thread_id,
-        ThreadProjectAgentListResponse {
-            project_root: "/workspace/demo".to_string(),
-            data: vec![ProjectAgentRosterEntry {
-                id: "query".to_string(),
-                description: "查询项目数据并返回带证据的结论".to_string(),
-                enabled: true,
-                active_session_thread_id: Some("worker-query".to_string()),
-                session: Some(test_session()),
-                current_task: Some(test_task(ProjectAgentTaskPhase::Running)),
-            }],
-            next_cursor: None,
-            total: 1,
+        test_workspace(),
+        test_agents(),
+        Some("task-child".to_string()),
+    );
+
+    assert_snapshot!(
+        "project_task_workspace_tree",
+        render_bottom_popup(&chat, /*width*/ 150)
+    );
+}
+
+#[tokio::test]
+async fn task_workspace_empty_state_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.show_project_task_workspace(
+        ThreadId::new(),
+        ProjectTaskWorkspace {
+            schema_version: 1,
+            tasks: Vec::new(),
+            updated_at: 0,
         },
+        test_agents(),
+        None,
     );
 
-    let popup = render_bottom_popup(&chat, /*width*/ 120);
-    insta::assert_snapshot!(
-        popup_lines(
-            &popup,
-            &["项目 AGENT 工作台", "共 1 个", "@query"],
-        ),
-        @r###"
-    项目 AGENT 工作台
-    共 1 个；输入 @名字搜索，Enter 打开详情。
-    @query 运行中 · 核对当前项目的索引状态，并把证据和异常一起返回。
-    "###
+    assert_snapshot!(
+        "project_task_workspace_empty",
+        render_bottom_popup(&chat, /*width*/ 120)
     );
 }
 
 #[tokio::test]
-async fn project_agent_detail_popup_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    let thread_id = ThreadId::new();
-
-    chat.show_project_agent_detail(
-        thread_id,
-        test_read_response(ProjectAgentTaskPhase::Running),
-    );
-
-    let popup = render_bottom_popup(&chat, /*width*/ 160);
-    insta::assert_snapshot!(
-        popup_lines(
-            &popup,
-            &[
-                "项目 AGENT · @query",
-                "会话：",
-                "当前任务",
-                "持久化响应",
-                "发起新任务",
-                "追加跟进",
-                "终止当前任务",
-            ],
-        ),
-        @r###"
-    项目 AGENT · @query
-    会话：第 2 代 · worker-query
-    当前任务 执行中 · 第 1 次 · 核对当前项目的索引状态，并把证据和异常一起返回。 · 父线程 parent-thread
-    持久化响应 已完成 · 索引已核对。 发现一条需要主 AGENT 决策的异常。
-    发起新任务 (disabled) 直接把任务交给这个专职 AGENT，不经过主模型代答。 (disabled: 活动任务结束后才能执行此操作。)
-    追加跟进 向正在执行的专职任务补充上下文。
-    终止当前任务 中断当前专职任务并保留可重试的持久化状态。
-    "###
-    );
-}
-
-#[tokio::test]
-async fn project_agent_controls_emit_typed_actions() {
-    let thread_id = ThreadId::new();
+async fn create_and_requirement_prompts_emit_semantic_task_actions() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.show_project_agent_detail(
-        thread_id,
-        test_read_response(ProjectAgentTaskPhase::Interrupted),
-    );
-    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
-    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let thread_id = ThreadId::new();
+    chat.show_project_task_create_prompt(thread_id, Some("task-root".to_string()));
+    chat.bottom_pane
+        .handle_paste("Implement UI\nRender the semantic task tree".to_string());
+    chat.bottom_pane
+        .handle_key_event(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Enter,
+        ));
     assert_eq!(
-        next_workbench_action(&mut rx, thread_id),
-        ProjectAgentWorkbenchAction::Retry {
-            agent_id: "query".to_string(),
-            task_id: "task-1".to_string(),
-        }
+        next_workbench_action(&mut rx),
+        (
+            thread_id,
+            ProjectAgentWorkbenchAction::Create {
+                parent_task_id: Some("task-root".to_string()),
+                input: "Implement UI\nRender the semantic task tree".to_string(),
+            }
+        )
     );
-    chat.show_project_agent_follow_up_prompt(thread_id, "query".to_string());
-    chat.handle_paste("add evidence".to_string());
-    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
+    chat.show_project_task_requirement_prompt(thread_id, "task-root".to_string());
+    chat.bottom_pane
+        .handle_paste("Include snapshot coverage".to_string());
+    chat.bottom_pane
+        .handle_key_event(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Enter,
+        ));
     assert_eq!(
-        next_workbench_action(&mut rx, thread_id),
-        ProjectAgentWorkbenchAction::FollowUp {
-            agent_id: "query".to_string(),
-            message: "add evidence".to_string(),
-        }
-    );
-
-    chat.show_project_agent_start_prompt(thread_id, "query".to_string());
-    chat.handle_paste("回复一句你好".to_string());
-    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
-    assert_eq!(
-        next_workbench_action(&mut rx, thread_id),
-        ProjectAgentWorkbenchAction::Start {
-            agent_id: "query".to_string(),
-            task: "回复一句你好".to_string(),
-        }
-    );
-}
-
-#[tokio::test]
-async fn project_agent_direct_task_history_snapshot() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    let task = test_task(ProjectAgentTaskPhase::Queued);
-    chat.show_project_agent_task_started(&task);
-
-    let mut completed = test_read_response(ProjectAgentTaskPhase::Completed);
-    completed.current_result = Some(ProjectAgentPersistedResult {
-        result: "你好".to_string(),
-        ..test_result()
-    });
-    chat.show_project_agent_task_finished("query", &task.task_id, completed);
-
-    let rendered = drain_insert_history(&mut rx)
-        .iter()
-        .map(|lines| lines_to_single_string(lines))
-        .collect::<Vec<_>>()
-        .join("\n");
-    insta::assert_snapshot!(
-        rendered,
-        @r###"
-• 项目 AGENT @query 已开始
-  任务：核对当前项目的索引状态，并把证据和异常一起返回。
-  状态：排队中 · task task-1
-
-
-• 项目 AGENT @query 已完成
-  你好
-  状态：已完成 · task task-1
-"###
+        next_workbench_action(&mut rx),
+        (
+            thread_id,
+            ProjectAgentWorkbenchAction::AppendRequirement {
+                task_id: "task-root".to_string(),
+                requirement: "Include snapshot coverage".to_string(),
+            }
+        )
     );
 }
 
 fn next_workbench_action(
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
-    expected_thread_id: ThreadId,
-) -> ProjectAgentWorkbenchAction {
-    match rx
-        .try_recv()
-        .expect("expected project AGENT workbench event")
-    {
-        AppEvent::ProjectAgentWorkbench { thread_id, action } => {
-            assert_eq!(thread_id, expected_thread_id);
-            action
-        }
-        event => panic!("expected project AGENT workbench event, got {event:?}"),
-    }
-}
-
-fn popup_lines(popup: &str, needles: &[&str]) -> String {
-    let lines = popup
-        .lines()
-        .map(remove_wide_char_spacers)
-        .collect::<Vec<_>>();
-    needles
-        .iter()
-        .map(|needle| {
-            let line = lines
-                .iter()
-                .find(|line| line.contains(needle))
-                .unwrap_or_else(|| panic!("expected popup line containing {needle:?}:\n{popup}"));
-            let start = line.find(needle).expect("needle should be present");
-            line[start..]
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn remove_wide_char_spacers(line: &str) -> String {
-    let mut chars = line.chars().peekable();
-    let mut normalized = String::with_capacity(line.len());
-    while let Some(ch) = chars.next() {
-        normalized.push(ch);
-        if ch.width().is_some_and(|width| width > 1) && chars.peek() == Some(&' ') {
-            let _ = chars.next();
+) -> (ThreadId, ProjectAgentWorkbenchAction) {
+    loop {
+        match rx.try_recv().expect("workbench event") {
+            AppEvent::ProjectAgentWorkbench { thread_id, action } => return (thread_id, action),
+            _ => continue,
         }
     }
-    normalized
 }
 
-fn test_read_response(phase: ProjectAgentTaskPhase) -> ThreadProjectAgentReadResponse {
-    let task = test_task(phase);
-    ThreadProjectAgentReadResponse {
-        project_root: "/workspace/demo".to_string(),
-        agent: ProjectAgentDefinition {
-            id: "query".to_string(),
-            description: "查询项目数据并返回带证据的结论".to_string(),
-            enabled: true,
-            definition_path: "AGENT/query/AGENT.md".to_string(),
-            constraints_file: "constraints.md".to_string(),
-            model: Some("gpt-5".to_string()),
-            model_reasoning_effort: Some("high".to_string()),
-            model_provider: None,
-            tools: vec!["search".to_string(), "read".to_string()],
-            memory_max_items: 8,
-            memory_max_tokens: 1200,
-        },
-        active_session_thread_id: Some("worker-query".to_string()),
-        session: Some(test_session()),
-        current_task: Some(task.clone()),
-        current_result: (!matches!(phase, ProjectAgentTaskPhase::Running)).then(test_result),
-        recent_tasks: vec![task],
-        recent_results: vec![test_result()],
-    }
-}
-
-fn test_session() -> ProjectAgentSession {
-    ProjectAgentSession {
-        agent_id: "query".to_string(),
-        thread_id: "worker-query".to_string(),
-        generation: 2,
-        created_at: 10,
+fn test_workspace() -> ProjectTaskWorkspace {
+    ProjectTaskWorkspace {
+        schema_version: 1,
         updated_at: 20,
+        tasks: vec![
+            ProjectTask {
+                task_id: "task-root".to_string(),
+                parent_task_id: None,
+                title: "Ship task workspace".to_string(),
+                objective: "Expose durable semantic tasks through app-server and TUI.".to_string(),
+                requirements: vec!["Keep task identity stable".to_string()],
+                status: ProjectTaskStatus::InProgress,
+                executor: ProjectTaskExecutor::ProjectAgent {
+                    agent_id: "query".to_string(),
+                },
+                execution_task_id: Some("worker-019".to_string()),
+                result: None,
+                evaluation: None,
+                created_at: 10,
+                updated_at: 15,
+            },
+            ProjectTask {
+                task_id: "task-child".to_string(),
+                parent_task_id: Some("task-root".to_string()),
+                title: "Verify visible result".to_string(),
+                objective: "Confirm tree, result, evidence and evaluation rendering.".to_string(),
+                requirements: vec!["No duplicate lifecycle cards".to_string()],
+                status: ProjectTaskStatus::Completed,
+                executor: ProjectTaskExecutor::ProjectAgent {
+                    agent_id: "query".to_string(),
+                },
+                execution_task_id: Some("worker-020".to_string()),
+                result: Some(ProjectTaskResult {
+                    status: ProjectTaskResultStatus::Completed,
+                    summary: "The task tree renders in one workspace.".to_string(),
+                    artifacts: vec!["tui/task-workspace.snap".to_string()],
+                    evidence: vec!["public JSON-RPC integration passed".to_string()],
+                    suggested_children: vec![ProjectTaskSuggestedChild {
+                        title: "Polish keyboard actions".to_string(),
+                        objective: "Bind direct task operations.".to_string(),
+                    }],
+                    error: None,
+                    completed_at: 18,
+                }),
+                evaluation: Some(ProjectTaskEvaluation {
+                    verdict: ProjectTaskEvaluationVerdict::Passed,
+                    summary: "The semantic node owns its final result.".to_string(),
+                    evidence: vec!["snapshot reviewed".to_string()],
+                    evaluated_at: 20,
+                }),
+                created_at: 11,
+                updated_at: 20,
+            },
+        ],
     }
 }
 
-fn test_task(phase: ProjectAgentTaskPhase) -> ProjectAgentTask {
-    ProjectAgentTask {
-        agent_id: "query".to_string(),
-        task_id: "task-1".to_string(),
-        task: "核对当前项目的索引状态，并把证据和异常一起返回。".to_string(),
-        phase,
-        session_thread_id: Some("worker-query".to_string()),
-        parent_thread_id: "parent-thread".to_string(),
-        attempt: 1,
-        created_at: 10,
-        updated_at: 20,
-    }
-}
-
-fn test_result() -> ProjectAgentPersistedResult {
-    ProjectAgentPersistedResult {
-        status: ProjectAgentTaskStatus::Completed,
-        agent_id: "query".to_string(),
-        task_id: "task-1".to_string(),
-        result: "索引已核对。\n发现一条需要主 AGENT 决策的异常。".to_string(),
-        artifacts: vec!["task/artifacts/index-report.md".to_string()],
-        evidence: vec!["index.json:12".to_string()],
-        memory_candidates: Vec::new(),
-        improvement_proposals: Vec::new(),
-        error: None,
-    }
+fn test_agents() -> Vec<ProjectAgentRosterEntry> {
+    vec![ProjectAgentRosterEntry {
+        id: "query".to_string(),
+        description: "Focused repository query executor".to_string(),
+        enabled: true,
+        active_session_thread_id: None,
+        session: None,
+        current_task: None,
+    }]
 }

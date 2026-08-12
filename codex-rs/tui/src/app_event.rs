@@ -320,18 +320,17 @@ pub(crate) enum AppEvent {
         thread_id: ThreadId,
     },
 
-    /// Inspect or control project-local specialist AGENTs for a thread.
+    /// Inspect or control the semantic project-task workspace for a thread.
     ProjectAgentWorkbench {
         thread_id: ThreadId,
         action: ProjectAgentWorkbenchAction,
     },
 
-    /// Completion of a directly started named project AGENT task.
-    ProjectAgentTaskFinished {
+    /// Refresh a semantic task in place after its internal worker execution ends.
+    ProjectTaskExecutionFinished {
         thread_id: ThreadId,
-        agent_id: String,
         task_id: String,
-        result: Result<codex_app_server_protocol::ThreadProjectAgentReadResponse, String>,
+        result: Result<codex_app_server_protocol::ThreadProjectTaskWorkspaceReadResponse, String>,
     },
 
     /// Result of refreshing rate limits.

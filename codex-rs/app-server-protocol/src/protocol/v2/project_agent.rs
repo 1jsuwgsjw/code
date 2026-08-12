@@ -136,6 +136,204 @@ pub struct ThreadProjectAgentRebuildResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskWorkspaceReadParams {
+    pub thread_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskWorkspaceReadResponse {
+    pub workspace: ProjectTaskWorkspace,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskCreateParams {
+    pub thread_id: String,
+    #[ts(optional = nullable)]
+    pub parent_task_id: Option<String>,
+    pub title: String,
+    pub objective: String,
+    #[ts(optional = nullable)]
+    pub executor: Option<ProjectTaskExecutor>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskCreateResponse {
+    pub task: ProjectTask,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskRequirementAppendParams {
+    pub thread_id: String,
+    pub task_id: String,
+    pub requirement: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskRequirementAppendResponse {
+    pub task: ProjectTask,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskExecutionStartParams {
+    pub thread_id: String,
+    pub task_id: String,
+    pub agent_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskExecutionStartResponse {
+    pub task: ProjectTask,
+    pub execution_task_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskResultRecordParams {
+    pub thread_id: String,
+    pub task_id: String,
+    pub result: ProjectTaskResult,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskResultRecordResponse {
+    pub task: ProjectTask,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskEvaluationSetParams {
+    pub thread_id: String,
+    pub task_id: String,
+    pub evaluation: ProjectTaskEvaluation,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadProjectTaskEvaluationSetResponse {
+    pub task: ProjectTask,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ProjectTaskWorkspace {
+    pub schema_version: u32,
+    pub tasks: Vec<ProjectTask>,
+    pub updated_at: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ProjectTask {
+    pub task_id: String,
+    pub parent_task_id: Option<String>,
+    pub title: String,
+    pub objective: String,
+    pub requirements: Vec<String>,
+    pub status: ProjectTaskStatus,
+    pub executor: ProjectTaskExecutor,
+    pub execution_task_id: Option<String>,
+    pub result: Option<ProjectTaskResult>,
+    pub evaluation: Option<ProjectTaskEvaluation>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum ProjectTaskStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Rejected,
+    Blocked,
+    Failed,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[ts(tag = "type", rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum ProjectTaskExecutor {
+    Unassigned,
+    MainAgent,
+    ProjectAgent { agent_id: String },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ProjectTaskResult {
+    pub status: ProjectTaskResultStatus,
+    pub summary: String,
+    pub artifacts: Vec<String>,
+    pub evidence: Vec<String>,
+    pub suggested_children: Vec<ProjectTaskSuggestedChild>,
+    pub error: Option<String>,
+    pub completed_at: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum ProjectTaskResultStatus {
+    Completed,
+    Rejected,
+    BlockedMissingTool,
+    Failed,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ProjectTaskSuggestedChild {
+    pub title: String,
+    pub objective: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ProjectTaskEvaluation {
+    pub verdict: ProjectTaskEvaluationVerdict,
+    pub summary: String,
+    pub evidence: Vec<String>,
+    pub evaluated_at: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum ProjectTaskEvaluationVerdict {
+    Passed,
+    NeedsRevision,
+    Failed,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct ProjectAgentRosterEntry {
     pub id: String,
     pub description: String,

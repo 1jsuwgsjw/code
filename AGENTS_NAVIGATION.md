@@ -105,7 +105,10 @@ Important variations:
   `codex-rs/tui/src/chatwidget/project_agent_maintenance.rs`
 - Project AGENT workbench UI: `codex-rs/tui/src/app/project_agent_workbench.rs`,
   `codex-rs/tui/src/chatwidget/project_agent_workbench.rs`
-  - direct named-task API: `thread/projectAgent/start` in
+  - semantic task workspace API: `thread/projectTask/workspace/read`,
+    `thread/projectTask/create`, `thread/projectTask/requirement/append`,
+    `thread/projectTask/execution/start`, `thread/projectTask/result/record`, and
+    `thread/projectTask/evaluation/set` in
     `codex-rs/app-server-protocol/src/protocol/v2/project_agent.rs` and
     `codex-rs/app-server/src/request_processors/project_agent_processor.rs`;
 - Composer and approval UI: `codex-rs/tui/src/bottom_pane/`

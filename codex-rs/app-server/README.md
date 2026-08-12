@@ -164,6 +164,12 @@ Example with notification opt-out:
 - `thread/projectAgent/rebuild` — explicitly shut down and replace an idle project AGENT worker session, returning the old session id and the new durable session generation.
 - `thread/projectAgentMaintenance/run` — apply pending memory candidates and improvement proposals for every project-local specialist AGENT attached to a loaded, idle thread. The request is rejected while the thread has an active task. Returns accepted/rejected counts plus the resulting maintenance status.
 - `thread/projectAgentMaintenance/statusUpdated` — notification emitted when a project AGENT context is loaded or resumed, after a delegated result creates pending maintenance, and after maintenance runs. Includes `threadId`, the canonical `projectRoot`, aggregate `pendingCount`, and `catalogRevision`.
+- `thread/projectTask/workspace/read` — read the durable semantic task tree attached to a root thread. Task nodes contain their parent, objective, requirements, executor, internal execution id, result, and evaluation.
+- `thread/projectTask/create` — create a root or child semantic task. A child is a tree edge, not a new chat session; omit `parentTaskId` for a root node.
+- `thread/projectTask/requirement/append` — append a bounded requirement to an active semantic task without changing its identity.
+- `thread/projectTask/execution/start` — bind a selected semantic task to a named project AGENT and start its internal worker execution. The returned `executionTaskId` is deliberately distinct from the semantic `taskId`.
+- `thread/projectTask/result/record` — record a bounded result, evidence, artifacts, and suggested child tasks on the semantic node.
+- `thread/projectTask/evaluation/set` — attach the main AGENT's evaluation and evidence to a task after a result exists.
 - `thread/settings/updated` — experimental notification emitted to subscribed clients when a loaded thread’s effective next-turn settings change; includes `threadId` and the full `threadSettings`.
 - `thread/status/changed` — notification emitted when a loaded thread’s status changes (`threadId` + new `status`).
 - `thread/archive` — move a thread’s rollout file into the archived directory and attempt to move any spawned descendant thread rollout files; returns `{}` on success and emits `thread/archived` for each archived thread.

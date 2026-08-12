@@ -10,6 +10,9 @@ use app_test_support::to_response;
 use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::ProjectAgentTaskPhase;
 use codex_app_server_protocol::ProjectAgentTaskStatus;
+use codex_app_server_protocol::ProjectTaskEvaluationVerdict;
+use codex_app_server_protocol::ProjectTaskResultStatus;
+use codex_app_server_protocol::ProjectTaskStatus;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ThreadProjectAgentFollowUpResponse;
 use codex_app_server_protocol::ThreadProjectAgentReadResponse;
@@ -17,6 +20,12 @@ use codex_app_server_protocol::ThreadProjectAgentRebuildResponse;
 use codex_app_server_protocol::ThreadProjectAgentRetryResponse;
 use codex_app_server_protocol::ThreadProjectAgentStartResponse;
 use codex_app_server_protocol::ThreadProjectAgentTerminateResponse;
+use codex_app_server_protocol::ThreadProjectTaskCreateResponse;
+use codex_app_server_protocol::ThreadProjectTaskEvaluationSetResponse;
+use codex_app_server_protocol::ThreadProjectTaskExecutionStartResponse;
+use codex_app_server_protocol::ThreadProjectTaskRequirementAppendResponse;
+use codex_app_server_protocol::ThreadProjectTaskResultRecordResponse;
+use codex_app_server_protocol::ThreadProjectTaskWorkspaceReadResponse;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::TurnStartParams;
@@ -50,6 +59,194 @@ const AGENT_CALL_ID: &str = "agent-control-call";
 struct ProjectAgentControlResponder {
     worker_requests: Arc<AtomicUsize>,
     first_worker_delay: Duration,
+}
+
+#[tokio::test]
+async fn semantic_task_workspace_supports_tree_requirements_results_and_evaluation() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+    let worker_requests = Arc::new(AtomicUsize::new(0));
+    let (_server, mut mcp, thread_id, _codex_home) =
+        start_control_app(worker_requests, Duration::ZERO).await?;
+
+    let empty: ThreadProjectTaskWorkspaceReadResponse = send_request(
+        &mut mcp,
+        "thread/projectTask/workspace/read",
+        json!({"threadId": thread_id}),
+    )
+    .await?;
+    assert_eq!(empty.workspace.tasks, Vec::new());
+
+    let root: ThreadProjectTaskCreateResponse = send_request(
+        &mut mcp,
+        "thread/projectTask/create",
+        json!({
+            "threadId": thread_id,
+            "parentTaskId": null,
+            "title": "Inspect API",
+            "objective": "Map the public task protocol",
+            "executor": null
+        }),
+    )
+    .await?;
+    assert_eq!(root.task.status, ProjectTaskStatus::Pending);
+
+    let child: ThreadProjectTaskCreateResponse = send_request(
+        &mut mcp,
+        "thread/projectTask/create",
+        json!({
+            "threadId": thread_id,
+            "parentTaskId": root.task.task_id,
+            "title": "Verify schema",
+            "objective": "Inspect generated shapes",
+            "executor": {"type": "mainAgent"}
+        }),
+    )
+    .await?;
+    assert_eq!(child.task.parent_task_id, Some(root.task.task_id.clone()));
+    assert_eq!(child.task.status, ProjectTaskStatus::InProgress);
+
+    let appended: ThreadProjectTaskRequirementAppendResponse = send_request(
+        &mut mcp,
+        "thread/projectTask/requirement/append",
+        json!({
+            "threadId": thread_id,
+            "taskId": root.task.task_id,
+            "requirement": "Keep the wire shape camelCase"
+        }),
+    )
+    .await?;
+    assert_eq!(
+        appended.task.requirements,
+        vec!["Keep the wire shape camelCase".to_string()]
+    );
+
+    let completed_at = appended.task.updated_at + 1;
+    let recorded: ThreadProjectTaskResultRecordResponse = send_request(
+        &mut mcp,
+        "thread/projectTask/result/record",
+        json!({
+            "threadId": thread_id,
+            "taskId": root.task.task_id,
+            "result": {
+                "status": "completed",
+                "summary": "Protocol mapped",
+                "artifacts": ["schema.json"],
+                "evidence": ["project_agent.rs"],
+                "suggestedChildren": [{"title": "Render UI", "objective": "Show the task tree"}],
+                "error": null,
+                "completedAt": completed_at
+            }
+        }),
+    )
+    .await?;
+    assert_eq!(recorded.task.status, ProjectTaskStatus::Completed);
+    assert_eq!(
+        recorded.task.result.as_ref().map(|result| result.status),
+        Some(ProjectTaskResultStatus::Completed)
+    );
+
+    let evaluated: ThreadProjectTaskEvaluationSetResponse = send_request(
+        &mut mcp,
+        "thread/projectTask/evaluation/set",
+        json!({
+            "threadId": thread_id,
+            "taskId": root.task.task_id,
+            "evaluation": {
+                "verdict": "passed",
+                "summary": "Public behavior verified",
+                "evidence": ["json-rpc integration"],
+                "evaluatedAt": completed_at + 1
+            }
+        }),
+    )
+    .await?;
+    assert_eq!(
+        evaluated
+            .task
+            .evaluation
+            .as_ref()
+            .map(|evaluation| evaluation.verdict),
+        Some(ProjectTaskEvaluationVerdict::Passed)
+    );
+
+    let workspace: ThreadProjectTaskWorkspaceReadResponse = send_request(
+        &mut mcp,
+        "thread/projectTask/workspace/read",
+        json!({"threadId": thread_id}),
+    )
+    .await?;
+    assert_eq!(workspace.workspace.tasks, vec![evaluated.task, child.task]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn semantic_task_execution_keeps_semantic_and_worker_task_ids_separate() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+    let worker_requests = Arc::new(AtomicUsize::new(0));
+    let (_server, mut mcp, thread_id, _codex_home) =
+        start_control_app(Arc::clone(&worker_requests), Duration::ZERO).await?;
+    let root: ThreadProjectTaskCreateResponse = send_request(
+        &mut mcp,
+        "thread/projectTask/create",
+        json!({
+            "threadId": thread_id,
+            "parentTaskId": null,
+            "title": "Run query",
+            "objective": "Inspect the control target",
+            "executor": {"type": "projectAgent", "agentId": "query"}
+        }),
+    )
+    .await?;
+    let started: ThreadProjectTaskExecutionStartResponse = send_request(
+        &mut mcp,
+        "thread/projectTask/execution/start",
+        json!({
+            "threadId": thread_id,
+            "taskId": root.task.task_id,
+            "agentId": "query"
+        }),
+    )
+    .await?;
+    assert_eq!(started.task.task_id, root.task.task_id);
+    assert_ne!(started.execution_task_id, started.task.task_id);
+    assert_eq!(
+        started.task.execution_task_id,
+        Some(started.execution_task_id.clone())
+    );
+    assert_eq!(started.task.status, ProjectTaskStatus::InProgress);
+
+    wait_for_worker_requests(&worker_requests, 1).await?;
+    let completed = timeout(DEFAULT_READ_TIMEOUT, async {
+        loop {
+            let workspace: ThreadProjectTaskWorkspaceReadResponse = send_request(
+                &mut mcp,
+                "thread/projectTask/workspace/read",
+                json!({"threadId": thread_id}),
+            )
+            .await?;
+            let task = workspace
+                .workspace
+                .tasks
+                .into_iter()
+                .find(|task| task.task_id == root.task.task_id)
+                .context("semantic task should remain present")?;
+            if task.status == ProjectTaskStatus::Completed {
+                return Ok::<_, anyhow::Error>(task);
+            }
+            sleep(Duration::from_millis(/*millis*/ 25)).await;
+        }
+    })
+    .await??;
+    assert_eq!(completed.task_id, root.task.task_id);
+    assert_eq!(completed.execution_task_id, Some(started.execution_task_id));
+    assert_eq!(
+        completed
+            .result
+            .as_ref()
+            .map(|result| result.summary.as_str()),
+        Some("Completed worker request 1.")
+    );
+    Ok(())
 }
 
 impl Respond for ProjectAgentControlResponder {

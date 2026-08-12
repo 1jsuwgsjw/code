@@ -586,6 +586,36 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadProjectAgentRebuildResponse,
     },
+    ThreadProjectTaskWorkspaceRead => "thread/projectTask/workspace/read" {
+        params: v2::ThreadProjectTaskWorkspaceReadParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectTaskWorkspaceReadResponse,
+    },
+    ThreadProjectTaskCreate => "thread/projectTask/create" {
+        params: v2::ThreadProjectTaskCreateParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectTaskCreateResponse,
+    },
+    ThreadProjectTaskRequirementAppend => "thread/projectTask/requirement/append" {
+        params: v2::ThreadProjectTaskRequirementAppendParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectTaskRequirementAppendResponse,
+    },
+    ThreadProjectTaskExecutionStart => "thread/projectTask/execution/start" {
+        params: v2::ThreadProjectTaskExecutionStartParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectTaskExecutionStartResponse,
+    },
+    ThreadProjectTaskResultRecord => "thread/projectTask/result/record" {
+        params: v2::ThreadProjectTaskResultRecordParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectTaskResultRecordResponse,
+    },
+    ThreadProjectTaskEvaluationSet => "thread/projectTask/evaluation/set" {
+        params: v2::ThreadProjectTaskEvaluationSetParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadProjectTaskEvaluationSetResponse,
+    },
     ThreadProjectAgentMaintenanceRun => "thread/projectAgentMaintenance/run" {
         params: v2::ThreadProjectAgentMaintenanceRunParams,
         serialization: thread_id(params.thread_id),

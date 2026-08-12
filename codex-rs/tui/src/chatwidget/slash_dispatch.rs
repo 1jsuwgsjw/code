@@ -310,7 +310,7 @@ impl ChatWidget {
                 self.request_empty_side_conversation(cmd);
             }
             SlashCommand::Agent | SlashCommand::MultiAgents => {
-                self.app_event_tx.send(AppEvent::OpenAgentPicker);
+                self.dispatch_project_agent_workbench("");
             }
             SlashCommand::Permissions => {
                 self.open_permissions_popup();

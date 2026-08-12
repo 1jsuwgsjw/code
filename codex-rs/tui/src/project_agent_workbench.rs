@@ -1,12 +1,23 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProjectAgentWorkbenchAction {
-    List,
-    Read(String),
-    PromptStart(String),
-    Start { agent_id: String, task: String },
-    PromptFollowUp(String),
-    FollowUp { agent_id: String, message: String },
-    Terminate(String),
-    Retry { agent_id: String, task_id: String },
-    Rebuild(String),
+    Open {
+        selected_task_id: Option<String>,
+    },
+    PromptCreateRoot,
+    PromptCreateChild(String),
+    Create {
+        parent_task_id: Option<String>,
+        input: String,
+    },
+    PromptAppendRequirement(String),
+    AppendRequirement {
+        task_id: String,
+        requirement: String,
+    },
+    PromptStartExecution(String),
+    StartExecution {
+        task_id: String,
+        agent_id: String,
+    },
+    Refresh(String),
 }

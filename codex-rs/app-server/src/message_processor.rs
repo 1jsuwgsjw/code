@@ -1120,6 +1120,34 @@ impl MessageProcessor {
             ClientRequest::ThreadProjectAgentRebuild { params, .. } => {
                 self.project_agent_processor.rebuild(params).await
             }
+            ClientRequest::ThreadProjectTaskWorkspaceRead { params, .. } => {
+                self.project_agent_processor
+                    .task_workspace_read(params)
+                    .await
+            }
+            ClientRequest::ThreadProjectTaskCreate { params, .. } => {
+                self.project_agent_processor.task_create(params).await
+            }
+            ClientRequest::ThreadProjectTaskRequirementAppend { params, .. } => {
+                self.project_agent_processor
+                    .task_requirement_append(params)
+                    .await
+            }
+            ClientRequest::ThreadProjectTaskExecutionStart { params, .. } => {
+                self.project_agent_processor
+                    .task_execution_start(params)
+                    .await
+            }
+            ClientRequest::ThreadProjectTaskResultRecord { params, .. } => {
+                self.project_agent_processor
+                    .task_result_record(params)
+                    .await
+            }
+            ClientRequest::ThreadProjectTaskEvaluationSet { params, .. } => {
+                self.project_agent_processor
+                    .task_evaluation_set(params)
+                    .await
+            }
             ClientRequest::ThreadProjectAgentMaintenanceRun { params, .. } => {
                 self.project_agent_processor
                     .maintenance_run(request_id.clone(), params)

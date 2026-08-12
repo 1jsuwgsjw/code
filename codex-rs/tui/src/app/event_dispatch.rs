@@ -824,13 +824,12 @@ impl App {
                 self.handle_project_agent_workbench_action(app_server, thread_id, action)
                     .await;
             }
-            AppEvent::ProjectAgentTaskFinished {
+            AppEvent::ProjectTaskExecutionFinished {
                 thread_id,
-                agent_id,
                 task_id,
                 result,
             } => {
-                self.handle_project_agent_task_finished(thread_id, agent_id, task_id, result);
+                self.handle_project_task_execution_finished(thread_id, task_id, result);
             }
             AppEvent::SendAddCreditsNudgeEmail { credit_type } => {
                 if self

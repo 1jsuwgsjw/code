@@ -8,12 +8,15 @@ use super::*;
 
 impl App {
     pub(super) async fn open_agent_picker(&mut self, app_server: &mut AppServerSession) {
-        if let Some(thread_id) = self.current_displayed_thread_id()
-            && let Ok(response) = app_server.thread_project_agent_list(thread_id).await
-            && response.total > 0
-        {
-            self.chat_widget
-                .show_project_agent_roster(thread_id, response);
+        if let Some(thread_id) = self.current_displayed_thread_id() {
+            self.handle_project_agent_workbench_action(
+                app_server,
+                thread_id,
+                crate::project_agent_workbench::ProjectAgentWorkbenchAction::Open {
+                    selected_task_id: None,
+                },
+            )
+            .await;
             return;
         }
         self.backfill_loaded_subagent_threads(app_server).await;

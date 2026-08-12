@@ -6,6 +6,15 @@ use codex_app_server_protocol::ProjectAgentSession;
 use codex_app_server_protocol::ProjectAgentTask;
 use codex_app_server_protocol::ProjectAgentTaskPhase;
 use codex_app_server_protocol::ProjectAgentTaskStatus;
+use codex_app_server_protocol::ProjectTask;
+use codex_app_server_protocol::ProjectTaskEvaluation as ApiProjectTaskEvaluation;
+use codex_app_server_protocol::ProjectTaskEvaluationVerdict as ApiProjectTaskEvaluationVerdict;
+use codex_app_server_protocol::ProjectTaskExecutor as ApiProjectTaskExecutor;
+use codex_app_server_protocol::ProjectTaskResult as ApiProjectTaskResult;
+use codex_app_server_protocol::ProjectTaskResultStatus as ApiProjectTaskResultStatus;
+use codex_app_server_protocol::ProjectTaskStatus as ApiProjectTaskStatus;
+use codex_app_server_protocol::ProjectTaskSuggestedChild as ApiProjectTaskSuggestedChild;
+use codex_app_server_protocol::ProjectTaskWorkspace as ApiProjectTaskWorkspace;
 use codex_app_server_protocol::ThreadProjectAgentFollowUpParams;
 use codex_app_server_protocol::ThreadProjectAgentFollowUpResponse;
 use codex_app_server_protocol::ThreadProjectAgentListParams;
@@ -20,6 +29,18 @@ use codex_app_server_protocol::ThreadProjectAgentStartParams;
 use codex_app_server_protocol::ThreadProjectAgentStartResponse;
 use codex_app_server_protocol::ThreadProjectAgentTerminateParams;
 use codex_app_server_protocol::ThreadProjectAgentTerminateResponse;
+use codex_app_server_protocol::ThreadProjectTaskCreateParams;
+use codex_app_server_protocol::ThreadProjectTaskCreateResponse;
+use codex_app_server_protocol::ThreadProjectTaskEvaluationSetParams;
+use codex_app_server_protocol::ThreadProjectTaskEvaluationSetResponse;
+use codex_app_server_protocol::ThreadProjectTaskExecutionStartParams;
+use codex_app_server_protocol::ThreadProjectTaskExecutionStartResponse;
+use codex_app_server_protocol::ThreadProjectTaskRequirementAppendParams;
+use codex_app_server_protocol::ThreadProjectTaskRequirementAppendResponse;
+use codex_app_server_protocol::ThreadProjectTaskResultRecordParams;
+use codex_app_server_protocol::ThreadProjectTaskResultRecordResponse;
+use codex_app_server_protocol::ThreadProjectTaskWorkspaceReadParams;
+use codex_app_server_protocol::ThreadProjectTaskWorkspaceReadResponse;
 use codex_project_agents_extension::ProjectAgentControlError;
 use codex_project_agents_extension::ProjectAgentId;
 use codex_project_agents_extension::ProjectAgentSessionMetadata;
@@ -27,6 +48,16 @@ use codex_project_agents_extension::ProjectAgentStoreError;
 use codex_project_agents_extension::ProjectAgentTaskListLimit;
 use codex_project_agents_extension::ProjectAgentTaskMetadata;
 use codex_project_agents_extension::ProjectAgentTaskResult;
+use codex_project_agents_extension::ProjectTaskEvaluation;
+use codex_project_agents_extension::ProjectTaskEvaluationVerdict;
+use codex_project_agents_extension::ProjectTaskExecutor;
+use codex_project_agents_extension::ProjectTaskId;
+use codex_project_agents_extension::ProjectTaskNode;
+use codex_project_agents_extension::ProjectTaskResult;
+use codex_project_agents_extension::ProjectTaskResultStatus;
+use codex_project_agents_extension::ProjectTaskStatus;
+use codex_project_agents_extension::ProjectTaskSuggestedChild;
+use codex_project_agents_extension::ProjectTaskWorkspace;
 use codex_project_agents_extension::StoredProjectAgentTaskPhase;
 use codex_project_agents_extension::StoredProjectAgentTaskStatus;
 use codex_project_agents_extension::ThreadProjectAgentSummary;
@@ -262,6 +293,158 @@ impl ProjectAgentRequestProcessor {
         ))
     }
 
+    pub(crate) async fn task_workspace_read(
+        &self,
+        params: ThreadProjectTaskWorkspaceReadParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let workspace =
+            codex_project_agents_extension::read_thread_project_task_workspace(thread.as_ref())
+                .await
+                .ok_or_else(|| missing_context(&params.thread_id))?
+                .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectTaskWorkspaceReadResponse {
+                workspace: api_task_workspace(&workspace),
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn task_create(
+        &self,
+        params: ThreadProjectTaskCreateParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let executor = params
+            .executor
+            .map(stored_task_executor)
+            .transpose()?
+            .unwrap_or(ProjectTaskExecutor::Unassigned);
+        let task = match params.parent_task_id {
+            Some(parent_task_id) => {
+                codex_project_agents_extension::create_thread_project_child_task(
+                    thread.as_ref(),
+                    parse_task_id(parent_task_id)?,
+                    params.title,
+                    params.objective,
+                    executor,
+                )
+                .await
+            }
+            None => {
+                codex_project_agents_extension::create_thread_project_root_task(
+                    thread.as_ref(),
+                    params.title,
+                    params.objective,
+                    executor,
+                )
+                .await
+            }
+        }
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectTaskCreateResponse {
+                task: api_project_task(&task),
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn task_requirement_append(
+        &self,
+        params: ThreadProjectTaskRequirementAppendParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let task_id = parse_task_id(params.task_id)?;
+        let task = codex_project_agents_extension::append_thread_project_task_requirement(
+            thread.as_ref(),
+            &task_id,
+            params.requirement,
+        )
+        .await
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectTaskRequirementAppendResponse {
+                task: api_project_task(&task),
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn task_execution_start(
+        &self,
+        params: ThreadProjectTaskExecutionStartParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let task_id = parse_task_id(params.task_id)?;
+        let agent_id = parse_agent_id(params.agent_id)?;
+        let outcome = codex_project_agents_extension::start_thread_project_task_execution(
+            Arc::clone(&self.thread_manager),
+            thread.as_ref(),
+            &task_id,
+            &agent_id,
+        )
+        .await
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectTaskExecutionStartResponse {
+                task: api_project_task(&outcome.task),
+                execution_task_id: outcome.execution_task_id,
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn task_result_record(
+        &self,
+        params: ThreadProjectTaskResultRecordParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let task_id = parse_task_id(params.task_id)?;
+        let result = stored_task_result(params.result)?;
+        let task = codex_project_agents_extension::record_thread_project_task_result(
+            thread.as_ref(),
+            &task_id,
+            result,
+        )
+        .await
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectTaskResultRecordResponse {
+                task: api_project_task(&task),
+            }
+            .into(),
+        ))
+    }
+
+    pub(crate) async fn task_evaluation_set(
+        &self,
+        params: ThreadProjectTaskEvaluationSetParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
+        let task_id = parse_task_id(params.task_id)?;
+        let evaluation = stored_task_evaluation(params.evaluation);
+        let task = codex_project_agents_extension::evaluate_thread_project_task(
+            thread.as_ref(),
+            &task_id,
+            evaluation,
+        )
+        .await
+        .ok_or_else(|| missing_context(&params.thread_id))?
+        .map_err(map_control_error)?;
+        Ok(Some(
+            ThreadProjectTaskEvaluationSetResponse {
+                task: api_project_task(&task),
+            }
+            .into(),
+        ))
+    }
+
     async fn loaded_thread(
         &self,
         thread_id: &str,
@@ -347,6 +530,66 @@ fn parse_list_cursor(cursor: Option<&str>) -> Result<usize, JSONRPCErrorError> {
 fn parse_agent_id(agent_id: String) -> Result<ProjectAgentId, JSONRPCErrorError> {
     ProjectAgentId::new(agent_id)
         .map_err(|error| invalid_request(format!("invalid project AGENT id: {error}")))
+}
+
+fn parse_task_id(task_id: String) -> Result<ProjectTaskId, JSONRPCErrorError> {
+    ProjectTaskId::new(task_id)
+        .map_err(|error| invalid_request(format!("invalid project task id: {error}")))
+}
+
+fn stored_task_executor(
+    executor: ApiProjectTaskExecutor,
+) -> Result<ProjectTaskExecutor, JSONRPCErrorError> {
+    Ok(match executor {
+        ApiProjectTaskExecutor::Unassigned => ProjectTaskExecutor::Unassigned,
+        ApiProjectTaskExecutor::MainAgent => ProjectTaskExecutor::MainAgent,
+        ApiProjectTaskExecutor::ProjectAgent { agent_id } => ProjectTaskExecutor::ProjectAgent {
+            agent_id: parse_agent_id(agent_id)?,
+        },
+    })
+}
+
+fn stored_task_result(
+    result: ApiProjectTaskResult,
+) -> Result<ProjectTaskResult, JSONRPCErrorError> {
+    Ok(ProjectTaskResult {
+        status: match result.status {
+            ApiProjectTaskResultStatus::Completed => ProjectTaskResultStatus::Completed,
+            ApiProjectTaskResultStatus::Rejected => ProjectTaskResultStatus::Rejected,
+            ApiProjectTaskResultStatus::BlockedMissingTool => {
+                ProjectTaskResultStatus::BlockedMissingTool
+            }
+            ApiProjectTaskResultStatus::Failed => ProjectTaskResultStatus::Failed,
+        },
+        summary: result.summary,
+        artifacts: result.artifacts,
+        evidence: result.evidence,
+        suggested_children: result
+            .suggested_children
+            .into_iter()
+            .map(|child| ProjectTaskSuggestedChild {
+                title: child.title,
+                objective: child.objective,
+            })
+            .collect(),
+        error: result.error,
+        completed_at: result.completed_at,
+    })
+}
+
+fn stored_task_evaluation(evaluation: ApiProjectTaskEvaluation) -> ProjectTaskEvaluation {
+    ProjectTaskEvaluation {
+        verdict: match evaluation.verdict {
+            ApiProjectTaskEvaluationVerdict::Passed => ProjectTaskEvaluationVerdict::Passed,
+            ApiProjectTaskEvaluationVerdict::NeedsRevision => {
+                ProjectTaskEvaluationVerdict::NeedsRevision
+            }
+            ApiProjectTaskEvaluationVerdict::Failed => ProjectTaskEvaluationVerdict::Failed,
+        },
+        summary: evaluation.summary,
+        evidence: evaluation.evidence,
+        evaluated_at: evaluation.evaluated_at,
+    }
 }
 
 fn missing_context(thread_id: &str) -> JSONRPCErrorError {
@@ -453,5 +696,86 @@ fn api_result(result: &ProjectAgentTaskResult) -> ProjectAgentPersistedResult {
         memory_candidates: result.memory_candidates.clone(),
         improvement_proposals: result.improvement_proposals.clone(),
         error: result.error.clone(),
+    }
+}
+
+fn api_task_workspace(workspace: &ProjectTaskWorkspace) -> ApiProjectTaskWorkspace {
+    ApiProjectTaskWorkspace {
+        schema_version: workspace.schema_version,
+        tasks: workspace.tasks.iter().map(api_project_task).collect(),
+        updated_at: workspace.updated_at,
+    }
+}
+
+fn api_project_task(task: &ProjectTaskNode) -> ProjectTask {
+    ProjectTask {
+        task_id: task.task_id.to_string(),
+        parent_task_id: task.parent_task_id.as_ref().map(ToString::to_string),
+        title: task.title.clone(),
+        objective: task.objective.clone(),
+        requirements: task.requirements.clone(),
+        status: match task.status {
+            ProjectTaskStatus::Pending => ApiProjectTaskStatus::Pending,
+            ProjectTaskStatus::InProgress => ApiProjectTaskStatus::InProgress,
+            ProjectTaskStatus::Completed => ApiProjectTaskStatus::Completed,
+            ProjectTaskStatus::Rejected => ApiProjectTaskStatus::Rejected,
+            ProjectTaskStatus::Blocked => ApiProjectTaskStatus::Blocked,
+            ProjectTaskStatus::Failed => ApiProjectTaskStatus::Failed,
+        },
+        executor: match &task.executor {
+            ProjectTaskExecutor::Unassigned => ApiProjectTaskExecutor::Unassigned,
+            ProjectTaskExecutor::MainAgent => ApiProjectTaskExecutor::MainAgent,
+            ProjectTaskExecutor::ProjectAgent { agent_id } => {
+                ApiProjectTaskExecutor::ProjectAgent {
+                    agent_id: agent_id.to_string(),
+                }
+            }
+        },
+        execution_task_id: task.execution_task_id.clone(),
+        result: task.result.as_ref().map(api_project_task_result),
+        evaluation: task.evaluation.as_ref().map(api_project_task_evaluation),
+        created_at: task.created_at,
+        updated_at: task.updated_at,
+    }
+}
+
+fn api_project_task_result(result: &ProjectTaskResult) -> ApiProjectTaskResult {
+    ApiProjectTaskResult {
+        status: match result.status {
+            ProjectTaskResultStatus::Completed => ApiProjectTaskResultStatus::Completed,
+            ProjectTaskResultStatus::Rejected => ApiProjectTaskResultStatus::Rejected,
+            ProjectTaskResultStatus::BlockedMissingTool => {
+                ApiProjectTaskResultStatus::BlockedMissingTool
+            }
+            ProjectTaskResultStatus::Failed => ApiProjectTaskResultStatus::Failed,
+        },
+        summary: result.summary.clone(),
+        artifacts: result.artifacts.clone(),
+        evidence: result.evidence.clone(),
+        suggested_children: result
+            .suggested_children
+            .iter()
+            .map(|child| ApiProjectTaskSuggestedChild {
+                title: child.title.clone(),
+                objective: child.objective.clone(),
+            })
+            .collect(),
+        error: result.error.clone(),
+        completed_at: result.completed_at,
+    }
+}
+
+fn api_project_task_evaluation(evaluation: &ProjectTaskEvaluation) -> ApiProjectTaskEvaluation {
+    ApiProjectTaskEvaluation {
+        verdict: match evaluation.verdict {
+            ProjectTaskEvaluationVerdict::Passed => ApiProjectTaskEvaluationVerdict::Passed,
+            ProjectTaskEvaluationVerdict::NeedsRevision => {
+                ApiProjectTaskEvaluationVerdict::NeedsRevision
+            }
+            ProjectTaskEvaluationVerdict::Failed => ApiProjectTaskEvaluationVerdict::Failed,
+        },
+        summary: evaluation.summary.clone(),
+        evidence: evaluation.evidence.clone(),
+        evaluated_at: evaluation.evaluated_at,
     }
 }
