@@ -117,8 +117,17 @@ pub(crate) async fn execute_direct_delegate_task(
     file_system: &dyn ExecutorFileSystem,
     scope: ProjectAgentFileSystemScope<'_>,
 ) -> ProjectAgentTaskResult {
-    let semantic_task_id =
-        ProjectTaskId::new(Uuid::now_v7().to_string()).expect("UUID project task IDs are valid");
+    let semantic_task_id_value = Uuid::now_v7().to_string();
+    let semantic_task_id = match ProjectTaskId::new(semantic_task_id_value.clone()) {
+        Ok(task_id) => task_id,
+        Err(error) => {
+            return crate::delegate::host_failed_result(
+                &agent_id,
+                &semantic_task_id_value,
+                &format!("failed to construct the semantic project task ID: {error}"),
+            );
+        }
+    };
     let semantic_task = match create_task_with_id(
         context.as_ref(),
         semantic_task_id.clone(),
