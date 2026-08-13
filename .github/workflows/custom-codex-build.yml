@@ -85,6 +85,17 @@ jobs:
           RUST_MIN_STACK: 8388608
         run: just test -p codex-project-agents-extension
 
+      - name: Regenerate app-server schema
+        run: just write-app-server-schema
+
+      - name: Upload generated app-server schema
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: app-server-schema-${{ github.sha }}
+          path: codex-rs/app-server-protocol/schema
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Test app-server protocol
         env:
           RUST_MIN_STACK: 8388608
@@ -99,18 +110,6 @@ jobs:
         env:
           RUST_MIN_STACK: 8388608
         run: just test -p codex-core
-
-      - name: Regenerate app-server schema
-        run: just write-app-server-schema
-
-      - name: Upload generated app-server schema
-        if: ${{ always() }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: app-server-schema-${{ github.sha }}
-          path: codex-rs/app-server-protocol/schema
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Test TUI and snapshots
         env:
