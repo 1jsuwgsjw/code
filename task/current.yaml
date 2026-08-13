@@ -5,9 +5,8 @@ status: active
 phase: implement
 mode: use
 objective: 对齐 Codex 项目中的文件化专职 AGENT、隔离工具注册、长期记忆、任务拒绝协议与主从控制架构；经用户确认任务单后再设计和实现。
-current_subtask: Format the completed project-AGENT integration batch, stage only its explicit
-  files, commit and push research-state, then use GitHub Actions as the sole compile/test/schema/snapshot
-  validation path.
+current_subtask: Monitor GitHub Actions run 31693677188 for commit d19bf57a8, fix any remote
+  compile/test/schema/snapshot failures, and publish the resulting Windows artifact.
 use_contract:
   target_output: A real end-to-end project AGENT run created through the new CLI registration
     workflow, showing the main AGENT delegates to a specialized worker that can call
@@ -51,14 +50,13 @@ open_questions:
 - The first app-server slice should remain under the reviewable change limit and may
   stage read/create/append/start before manual result/evaluation RPCs if the actual
   diff requires it.
-next_action: Run only just fmt locally, inspect the bounded diff/stat, stage the explicit T-003
-  implementation/docs/workflow paths, commit, and push research-state so GitHub Actions performs
-  compilation and validation.
-last_result: 'Completed the implementation and static closure batch, corrected app-server
-  semantics for execution/session identities and worker conversation history, updated navigation
-  owners, and replaced the research-stage workflow with focused project-AGENT crate validation,
-  schema drift detection, TUI snapshot artifact capture, and the gated Windows build. No local
-  tests, builds, Clippy, schema generation, or snapshot generation were run.'
+next_action: Poll run 31693677188, inspect only failing job logs or generated snapshot/schema
+  artifacts, apply the smallest remote-driven fix, and push until the workflow and Windows build
+  are green.
+last_result: 'Ran only just fmt locally, staged exactly 50 T-003 files while excluding unrelated
+  Bazel/schema changes, committed d19bf57a8 (feat: complete project agent task conversations),
+  and pushed research-state. GitHub Actions run 31693677188 is now in progress; no local compile,
+  test, Clippy, schema, or snapshot command was run.'
 scripts: []
 artifacts:
 - D:\codex\task\artifacts\T-003-agent-system-task-sheet.md
