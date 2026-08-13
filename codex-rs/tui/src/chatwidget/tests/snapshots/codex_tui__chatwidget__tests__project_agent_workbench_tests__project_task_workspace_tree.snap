@@ -1,0 +1,19 @@
+---
+source: tui/src/chatwidget/tests/project_agent_workbench_tests.rs
+expression: "render_bottom_popup(&chat, /*width*/ 150)"
+---
+  项 目 任 务 工 作 区                                                             Verify visible result
+  任 务 是 一 级 对 象 ； 执 行 者 只 负 责 当 前 节 点 。                                     task task-child
+                                                                            已 完 成  · @query
+  搜 索 标 题 或  task id
+  ＋  新 建 根 任 务                建 立 新 的 任 务 目 标 。                             目 标
+  ● Ship task workspace       执 行 中  · @query                               Confirm tree, result, evidence and evaluation rendering.
+› ✓ └─ Verify visible result  已 完 成  · @query
+  当 前 任 务                     对 高 亮 的 任 务 节 点 执 行 操 作                       追 加 要 求
+    追 加 要 求                   补 充 约 束 或 验 收 条 件                             • No duplicate lifecycle cards
+    创 建 子 任 务                 在 当 前 节 点 下 建 立 任 务
+    选 择 执 行 者                 把 当 前 节 点 交 给 项 目  AGENT                      执 行 流
+    刷 新                       重 新 读 取 任 务 、 结 果 和 评 测                       已 完 成  · internal worker-020
+
+  任 务 和 执 行 记 录 保 留 在 同 一 个 工 作 区
+  Press enter to confirm or esc to go back

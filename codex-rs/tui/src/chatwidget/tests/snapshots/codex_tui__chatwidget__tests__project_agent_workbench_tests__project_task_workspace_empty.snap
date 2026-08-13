@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/project_agent_workbench_tests.rs
+expression: "render_bottom_popup(&chat, /*width*/ 120)"
+---
+  项 目 任 务 工 作 区                                              尚 无 任 务
+  任 务 是 一 级 对 象 ； 执 行 者 只 负 责 当 前 节 点 。                      从 左 侧 “新 建 根 任 务 ”开 始 。
+                                                             已 注 册 执 行 者 ： 1
+  搜 索 标 题 或  task id
+› ＋  新 建 根 任 务   建 立 新 的 任 务 目 标 。
+
+  任 务 和 执 行 记 录 保 留 在 同 一 个 工 作 区
+  Press enter to confirm or esc to go back
