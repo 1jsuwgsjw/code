@@ -50,12 +50,12 @@ open_questions:
 - The first app-server slice should remain under the reviewable change limit and may
   stage read/create/append/start before manual result/evaluation RPCs if the actual
   diff requires it.
-next_action: Format, commit, and push the TUI fixture initialization fix, then resume one-minute
-  continuous monitoring on the replacement research-state run until success and artifact
-  publication, automatically repairing any further branch-caused remote failure.
-last_result: 'Run 31697855790 passed all prior Clippy findings and reached TUI test-target
-  compilation, where three App test fixtures were missing the new project_agent_conversation_origin
-  field. Each fixture now initializes the thread-scoped conversation origin to None.'
+next_action: Commit and push the CI tool bootstrap fix, then keep one long-running 60-second
+  watcher on the replacement research-state run until every required check and the Windows
+  artifact are green; repair only a branch-caused failure and restart that same watch cycle.
+last_result: 'Run 31699096329 passed formatting and all changed-crate Clippy checks, then failed
+  before tests because the runner did not have cargo-nextest installed (just test reported no
+  such command). The workflow now installs pinned cargo-nextest 0.9.103 before validation.'
 scripts: []
 artifacts:
 - D:\codex\task\artifacts\T-003-agent-system-task-sheet.md
