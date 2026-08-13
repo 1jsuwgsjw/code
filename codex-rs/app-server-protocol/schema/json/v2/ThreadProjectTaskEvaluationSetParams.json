@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ProjectTaskEvaluation": {
+      "properties": {
+        "evaluatedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/definitions/ProjectTaskEvaluationVerdict"
+        }
+      },
+      "required": [
+        "evaluatedAt",
+        "evidence",
+        "summary",
+        "verdict"
+      ],
+      "type": "object"
+    },
+    "ProjectTaskEvaluationVerdict": {
+      "enum": [
+        "passed",
+        "needsRevision",
+        "failed"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "evaluation": {
+      "$ref": "#/definitions/ProjectTaskEvaluation"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "evaluation",
+    "taskId",
+    "threadId"
+  ],
+  "title": "ThreadProjectTaskEvaluationSetParams",
+  "type": "object"
+}

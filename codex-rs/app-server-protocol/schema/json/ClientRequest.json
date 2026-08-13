@@ -2222,6 +2222,168 @@
       ],
       "type": "object"
     },
+    "ProjectTaskEvaluation": {
+      "properties": {
+        "evaluatedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/definitions/ProjectTaskEvaluationVerdict"
+        }
+      },
+      "required": [
+        "evaluatedAt",
+        "evidence",
+        "summary",
+        "verdict"
+      ],
+      "type": "object"
+    },
+    "ProjectTaskEvaluationVerdict": {
+      "enum": [
+        "passed",
+        "needsRevision",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "ProjectTaskExecutor": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "unassigned"
+              ],
+              "title": "UnassignedProjectTaskExecutorType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "UnassignedProjectTaskExecutor",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "mainAgent"
+              ],
+              "title": "MainAgentProjectTaskExecutorType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "MainAgentProjectTaskExecutor",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "agent_id": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "projectAgent"
+              ],
+              "title": "ProjectAgentProjectTaskExecutorType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agent_id",
+            "type"
+          ],
+          "title": "ProjectAgentProjectTaskExecutor",
+          "type": "object"
+        }
+      ]
+    },
+    "ProjectTaskResult": {
+      "properties": {
+        "artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "completedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/definitions/ProjectTaskResultStatus"
+        },
+        "suggestedChildren": {
+          "items": {
+            "$ref": "#/definitions/ProjectTaskSuggestedChild"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifacts",
+        "completedAt",
+        "evidence",
+        "status",
+        "suggestedChildren",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "ProjectTaskResultStatus": {
+      "enum": [
+        "completed",
+        "rejected",
+        "blockedMissingTool",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "ProjectTaskSuggestedChild": {
+      "properties": {
+        "objective": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "objective",
+        "title"
+      ],
+      "type": "object"
+    },
     "RealtimeConversationVersion": {
       "enum": [
         "v1",
@@ -4185,6 +4347,128 @@
       ],
       "type": "object"
     },
+    "ThreadProjectTaskCreateParams": {
+      "properties": {
+        "executor": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ProjectTaskExecutor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "objective": {
+          "type": "string"
+        },
+        "parentTaskId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "objective",
+        "threadId",
+        "title"
+      ],
+      "type": "object"
+    },
+    "ThreadProjectTaskEvaluationSetParams": {
+      "properties": {
+        "evaluation": {
+          "$ref": "#/definitions/ProjectTaskEvaluation"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evaluation",
+        "taskId",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadProjectTaskExecutionStartParams": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "taskId",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadProjectTaskRequirementAppendParams": {
+      "properties": {
+        "requirement": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "requirement",
+        "taskId",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadProjectTaskResultRecordParams": {
+      "properties": {
+        "result": {
+          "$ref": "#/definitions/ProjectTaskResult"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "taskId",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadProjectTaskWorkspaceReadParams": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ThreadReadParams": {
       "properties": {
         "includeTurns": {
@@ -5442,6 +5726,150 @@
         "params"
       ],
       "title": "Thread/projectAgent/rebuildRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/projectTask/workspace/read"
+          ],
+          "title": "Thread/projectTask/workspace/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectTaskWorkspaceReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectTask/workspace/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/projectTask/create"
+          ],
+          "title": "Thread/projectTask/createRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectTaskCreateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectTask/createRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/projectTask/requirement/append"
+          ],
+          "title": "Thread/projectTask/requirement/appendRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectTaskRequirementAppendParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectTask/requirement/appendRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/projectTask/execution/start"
+          ],
+          "title": "Thread/projectTask/execution/startRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectTaskExecutionStartParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectTask/execution/startRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/projectTask/result/record"
+          ],
+          "title": "Thread/projectTask/result/recordRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectTaskResultRecordParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectTask/result/recordRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/projectTask/evaluation/set"
+          ],
+          "title": "Thread/projectTask/evaluation/setRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProjectTaskEvaluationSetParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/projectTask/evaluation/setRequest",
       "type": "object"
     },
     {

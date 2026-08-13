@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ProjectTaskExecutor": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "unassigned"
+              ],
+              "title": "UnassignedProjectTaskExecutorType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "UnassignedProjectTaskExecutor",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "mainAgent"
+              ],
+              "title": "MainAgentProjectTaskExecutorType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "MainAgentProjectTaskExecutor",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "agent_id": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "projectAgent"
+              ],
+              "title": "ProjectAgentProjectTaskExecutorType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agent_id",
+            "type"
+          ],
+          "title": "ProjectAgentProjectTaskExecutor",
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "executor": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProjectTaskExecutor"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "objective": {
+      "type": "string"
+    },
+    "parentTaskId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "objective",
+    "threadId",
+    "title"
+  ],
+  "title": "ThreadProjectTaskCreateParams",
+  "type": "object"
+}
