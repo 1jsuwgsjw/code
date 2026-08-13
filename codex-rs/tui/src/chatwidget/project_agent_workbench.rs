@@ -526,7 +526,7 @@ fn task_status_symbol(status: ProjectTaskStatus) -> ratatui::text::Span<'static>
         ProjectTaskStatus::InProgress => "● ".cyan(),
         ProjectTaskStatus::Completed => "✓ ".green(),
         ProjectTaskStatus::Rejected => "× ".magenta(),
-        ProjectTaskStatus::Blocked => "■ ".yellow(),
+        ProjectTaskStatus::Blocked => "■ ".magenta(),
         ProjectTaskStatus::Failed => "! ".red(),
     }
 }

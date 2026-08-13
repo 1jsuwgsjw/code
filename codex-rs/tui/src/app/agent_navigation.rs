@@ -21,10 +21,7 @@
 use crate::multi_agents::AgentPickerThreadEntry;
 use crate::multi_agents::SubAgentActivityDisplay;
 use crate::multi_agents::format_agent_picker_item_name;
-use crate::multi_agents::next_agent_shortcut;
-use crate::multi_agents::previous_agent_shortcut;
 use codex_protocol::ThreadId;
-use ratatui::text::Span;
 use std::collections::HashMap;
 
 /// Small state container for multi-agent picker ordering and labeling.
@@ -297,19 +294,6 @@ impl AgentNavigationState {
         )
     }
 
-    /// Builds the `/agent` picker subtitle from the same canonical bindings used by key handling.
-    ///
-    /// Keeping this text derived from the actual shortcut helpers prevents the picker copy from
-    /// drifting if the bindings ever change on one platform.
-    pub(crate) fn picker_subtitle() -> String {
-        let previous: Span<'static> = previous_agent_shortcut().into();
-        let next: Span<'static> = next_agent_shortcut().into();
-        format!(
-            "Select an agent to watch. {} previous, {} next.",
-            previous.content, next.content
-        )
-    }
-
     #[cfg(test)]
     /// Returns only the ordered thread ids for focused tests of traversal invariants.
     ///
@@ -392,16 +376,6 @@ mod tests {
             state.adjacent_thread_id(Some(main_thread_id), AgentNavigationDirection::Previous),
             Some(second_agent_id)
         );
-    }
-
-    #[test]
-    fn picker_subtitle_mentions_shortcuts() {
-        let previous: Span<'static> = previous_agent_shortcut().into();
-        let next: Span<'static> = next_agent_shortcut().into();
-        let subtitle = AgentNavigationState::picker_subtitle();
-
-        assert!(subtitle.contains(previous.content.as_ref()));
-        assert!(subtitle.contains(next.content.as_ref()));
     }
 
     #[test]

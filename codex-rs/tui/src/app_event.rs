@@ -148,8 +148,6 @@ pub(crate) enum KeymapEditIntent {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub(crate) enum AppEvent {
-    /// Open the agent picker for switching active threads.
-    OpenAgentPicker,
     /// Switch the active thread to the selected agent.
     SelectAgentThread(ThreadId),
 

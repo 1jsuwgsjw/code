@@ -1914,9 +1914,6 @@ impl App {
             AppEvent::OpenApprovalsPopup => {
                 self.chat_widget.open_approvals_popup();
             }
-            AppEvent::OpenAgentPicker => {
-                self.open_agent_picker(app_server).await;
-            }
             AppEvent::SelectAgentThread(thread_id) => {
                 self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
                     .await?;
