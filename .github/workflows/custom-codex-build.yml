@@ -36,7 +36,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Check formatting
-        run: just fmt-check
+        run: cargo fmt -- --config imports_granularity=Item --check
 
       - name: Check changed crates with Clippy
         env:
