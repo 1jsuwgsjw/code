@@ -16,14 +16,13 @@ use codex_project_agents::ProjectAgentTaskMetadata;
 use codex_project_agents::ProjectAgentTaskPhase;
 use codex_project_agents::ProjectAgentTaskResult;
 use codex_project_agents::ProjectAgentTaskStatus;
-use codex_protocol::AgentPath;
+use codex_project_agents::ProjectTaskId;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::AgentStatus;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::user_input::UserInput;
 use tokio::sync::OwnedSemaphorePermit;
@@ -54,75 +53,11 @@ enum WorkerTurnTerminal {
     SessionFailed(String),
 }
 
-pub(crate) async fn execute_worker_task(
-    thread_manager: Option<Arc<ThreadManager>>,
-    root_context: Arc<ProjectAgentRootContext>,
-    agent_id: ProjectAgentId,
-    task_id: String,
-    task: String,
-    file_system: &dyn ExecutorFileSystem,
-    scope: ProjectAgentFileSystemScope<'_>,
-) -> ProjectAgentTaskResult {
-    let task_gate = root_context.task_gate(&agent_id).await;
-    let _task_permit = match task_gate.acquire_owned().await {
-        Ok(permit) => permit,
-        Err(error) => {
-            return host_failed_result(
-                &agent_id,
-                &task_id,
-                &format!("project AGENT task gate is unavailable: {error}"),
-            );
-        }
-    };
-    let created_at = unix_timestamp();
-    let mut metadata = ProjectAgentTaskMetadata {
-        schema_version: PROJECT_AGENT_SCHEMA_VERSION,
-        agent_id: agent_id.clone(),
-        task_id: task_id.clone(),
-        task,
-        phase: ProjectAgentTaskPhase::Queued,
-        session_thread_id: None,
-        parent_thread_id: root_context.thread_id.to_string(),
-        attempt: 1,
-        created_at,
-        updated_at: created_at,
-    };
-
-    if let Err(error) = persist_task_phase(
-        root_context.as_ref(),
-        file_system,
-        scope,
-        &mut metadata,
-        ProjectAgentTaskPhase::Queued,
-    )
-    .await
-    {
-        let result = host_failed_result(&agent_id, &task_id, &error);
-        return persist_result(
-            root_context.as_ref(),
-            file_system,
-            scope,
-            &mut metadata,
-            result,
-        )
-        .await;
-    }
-
-    execute_queued_worker_task(
-        thread_manager,
-        root_context,
-        metadata,
-        file_system,
-        scope,
-        _task_permit,
-    )
-    .await
-}
-
 pub(crate) async fn execute_queued_worker_task(
     thread_manager: Option<Arc<ThreadManager>>,
     root_context: Arc<ProjectAgentRootContext>,
     mut metadata: ProjectAgentTaskMetadata,
+    semantic_task_id: Option<ProjectTaskId>,
     file_system: &dyn ExecutorFileSystem,
     scope: ProjectAgentFileSystemScope<'_>,
     _task_permit: OwnedSemaphorePermit,
@@ -136,6 +71,7 @@ pub(crate) async fn execute_queued_worker_task(
                 thread_manager,
                 Arc::clone(&root_context),
                 &mut metadata,
+                semantic_task_id.as_ref(),
                 file_system,
                 scope,
             )
@@ -184,6 +120,7 @@ async fn run_worker(
     thread_manager: Arc<ThreadManager>,
     root_context: Arc<ProjectAgentRootContext>,
     metadata: &mut ProjectAgentTaskMetadata,
+    semantic_task_id: Option<&ProjectTaskId>,
     file_system: &dyn ExecutorFileSystem,
     scope: ProjectAgentFileSystemScope<'_>,
 ) -> WorkerExecution {
@@ -218,6 +155,20 @@ async fn run_worker(
     {
         return WorkerExecution {
             result: host_failed_result(&agent_id, &task_id, &error),
+            phase: ProjectAgentTaskPhase::Failed,
+        };
+    }
+    if let Some(semantic_task_id) = semantic_task_id
+        && let Err(error) = crate::task_workspace::bind_worker_session(
+            root_context.as_ref(),
+            semantic_task_id,
+            &task_id,
+            worker.thread_id,
+        )
+        .await
+    {
+        return WorkerExecution {
+            result: host_failed_result(&agent_id, &task_id, &error.to_string()),
             phase: ProjectAgentTaskPhase::Failed,
         };
     }
@@ -366,14 +317,8 @@ pub(crate) async fn load_or_start_worker(
             allow_provider_model_fallback: false,
             initial_history: InitialHistory::New,
             history_mode: None,
-            session_source: Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-                parent_thread_id: root_context.thread_id,
-                depth: 1,
-                agent_path: AgentPath::root().join(agent_id.as_str()).ok(),
-                agent_nickname: Some(agent_id.to_string()),
-                agent_role: Some(format!("project-agent:{agent_id}")),
-            })),
-            thread_source: Some(ThreadSource::Subagent),
+            session_source: Some(SessionSource::Custom(format!("project-agent:{agent_id}"))),
+            thread_source: Some(ThreadSource::Feature("project-agent".to_string())),
             dynamic_tools: Vec::new(),
             metrics_service_name: None,
             parent_trace: None,

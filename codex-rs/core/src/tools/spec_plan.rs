@@ -374,6 +374,11 @@ fn multi_agent_v2_enabled(turn_context: &TurnContext) -> bool {
 }
 
 fn collab_tools_enabled(turn_context: &TurnContext) -> bool {
+    if turn_context.collaboration_surface_policy
+        == codex_extension_api::CollaborationSurfacePolicy::Disabled
+    {
+        return false;
+    }
     match turn_context.multi_agent_version {
         MultiAgentVersion::Disabled => false,
         MultiAgentVersion::V1 => !exceeds_thread_spawn_depth_limit(

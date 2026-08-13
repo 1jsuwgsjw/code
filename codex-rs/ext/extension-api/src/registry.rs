@@ -3,6 +3,8 @@ use std::sync::Arc;
 use codex_protocol::protocol::ReviewDecision;
 
 use crate::ApprovalReviewContributor;
+use crate::CollaborationSurfaceContributor;
+use crate::CollaborationSurfacePolicy;
 use crate::ConfigContributor;
 use crate::ContextContributor;
 use crate::ExtensionData;
@@ -36,6 +38,7 @@ pub struct ExtensionRegistryBuilder<C: Sync> {
     tool_visibility_contributors: Vec<Arc<dyn ToolVisibilityContributor>>,
     turn_item_contributors: Vec<Arc<dyn TurnItemContributor>>,
     approval_review_contributors: Vec<Arc<dyn ApprovalReviewContributor>>,
+    collaboration_surface_contributors: Vec<Arc<dyn CollaborationSurfaceContributor>>,
 }
 
 impl<C: Sync> Default for ExtensionRegistryBuilder<C> {
@@ -48,6 +51,7 @@ impl<C: Sync> Default for ExtensionRegistryBuilder<C> {
             token_usage_contributors: Vec::new(),
             skill_invocation_contributors: Vec::new(),
             approval_review_contributors: Vec::new(),
+            collaboration_surface_contributors: Vec::new(),
             context_contributors: Vec::new(),
             mcp_server_contributors: Vec::new(),
             turn_input_contributors: Vec::new(),
@@ -81,6 +85,14 @@ impl<C: Sync> ExtensionRegistryBuilder<C> {
     /// Registers one approval-review contributor.
     pub fn approval_review_contributor(&mut self, contributor: Arc<dyn ApprovalReviewContributor>) {
         self.approval_review_contributors.push(contributor);
+    }
+
+    /// Registers one thread-scoped generic collaboration-surface contributor.
+    pub fn collaboration_surface_contributor(
+        &mut self,
+        contributor: Arc<dyn CollaborationSurfaceContributor>,
+    ) {
+        self.collaboration_surface_contributors.push(contributor);
     }
 
     /// Registers one thread-lifecycle contributor.
@@ -159,6 +171,7 @@ impl<C: Sync> ExtensionRegistryBuilder<C> {
             token_usage_contributors: self.token_usage_contributors,
             skill_invocation_contributors: self.skill_invocation_contributors,
             approval_review_contributors: self.approval_review_contributors,
+            collaboration_surface_contributors: self.collaboration_surface_contributors,
             context_contributors: self.context_contributors,
             mcp_server_contributors: self.mcp_server_contributors,
             turn_input_contributors: self.turn_input_contributors,
@@ -186,12 +199,33 @@ pub struct ExtensionRegistry<C: Sync> {
     tool_visibility_contributors: Vec<Arc<dyn ToolVisibilityContributor>>,
     turn_item_contributors: Vec<Arc<dyn TurnItemContributor>>,
     approval_review_contributors: Vec<Arc<dyn ApprovalReviewContributor>>,
+    collaboration_surface_contributors: Vec<Arc<dyn CollaborationSurfaceContributor>>,
 }
 
 impl<C: Sync> ExtensionRegistry<C> {
     /// Returns the host event sink retained by this registry.
     pub fn event_sink(&self) -> Arc<dyn ExtensionEventSink> {
         Arc::clone(&self.event_sink)
+    }
+
+    /// Resolves whether generic collaboration tools and context remain enabled for one thread.
+    pub fn collaboration_surface_policy(
+        &self,
+        session_store: &ExtensionData,
+        thread_store: &ExtensionData,
+    ) -> CollaborationSurfacePolicy {
+        if self
+            .collaboration_surface_contributors
+            .iter()
+            .any(|contributor| {
+                contributor.policy(session_store, thread_store)
+                    == CollaborationSurfacePolicy::Disabled
+            })
+        {
+            CollaborationSurfacePolicy::Disabled
+        } else {
+            CollaborationSurfacePolicy::Enabled
+        }
     }
 
     /// Returns the registered thread-lifecycle contributors.

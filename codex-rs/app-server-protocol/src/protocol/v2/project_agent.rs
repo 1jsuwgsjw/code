@@ -73,6 +73,8 @@ pub struct ThreadProjectAgentStartResponse {
 pub struct ThreadProjectAgentFollowUpParams {
     pub thread_id: String,
     pub agent_id: String,
+    #[ts(optional = nullable)]
+    pub session_thread_id: Option<String>,
     pub message: String,
 }
 
@@ -253,6 +255,7 @@ pub struct ProjectTask {
     pub status: ProjectTaskStatus,
     pub executor: ProjectTaskExecutor,
     pub execution_task_id: Option<String>,
+    pub session_thread_id: Option<String>,
     pub result: Option<ProjectTaskResult>,
     pub evaluation: Option<ProjectTaskEvaluation>,
     pub created_at: i64,

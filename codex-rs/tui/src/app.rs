@@ -497,6 +497,12 @@ struct InitialHistoryReplayBuffer {
     render_from_transcript_tail: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProjectAgentConversationOrigin {
+    root_thread_id: ThreadId,
+    task_id: String,
+}
+
 pub(crate) struct App {
     model_catalog: Arc<ModelCatalog>,
     pub(crate) session_telemetry: SessionTelemetry,
@@ -569,6 +575,7 @@ pub(crate) struct App {
     active_thread_id: Option<ThreadId>,
     active_thread_rx: Option<mpsc::Receiver<ThreadBufferedEvent>>,
     primary_thread_id: Option<ThreadId>,
+    project_agent_conversation_origin: Option<ProjectAgentConversationOrigin>,
     last_subagent_backfill_attempt: Option<ThreadId>,
     primary_session_configured: Option<ThreadSessionState>,
     pending_primary_events: VecDeque<ThreadBufferedEvent>,
@@ -1054,6 +1061,7 @@ See the Codex keymap documentation for supported actions and examples."
             active_thread_id: None,
             active_thread_rx: None,
             primary_thread_id: None,
+            project_agent_conversation_origin: None,
             last_subagent_backfill_attempt: None,
             primary_session_configured: None,
             pending_primary_events: VecDeque::new(),

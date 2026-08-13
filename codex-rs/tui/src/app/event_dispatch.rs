@@ -821,7 +821,7 @@ impl App {
                     .await;
             }
             AppEvent::ProjectAgentWorkbench { thread_id, action } => {
-                self.handle_project_agent_workbench_action(app_server, thread_id, action)
+                self.handle_project_agent_workbench_action(tui, app_server, thread_id, action)
                     .await;
             }
             AppEvent::ProjectTaskExecutionFinished {

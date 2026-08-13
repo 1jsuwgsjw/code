@@ -326,6 +326,7 @@ pub enum ThreadItem {
         status: DynamicToolCallStatus,
         content_items: Option<Vec<DynamicToolCallOutputContentItem>>,
         success: Option<bool>,
+        error: Option<String>,
         /// The duration of the dynamic tool call in milliseconds.
         #[ts(type = "number | null")]
         duration_ms: Option<i64>,
@@ -869,6 +870,7 @@ impl From<CoreTurnItem> for ThreadItem {
                         .collect()
                 }),
                 success: call.success,
+                error: call.error,
                 duration_ms: call
                     .duration
                     .and_then(|duration| i64::try_from(duration.as_millis()).ok()),

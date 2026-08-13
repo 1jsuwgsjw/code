@@ -2262,6 +2262,112 @@ fn plan_update_does_not_split_url_like_tokens_in_note_or_step() {
 }
 
 #[test]
+fn active_dynamic_tool_call_snapshot() {
+    let cell = new_active_dynamic_tool_call(
+        "dynamic-active".to_string(),
+        DynamicToolInvocation {
+            namespace: Some("agent".to_string()),
+            tool: "query".to_string(),
+            arguments: json!({"task": "say hello"}),
+        },
+        /*animations_enabled*/ false,
+    );
+    let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
+
+    insta::assert_snapshot!(rendered, @r###"
+    • Calling agent.query
+      └ arguments: {"task": "say hello"}
+    "###);
+}
+
+#[test]
+fn completed_dynamic_tool_call_snapshot() {
+    let mut cell = new_active_dynamic_tool_call(
+        "dynamic-complete".to_string(),
+        DynamicToolInvocation {
+            namespace: Some("x".to_string()),
+            tool: "lookup".to_string(),
+            arguments: json!({"id": "ABC-123"}),
+        },
+        /*animations_enabled*/ false,
+    );
+    cell.complete(
+        Duration::from_millis(42),
+        Some(vec![
+            codex_app_server_protocol::DynamicToolCallOutputContentItem::InputText {
+                text: "Ticket is open".to_string(),
+            },
+            codex_app_server_protocol::DynamicToolCallOutputContentItem::InputImage {
+                image_url: "data:image/png;base64,AAAA".to_string(),
+            },
+        ]),
+        Some(true),
+        None,
+    );
+    let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
+
+    insta::assert_snapshot!(rendered, @r###"
+    • Completed x.lookup (0.0s)
+      └ arguments: {"id": "ABC-123"}
+        output: Ticket is open
+        [image] data:image/png;base64,AAAA
+    "###);
+}
+
+#[test]
+fn failed_dynamic_tool_call_snapshot() {
+    let mut cell = new_active_dynamic_tool_call(
+        "dynamic-failed".to_string(),
+        DynamicToolInvocation {
+            namespace: Some("agent".to_string()),
+            tool: "query".to_string(),
+            arguments: json!({"task": "say hello"}),
+        },
+        /*animations_enabled*/ false,
+    );
+    cell.complete(
+        Duration::from_millis(12),
+        Some(Vec::new()),
+        Some(false),
+        Some("worker session failed".to_string()),
+    );
+    let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
+
+    insta::assert_snapshot!(rendered, @r###"
+    • Failed agent.query (0.0s)
+      └ arguments: {"task": "say hello"}
+        error: worker session failed
+    "###);
+}
+
+#[test]
+fn dynamic_tool_call_truncation_snapshot() {
+    let mut cell = new_active_dynamic_tool_call(
+        "dynamic-truncated".to_string(),
+        DynamicToolInvocation {
+            namespace: Some("x".to_string()),
+            tool: "large".to_string(),
+            arguments: json!({"value": "a".repeat(9 * 1024)}),
+        },
+        /*animations_enabled*/ false,
+    );
+    cell.complete(
+        Duration::from_millis(1),
+        Some(vec![
+            codex_app_server_protocol::DynamicToolCallOutputContentItem::InputText {
+                text: "b".repeat(17 * 1024),
+            },
+        ]),
+        Some(true),
+        None,
+    );
+    let rendered = render_lines(&cell.display_lines(/*width*/ 40)).join("\n");
+
+    insta::assert_snapshot!(rendered);
+    assert_eq!(rendered.matches("[truncated]").count(), 2);
+}
+
+#[test]
 fn research_state_update_renders_revision_and_entries() {
     let cell = new_research_state_update(
         codex_app_server_protocol::TurnResearchStateUpdatedNotification {

@@ -295,6 +295,8 @@ use crate::exec_command::split_command_string;
 use crate::exec_command::strip_bash_lc_and_escape;
 use crate::get_git_diff::get_git_diff;
 use crate::history_cell;
+use crate::history_cell::DynamicToolCallCell;
+use crate::history_cell::DynamicToolInvocation;
 use crate::history_cell::HistoryCell;
 use crate::history_cell::HistoryRenderMode;
 use crate::history_cell::HookCell;
@@ -1387,6 +1389,8 @@ impl ChatWidget {
             if let Some(exec) = cell.as_any_mut().downcast_mut::<ExecCell>() {
                 exec.mark_failed();
             } else if let Some(tool) = cell.as_any_mut().downcast_mut::<McpToolCallCell>() {
+                tool.mark_failed();
+            } else if let Some(tool) = cell.as_any_mut().downcast_mut::<DynamicToolCallCell>() {
                 tool.mark_failed();
             }
             self.add_boxed_history(cell);

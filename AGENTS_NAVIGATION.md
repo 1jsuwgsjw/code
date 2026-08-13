@@ -282,7 +282,8 @@ Important variations:
     `maintain`;
 - Runtime extension: `codex-rs/ext/project-agents/`
   - representative symbols: `ProjectAgentExtension`, `ProjectAgentRootContext`,
-    `ProjectAgentWorkerContext`, `list_thread_project_agents`, `read_thread_project_agent`,
+    `ProjectAgentWorkerContext`, `CollaborationSurfacePolicy`,
+    `list_thread_project_agents`, `read_thread_project_agent`,
     `read_thread_project_task_workspace`, `create_thread_project_root_task`,
     `create_thread_project_child_task`, `append_thread_project_task_requirement`,
     `start_thread_project_task_execution`, `record_thread_project_task_result`,
@@ -298,13 +299,29 @@ Important variations:
     persistence: `codex-rs/ext/project-agents/src/worker.rs`;
   - semantic task-workspace mutation, execution binding, and result writeback:
     `codex-rs/ext/project-agents/src/task_workspace.rs`;
+  - generic collaboration suppression is thread-scoped rather than inferred from
+    `SessionSource`: the extension contributor lives in
+    `codex-rs/ext/project-agents/src/state.rs`, the shared contract and registry owner live in
+    `codex-rs/ext/extension-api/src/collaboration_surface.rs` and
+    `codex-rs/ext/extension-api/src/registry.rs`, and core consumers live in
+    `codex-rs/core/src/session/multi_agents.rs` and `codex-rs/core/src/tools/spec_plan.rs`;
 - App-server surface: `thread/projectAgent/list`, `thread/projectAgent/read`,
   `thread/projectAgent/start`,
   `thread/projectAgent/followUp`, `thread/projectAgent/terminate`,
   `thread/projectAgent/retry`, `thread/projectAgent/rebuild`,
   `thread/projectAgentMaintenance/run`, and `thread/projectAgentMaintenance/statusUpdated`;
-- TUI surfaces: `/agents` opens a searchable `@agent-name` roster/detail/control workbench;
-  `/agents-maintain` applies pending maintenance, with reminders deferred while a turn is active.
+- TUI surface: `/agent` opens the project task-tree workbench. Every semantic task node remains
+  selectable; Enter opens its bound worker thread when `sessionThreadId` exists, and otherwise
+  reports that the task has not started or has no bound worker session. The task tree is navigation;
+  normal thread routing owns the independent worker conversation and its composer continues on the
+  same thread. Generic sub-agent picker aliases are not the project-AGENT interface.
+- Dynamic project-tool history is represented by app-server
+  `ThreadItem::DynamicToolCall` (`codex-rs/app-server-protocol/src/protocol/v2/item.rs` and
+  `codex-rs/app-server-protocol/src/protocol/thread_history.rs`) and rendered consistently for live,
+  replayed, and loaded transcripts by `codex-rs/tui/src/history_cell/dynamic_tool.rs`,
+  `codex-rs/tui/src/chatwidget/tool_lifecycle.rs`, `codex-rs/tui/src/chatwidget/replay.rs`, and
+  `codex-rs/tui/src/thread_transcript.rs`.
+- `/agents-maintain` applies pending maintenance, with reminders deferred while a turn is active.
 - Cross-executor project-root discovery reuses
   `codex_file_system::find_nearest_ancestor_with_markers` with `PathUri`.
 - On-disk source of truth begins at `AGENT/registry.toml`; discovery never activates an unregistered
@@ -313,9 +330,12 @@ Important variations:
   `codex-rs/ext/project-agents/src/tests.rs`,
   `codex-rs/ext/project-agents/src/task_workspace_tests.rs`, and
   `codex-rs/app-server/tests/suite/v2/project_agents.rs`,
-  `codex-rs/app-server/tests/suite/v2/project_agent_controls.rs`, plus
+  `codex-rs/app-server/tests/suite/v2/project_agent_controls.rs`,
+  `codex-rs/app-server/tests/suite/v2/dynamic_tools.rs`, plus
   `codex-rs/tui/src/chatwidget/tests/project_agent_maintenance_tests.rs` and
-  `codex-rs/tui/src/chatwidget/tests/project_agent_workbench_tests.rs`.
+  `codex-rs/tui/src/chatwidget/tests/project_agent_workbench_tests.rs`,
+  `codex-rs/tui/src/chatwidget/tests/history_replay.rs`, and
+  `codex-rs/tui/src/history_cell/tests.rs`.
 - Authoritative validation runs in GitHub Actions:
   `cd codex-rs && just test -p codex-project-agents`, `just test -p codex-cli`,
   `just test -p codex-project-agents-extension`, `just test -p codex-app-server-protocol`,

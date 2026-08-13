@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 const MAX_TASK_BYTES: usize = 16 * 1024;
-const MAX_THREAD_ID_BYTES: usize = 128;
+pub(crate) const MAX_THREAD_ID_BYTES: usize = 128;
 const MAX_TASK_LIST_ITEMS: usize = 100;
 const DEFAULT_TASK_LIST_ITEMS: usize = 25;
 
@@ -129,7 +129,10 @@ impl Default for ProjectAgentTaskListLimit {
     }
 }
 
-fn validate_thread_id(field: &'static str, value: &str) -> Result<(), ProjectAgentValidationError> {
+pub(crate) fn validate_thread_id(
+    field: &'static str,
+    value: &str,
+) -> Result<(), ProjectAgentValidationError> {
     let valid = !value.is_empty()
         && value.len() <= MAX_THREAD_ID_BYTES
         && value.chars().all(|character| !character.is_control());

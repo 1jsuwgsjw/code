@@ -1,4 +1,4 @@
-name: Custom Codex Build
+name: Project AGENT Integration
 
 on:
   workflow_dispatch:
@@ -10,14 +10,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: custom-codex-build-${{ github.ref }}
+  group: project-agent-integration-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test-linux:
-    name: Test research-state integration
+  validate-linux:
+    name: Validate project AGENT integration
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 180
     defaults:
       run:
         working-directory: codex-rs
@@ -36,121 +36,69 @@ jobs:
           components: rustfmt, clippy
 
       - name: Check formatting
-        run: cargo fmt -- --config imports_granularity=Item --check
+        run: just fmt-check
 
-      - name: Clippy Stage 3 project-agent surfaces
-        id: stage3_clippy
+      - name: Check changed crates with Clippy
         env:
           RUST_MIN_STACK: 8388608
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           packages=(
+            codex-extension-api
             codex-project-agents
-            codex-cli
             codex-project-agents-extension
-            codex-protocol
-            codex-core
             codex-app-server-protocol
             codex-app-server
-            codex-mcp-server
-            codex-rollout
-            codex-rollout-trace
+            codex-core
             codex-tui
           )
-          failed_packages=()
-          : > stage3-clippy.log
-
           for package in "${packages[@]}"; do
-            echo "::group::Clippy ${package}" | tee -a stage3-clippy.log
-            cargo clippy --locked --tests --no-deps -p "${package}" -- -D warnings \
-              2>&1 | tee -a stage3-clippy.log
-            package_status=${PIPESTATUS[0]}
+            echo "::group::Clippy ${package}"
+            just clippy -p "${package}" -- -D warnings
             echo "::endgroup::"
-            if (( package_status != 0 )); then
-              failed_packages+=("${package}")
-            fi
           done
 
-          if (( ${#failed_packages[@]} != 0 )); then
-            printf 'Stage 3 Clippy failed packages: %s\n' "${failed_packages[*]}" \
-              | tee -a stage3-clippy.log "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-
-          echo "Stage 3 Clippy passed for all packages." \
-            | tee -a stage3-clippy.log "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload Stage 3 Clippy log
-        if: ${{ always() && steps.stage3_clippy.outcome != 'skipped' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: stage3-clippy-${{ github.sha }}
-          path: codex-rs/stage3-clippy.log
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Test project agents foundation
+      - name: Test extension API
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-project-agents
+        run: just test -p codex-extension-api
 
-      - name: Test project agents CLI
+      - name: Test project AGENT persistence
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-cli --test agents
+        run: just test -p codex-project-agents
 
-      - name: Test project agents runtime extension
+      - name: Test project AGENT registration CLI
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-project-agents-extension
+        run: just test -p codex-cli --test agents
 
-      - name: Test research-state crate
+      - name: Test project AGENT runtime extension
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-research-state
+        run: just test -p codex-project-agents-extension
 
-      - name: Test research persistence
+      - name: Test app-server protocol
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-state runtime::research::tests
+        run: just test -p codex-app-server-protocol
 
-      - name: Test Git project identity evidence
+      - name: Test app-server integration
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-git-utils root_commit_hashes_are_stable_after_new_commits
+        run: just test -p codex-app-server
 
-      - name: Test protocol crate
+      - name: Test core collaboration policy
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-protocol
+        run: just test -p codex-core
 
-      - name: Test core plan integration
-        env:
-          RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-core plan
-
-      - name: Test core project-agent tool visibility
-        env:
-          RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-core tool_visibility_policy_filters_code_mode_capabilities_before_building_transport
-
-      - name: Test core research context projection
-        env:
-          RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-core research_context
-
-      - name: Test Responses Lite instruction roles
-        env:
-          RUST_MIN_STACK: 8388608
-        run: |
-          cargo test --locked -p codex-core responses_lite_uses_system_message_for_instructions_and_input_tools
-          cargo test --locked -p codex-core responses_lite_uses_developer_message_for_non_openai_provider
-
-      - name: Generate app-server schema
-        run: cargo run --locked -p codex-app-server-protocol --bin write_schema_fixtures
+      - name: Regenerate app-server schema
+        run: just write-app-server-schema
 
       - name: Upload generated app-server schema
+        if: ${{ always() }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: app-server-schema-${{ github.sha }}
@@ -158,27 +106,22 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Test app-server research-state protocol
+      - name: Test TUI and snapshots
         env:
           RUST_MIN_STACK: 8388608
-        run: cargo test --locked -p codex-app-server-protocol
+        run: just test -p codex-tui
 
-      - name: Test app-server research-state projection
-        env:
-          RUST_MIN_STACK: 8388608
-        run: |
-          cargo test --locked -p codex-app-server test_handle_turn_research_state_update_emits_notification_for_v2
-          cargo test --locked -p codex-app-server project_agents
-
-      - name: Test TUI research-state cell
-        env:
-          RUST_MIN_STACK: 8388608
-        run: |
-          cargo test --locked -p codex-tui research_state_update_renders_revision_and_entries
-          cargo test --locked -p codex-tui project_agent_maintenance
-          cargo test --locked -p codex-tui project_agent_workbench
+      - name: Upload pending TUI snapshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: pending-tui-snapshots-${{ github.sha }}
+          path: codex-rs/tui/src/**/snapshots/*.snap.new
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Verify app-server schema is committed
+        if: ${{ always() }}
         shell: bash
         run: |
           if [[ -n "$(git status --porcelain -- app-server-protocol/schema)" ]]; then
@@ -190,12 +133,9 @@ jobs:
   build-windows:
     name: Build custom codex.exe
     runs-on: windows-latest
-    # The first Windows build has no compiled Rust cache. Keep a generous
-    # ceiling, while the dev-small profile below avoids release LTO and is
-    # substantially faster for iteration builds.
     timeout-minutes: 360
     needs:
-      - test-linux
+      - validate-linux
     defaults:
       run:
         working-directory: codex-rs

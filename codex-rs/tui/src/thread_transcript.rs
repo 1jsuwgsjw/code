@@ -104,6 +104,11 @@ pub(crate) fn thread_to_transcript_cells(
                     )));
                 }
             }
+            item @ ThreadItem::DynamicToolCall { .. } => {
+                if let Some(cell) = crate::history_cell::dynamic_tool_call_cell_from_item(item) {
+                    cells.push(Arc::new(cell));
+                }
+            }
             other => {
                 if let Some(cell) = fallback_transcript_cell(other) {
                     cells.push(Arc::new(cell));
@@ -178,18 +183,6 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
                 .dim()
                 .into(),
         ],
-        ThreadItem::DynamicToolCall {
-            namespace,
-            tool,
-            status,
-            ..
-        } => {
-            let name = namespace
-                .as_ref()
-                .map(|namespace| format!("{namespace}/{tool}"))
-                .unwrap_or_else(|| tool.clone());
-            vec![format!("tool: {name} · {status:?}").dim().into()]
-        }
         ThreadItem::CollabAgentToolCall { tool, status, .. } => {
             vec![format!("agent tool: {tool:?} · {status:?}").dim().into()]
         }
@@ -230,6 +223,7 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
         | ThreadItem::AgentMessage { .. }
         | ThreadItem::Plan { .. }
         | ThreadItem::Reasoning { .. }
+        | ThreadItem::DynamicToolCall { .. }
         | ThreadItem::Sleep { .. } => return None,
     };
     (!lines.is_empty()).then(|| PlainHistoryCell::new(lines))

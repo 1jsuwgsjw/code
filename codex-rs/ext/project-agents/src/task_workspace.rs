@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use codex_core::CodexThread;
 use codex_core::ThreadManager;
+use codex_exec_server::ExecutorFileSystem;
 use codex_project_agents::PROJECT_AGENT_SCHEMA_VERSION;
 use codex_project_agents::ProjectAgentFileSystemScope;
 use codex_project_agents::ProjectAgentId;
@@ -15,6 +16,7 @@ use codex_project_agents::ProjectTaskId;
 use codex_project_agents::ProjectTaskNode;
 use codex_project_agents::ProjectTaskResult;
 use codex_project_agents::ProjectTaskResultStatus;
+use codex_project_agents::ProjectTaskStatus;
 use codex_project_agents::ProjectTaskSuggestedChild;
 use codex_project_agents::ProjectTaskWorkspace;
 use codex_project_agents::ProjectTaskWorkspaceError;
@@ -106,6 +108,182 @@ pub async fn evaluate_thread_project_task(
     Some(set_evaluation(&context, task_id, evaluation).await)
 }
 
+pub(crate) async fn execute_direct_delegate_task(
+    thread_manager: Option<Arc<ThreadManager>>,
+    context: Arc<ProjectAgentRootContext>,
+    executor: ProjectTaskExecutor,
+    agent_id: ProjectAgentId,
+    objective: String,
+    file_system: &dyn ExecutorFileSystem,
+    scope: ProjectAgentFileSystemScope<'_>,
+) -> ProjectAgentTaskResult {
+    let semantic_task_id =
+        ProjectTaskId::new(Uuid::now_v7().to_string()).expect("UUID project task IDs are valid");
+    let semantic_task = match create_task_with_id(
+        context.as_ref(),
+        semantic_task_id.clone(),
+        None,
+        direct_delegate_title(&objective),
+        objective,
+        executor,
+    )
+    .await
+    {
+        Ok(task) => task,
+        Err(error) => {
+            return crate::delegate::host_failed_result(
+                &agent_id,
+                semantic_task_id.as_str(),
+                &format!("failed to create the semantic project task: {error}"),
+            );
+        }
+    };
+    let created_at = unix_timestamp().max(semantic_task.updated_at);
+    let mut execution = ProjectAgentTaskMetadata {
+        schema_version: PROJECT_AGENT_SCHEMA_VERSION,
+        agent_id: agent_id.clone(),
+        task_id: semantic_task.task_id.to_string(),
+        task: task_prompt(&semantic_task),
+        phase: ProjectAgentTaskPhase::Queued,
+        session_thread_id: None,
+        parent_thread_id: context.thread_id.to_string(),
+        attempt: 1,
+        created_at,
+        updated_at: created_at,
+    };
+    let task_gate = context.task_gate(&agent_id).await;
+    let task_permit = match task_gate.acquire_owned().await {
+        Ok(permit) => permit,
+        Err(error) => {
+            return fail_direct_delegate_task(
+                context.as_ref(),
+                &semantic_task.task_id,
+                &mut execution,
+                file_system,
+                scope,
+                &format!("project AGENT task gate is unavailable: {error}"),
+            )
+            .await;
+        }
+    };
+    let prepared: Result<(), ProjectAgentControlError> = async {
+        let _permit = workspace_permit(&context).await?;
+        let mut workspace = load_workspace(&context).await?;
+        workspace
+            .start_execution(
+                &semantic_task.task_id,
+                agent_id.clone(),
+                semantic_task.task_id.to_string(),
+                created_at,
+            )
+            .map_err(workspace_error)?;
+        persist_workspace(&context, &workspace).await?;
+        persist_task_phase(
+            context.as_ref(),
+            file_system,
+            scope,
+            &mut execution,
+            ProjectAgentTaskPhase::Queued,
+        )
+        .await
+        .map_err(ProjectAgentControlError::Internal)?;
+        Ok(())
+    }
+    .await;
+    if let Err(error) = prepared {
+        return fail_direct_delegate_task(
+            context.as_ref(),
+            &semantic_task.task_id,
+            &mut execution,
+            file_system,
+            scope,
+            &error.to_string(),
+        )
+        .await;
+    }
+    let result = execute_queued_worker_task(
+        thread_manager,
+        Arc::clone(&context),
+        execution,
+        Some(semantic_task.task_id.clone()),
+        file_system,
+        scope,
+        task_permit,
+    )
+    .await;
+    if let Err(error) =
+        write_back_worker_result(&context, &semantic_task.task_id, result.clone()).await
+    {
+        let failed =
+            crate::delegate::host_failed_result(&agent_id, &result.task_id, &error.to_string());
+        if let Err(retry_error) =
+            write_back_worker_result(&context, &semantic_task.task_id, failed.clone()).await
+        {
+            tracing::error!(
+                %retry_error,
+                task_id = %semantic_task.task_id,
+                execution_task_id = %result.task_id,
+                "failed to terminate a semantic project AGENT task after result writeback failure"
+            );
+        }
+        return failed;
+    }
+    result
+}
+
+async fn fail_direct_delegate_task(
+    context: &ProjectAgentRootContext,
+    semantic_task_id: &ProjectTaskId,
+    execution: &mut ProjectAgentTaskMetadata,
+    file_system: &dyn ExecutorFileSystem,
+    scope: ProjectAgentFileSystemScope<'_>,
+    error: &str,
+) -> ProjectAgentTaskResult {
+    let result =
+        crate::delegate::host_failed_result(&execution.agent_id, &execution.task_id, error);
+    if let Err(metadata_error) = persist_task_phase(
+        context,
+        file_system,
+        scope,
+        execution,
+        ProjectAgentTaskPhase::Failed,
+    )
+    .await
+    {
+        tracing::error!(
+            %metadata_error,
+            task_id = %semantic_task_id,
+            execution_task_id = %execution.task_id,
+            "failed to persist terminal project AGENT execution metadata"
+        );
+    }
+    if let Err(write_error) =
+        write_back_worker_result(context, semantic_task_id, result.clone()).await
+    {
+        tracing::error!(
+            %write_error,
+            task_id = %semantic_task_id,
+            execution_task_id = %execution.task_id,
+            "failed to terminate a semantic project AGENT task after delegation failure"
+        );
+    }
+    if let Err(result_error) = context
+        .store
+        .persist_result(file_system, scope, &result)
+        .await
+    {
+        tracing::error!(
+            %result_error,
+            task_id = %semantic_task_id,
+            execution_task_id = %execution.task_id,
+            "failed to persist terminal project AGENT execution result"
+        );
+    } else {
+        context.emit_maintenance_status().await;
+    }
+    result
+}
+
 async fn read_workspace(
     context: &ProjectAgentRootContext,
 ) -> Result<ProjectTaskWorkspace, ProjectAgentControlError> {
@@ -126,9 +304,20 @@ async fn create_task(
     objective: String,
     executor: ProjectTaskExecutor,
 ) -> Result<ProjectTaskNode, ProjectAgentControlError> {
+    let task_id = ProjectTaskId::new(Uuid::now_v7().to_string()).map_err(workspace_error)?;
+    create_task_with_id(context, task_id, parent_task_id, title, objective, executor).await
+}
+
+async fn create_task_with_id(
+    context: &ProjectAgentRootContext,
+    task_id: ProjectTaskId,
+    parent_task_id: Option<ProjectTaskId>,
+    title: String,
+    objective: String,
+    executor: ProjectTaskExecutor,
+) -> Result<ProjectTaskNode, ProjectAgentControlError> {
     let _permit = workspace_permit(context).await?;
     let mut workspace = load_workspace(context).await?;
-    let task_id = ProjectTaskId::new(Uuid::now_v7().to_string()).map_err(workspace_error)?;
     workspace
         .create_task(
             task_id.clone(),
@@ -218,6 +407,7 @@ async fn start_execution(
             thread_manager,
             Arc::clone(&context),
             execution,
+            Some(semantic_task_id.clone()),
             file_system.as_ref(),
             ProjectAgentFileSystemScope::Unrestricted,
             task_permit,
@@ -228,6 +418,26 @@ async fn start_execution(
         }
     });
     Ok(outcome)
+}
+
+pub(crate) async fn bind_worker_session(
+    context: &ProjectAgentRootContext,
+    task_id: &ProjectTaskId,
+    execution_task_id: &str,
+    session_thread_id: codex_protocol::ThreadId,
+) -> Result<(), ProjectAgentControlError> {
+    let _permit = workspace_permit(context).await?;
+    let mut workspace = load_workspace(context).await?;
+    let updated_at = task_update_timestamp(&workspace, task_id)?;
+    workspace
+        .bind_execution_session(
+            task_id,
+            execution_task_id,
+            session_thread_id.to_string(),
+            updated_at,
+        )
+        .map_err(workspace_error)?;
+    persist_workspace(context, &workspace).await
 }
 
 async fn record_result(
@@ -268,6 +478,33 @@ async fn write_back_worker_result(
     let _permit = workspace_permit(context).await?;
     let mut workspace = load_workspace(context).await?;
     let completed_at = task_update_timestamp(&workspace, task_id)?;
+    match task(&workspace, task_id)?.status {
+        ProjectTaskStatus::Pending => workspace
+            .start_execution(
+                task_id,
+                result.agent_id.clone(),
+                result.task_id.clone(),
+                completed_at,
+            )
+            .map_err(workspace_error)?,
+        ProjectTaskStatus::InProgress => {
+            let semantic_task = task(&workspace, task_id)?;
+            ensure_executor_matches(semantic_task, &result.agent_id)?;
+            let existing_execution_task_id = semantic_task.execution_task_id.clone();
+            if existing_execution_task_id.as_deref() != Some(result.task_id.as_str()) {
+                return Err(ProjectAgentControlError::InvalidRequest(format!(
+                    "semantic task `{task_id}` is bound to execution `{:?}`, not `{}`",
+                    existing_execution_task_id, result.task_id
+                )));
+            }
+        }
+        ProjectTaskStatus::Completed
+        | ProjectTaskStatus::Rejected
+        | ProjectTaskStatus::Blocked
+        | ProjectTaskStatus::Failed => {
+            return Ok(());
+        }
+    }
     workspace
         .record_result(task_id, worker_result(result, completed_at))
         .map_err(workspace_error)?;
@@ -394,6 +631,16 @@ fn task_prompt(task: &ProjectTaskNode) -> String {
         }
     }
     take_bytes_at_char_boundary(&prompt, MAX_EXECUTION_TASK_BYTES).to_string()
+}
+
+fn direct_delegate_title(objective: &str) -> String {
+    let first_line = objective.lines().next().unwrap_or_default().trim();
+    let title = take_bytes_at_char_boundary(first_line, 256).trim();
+    if title.is_empty() {
+        "Project AGENT task".to_string()
+    } else {
+        title.to_string()
+    }
 }
 
 fn bounded_items(values: Vec<String>) -> Vec<String> {

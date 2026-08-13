@@ -250,6 +250,9 @@ async fn run_command_tool(
     } else {
         vec![program_string, arguments]
     };
+    #[cfg(windows)]
+    let sandbox = None;
+    #[cfg(not(windows))]
     let sandbox = invocation
         .environments
         .iter()

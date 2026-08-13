@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use codex_extension_api::CollaborationSurfacePolicy;
 use codex_extension_api::ToolVisibilityPolicy;
 use codex_features::Feature;
 use codex_login::AuthManager;
@@ -1381,6 +1382,28 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         direct_model_only
             .exposure(&ToolName::namespaced(MULTI_AGENT_V2_NAMESPACE, "spawn_agent").to_string()),
         ToolExposure::DirectModelOnly
+    );
+}
+
+#[tokio::test]
+async fn disabled_collaboration_surface_removes_generic_agent_tools() {
+    let plan = probe(|turn| {
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        turn.collaboration_surface_policy = CollaborationSurfacePolicy::Disabled;
+    })
+    .await;
+
+    plan.assert_visible_lacks(&[
+        MULTI_AGENT_V1_NAMESPACE,
+        MULTI_AGENT_V2_NAMESPACE,
+        "spawn_agent",
+        "spawn_agents_on_csv",
+    ]);
+    assert!(
+        !plan
+            .registered_names
+            .iter()
+            .any(|name| name.starts_with("collaboration.") || name == "spawn_agents_on_csv")
     );
 }
 

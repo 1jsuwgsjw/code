@@ -7,6 +7,8 @@ use codex_core::ThreadManager;
 use codex_core::config::Config;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecutorFileSystem;
+use codex_extension_api::CollaborationSurfaceContributor;
+use codex_extension_api::CollaborationSurfacePolicy;
 use codex_extension_api::ContextContributor;
 use codex_extension_api::ExtensionData;
 use codex_extension_api::ExtensionEventSink;
@@ -19,6 +21,7 @@ use codex_extension_api::ThreadStartInput;
 use codex_extension_api::ToolCall;
 use codex_extension_api::ToolContributor;
 use codex_extension_api::ToolExecutor;
+use codex_extension_api::ToolName;
 use codex_extension_api::ToolVisibilityContributor;
 use codex_extension_api::ToolVisibilityPolicy;
 use codex_project_agents::ProjectAgentEntry;
@@ -34,6 +37,7 @@ use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::sync::Semaphore;
 
+use crate::delegate::AGENT_NAMESPACE;
 use crate::delegate::ProjectAgentDelegateTool;
 use crate::delegate::worker_context_prompt;
 use crate::events::ProjectAgentEventEmitter;
@@ -273,11 +277,30 @@ impl ContextContributor for ProjectAgentExtension {
         thread_store: &'a ExtensionData,
     ) -> ExtensionFuture<'a, Vec<PromptFragment>> {
         Box::pin(async move {
+            if let Some(context) = thread_store.get::<ProjectAgentWorkerContext>() {
+                return vec![PromptFragment::developer_policy(worker_context_prompt(
+                    &context,
+                ))];
+            }
             thread_store
-                .get::<ProjectAgentWorkerContext>()
+                .get::<ProjectAgentRootContext>()
+                .filter(|context| !context.enabled_agents.is_empty())
                 .map(|context| {
-                    vec![PromptFragment::developer_policy(worker_context_prompt(
-                        &context,
+                    let roster = context
+                        .enabled_agents
+                        .iter()
+                        .map(|entry| {
+                            format!(
+                                "- @{}: {} (call `agent.{}` for real execution)",
+                                entry.definition.id,
+                                entry.definition.description,
+                                entry.definition.id
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    vec![PromptFragment::developer_policy(format!(
+                        "# Project AGENT registry\n\nThe registered project AGENTs below are the only user-facing AGENT system for this project. They are specialist task tools, not generic sub-agents, `/root` children, or collaboration slots. When the user names an available `@agent`, call its matching `agent.<id>` tool instead of answering on its behalf. When asked which AGENTs are available, list this registry.\n\n{roster}"
                     ))]
                 })
                 .unwrap_or_default()
@@ -323,10 +346,56 @@ impl ToolVisibilityContributor for ProjectAgentExtension {
         _session_store: &ExtensionData,
         thread_store: &ExtensionData,
     ) -> ToolVisibilityPolicy {
-        let Some(context) = thread_store.get::<ProjectAgentWorkerContext>() else {
+        if let Some(context) = thread_store.get::<ProjectAgentWorkerContext>() {
+            return ToolVisibilityPolicy::allow_only(worker_visible_tool_names(
+                &context.runtime.tools,
+            ));
+        }
+        let Some(context) = thread_store.get::<ProjectAgentRootContext>() else {
             return ToolVisibilityPolicy::default();
         };
-        ToolVisibilityPolicy::allow_only(worker_visible_tool_names(&context.runtime.tools))
+        let mut policy = ToolVisibilityPolicy::default();
+        let collaboration_namespaces = ["collaboration", "multi_agent_v1"];
+        for namespace in collaboration_namespaces {
+            for name in [
+                "spawn_agent",
+                "send_message",
+                "followup_task",
+                "wait_agent",
+                "interrupt_agent",
+                "list_agents",
+                "send_input",
+                "resume_agent",
+                "close_agent",
+            ] {
+                policy.deny.insert(ToolName::namespaced(namespace, name));
+            }
+        }
+        policy.deny.insert(ToolName::plain("spawn_agent"));
+        policy.deny.insert(ToolName::plain("spawn_agents_on_csv"));
+        for entry in &context.enabled_agents {
+            policy.deny.remove(&ToolName::namespaced(
+                AGENT_NAMESPACE,
+                entry.definition.id.as_str(),
+            ));
+        }
+        policy
+    }
+}
+
+impl CollaborationSurfaceContributor for ProjectAgentExtension {
+    fn policy(
+        &self,
+        _session_store: &ExtensionData,
+        thread_store: &ExtensionData,
+    ) -> CollaborationSurfacePolicy {
+        if thread_store.get::<ProjectAgentRootContext>().is_some()
+            || thread_store.get::<ProjectAgentWorkerContext>().is_some()
+        {
+            CollaborationSurfacePolicy::Disabled
+        } else {
+            CollaborationSurfacePolicy::Enabled
+        }
     }
 }
 
@@ -343,6 +412,7 @@ pub fn install(
         event_sink,
     ));
     registry.thread_lifecycle_contributor(extension.clone());
+    registry.collaboration_surface_contributor(extension.clone());
     registry.prompt_contributor(extension.clone());
     registry.tool_contributor(extension.clone());
     registry.tool_visibility_contributor(extension);

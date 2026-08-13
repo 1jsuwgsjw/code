@@ -157,6 +157,7 @@ fn test_workspace() -> ProjectTaskWorkspace {
                     agent_id: "query".to_string(),
                 },
                 execution_task_id: Some("worker-019".to_string()),
+                session_thread_id: Some("01900000-0000-7000-8000-000000000019".to_string()),
                 result: None,
                 evaluation: None,
                 created_at: 10,
@@ -173,6 +174,7 @@ fn test_workspace() -> ProjectTaskWorkspace {
                     agent_id: "query".to_string(),
                 },
                 execution_task_id: Some("worker-020".to_string()),
+                session_thread_id: Some("01900000-0000-7000-8000-000000000020".to_string()),
                 result: Some(ProjectTaskResult {
                     status: ProjectTaskResultStatus::Completed,
                     summary: "The task tree renders in one workspace.".to_string(),

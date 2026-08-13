@@ -1,6 +1,7 @@
 use crate::PROJECT_AGENT_SCHEMA_VERSION;
 use crate::ProjectAgentId;
 use crate::ProjectAgentValidationError;
+use crate::task::validate_thread_id;
 use crate::types::validate_bounded_text;
 use crate::types::validate_schema;
 use crate::types::validate_task_id;
@@ -125,6 +126,8 @@ pub struct ProjectTaskNode {
     pub status: ProjectTaskStatus,
     pub executor: ProjectTaskExecutor,
     pub execution_task_id: Option<String>,
+    #[serde(default)]
+    pub session_thread_id: Option<String>,
     pub result: Option<ProjectTaskResult>,
     pub evaluation: Option<ProjectTaskEvaluation>,
     pub created_at: i64,
@@ -211,6 +214,7 @@ impl ProjectTaskWorkspace {
             status,
             executor,
             execution_task_id: None,
+            session_thread_id: None,
             result: None,
             evaluation: None,
             created_at,
@@ -259,7 +263,29 @@ impl ProjectTaskWorkspace {
         validate_task_id(&execution_task_id)?;
         task.executor = ProjectTaskExecutor::ProjectAgent { agent_id };
         task.execution_task_id = Some(execution_task_id);
+        task.session_thread_id = None;
         task.status = ProjectTaskStatus::InProgress;
+        task.updated_at = updated_at;
+        self.updated_at = self.updated_at.max(updated_at);
+        Ok(())
+    }
+
+    pub fn bind_execution_session(
+        &mut self,
+        task_id: &ProjectTaskId,
+        execution_task_id: &str,
+        session_thread_id: String,
+        updated_at: i64,
+    ) -> Result<(), ProjectTaskWorkspaceError> {
+        let task = self.task_mut(task_id)?;
+        if task.status != ProjectTaskStatus::InProgress
+            || task.execution_task_id.as_deref() != Some(execution_task_id)
+        {
+            return Err(invalid_state(task, "bind execution session"));
+        }
+        validate_update(task, updated_at)?;
+        validate_thread_id("session_thread_id", &session_thread_id)?;
+        task.session_thread_id = Some(session_thread_id);
         task.updated_at = updated_at;
         self.updated_at = self.updated_at.max(updated_at);
         Ok(())
@@ -385,6 +411,12 @@ impl ProjectTaskNode {
             validate_task_id(execution_task_id)?;
             if !matches!(&self.executor, ProjectTaskExecutor::ProjectAgent { .. }) {
                 return invalid("execution_task_id", "requires a project AGENT executor");
+            }
+        }
+        if let Some(session_thread_id) = self.session_thread_id.as_deref() {
+            validate_thread_id("session_thread_id", session_thread_id)?;
+            if self.execution_task_id.is_none() {
+                return invalid("session_thread_id", "requires an execution task");
             }
         }
         match (&self.result, self.status) {

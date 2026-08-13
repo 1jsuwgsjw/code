@@ -19,6 +19,7 @@ use codex_project_agents::ProjectAgentId;
 use codex_project_agents::ProjectAgentTaskResult;
 use codex_project_agents::ProjectAgentTaskStatus;
 use codex_project_agents::ProjectAgentToolTarget;
+use codex_project_agents::ProjectTaskExecutor;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiNamespace;
@@ -28,11 +29,10 @@ use codex_utils_string::take_bytes_at_char_boundary;
 use serde::Deserialize;
 use serde_json::Value;
 use serde_json::json;
-use uuid::Uuid;
 
 use crate::state::ProjectAgentRootContext;
 use crate::state::ProjectAgentWorkerContext;
-use crate::worker::execute_worker_task;
+use crate::task_workspace::execute_direct_delegate_task;
 
 pub(crate) const AGENT_NAMESPACE: &str = "agent";
 pub(crate) const MAX_TASK_BYTES: usize = 16 * 1024;
@@ -115,7 +115,6 @@ impl ToolExecutor<ToolCall> for ProjectAgentDelegateTool {
                 )));
             }
 
-            let task_id = Uuid::now_v7().to_string();
             let selected_environment = invocation
                 .environments
                 .iter()
@@ -133,11 +132,13 @@ impl ToolExecutor<ToolCall> for ProjectAgentDelegateTool {
                 })
                 .unwrap_or(ProjectAgentFileSystemScope::Unrestricted);
 
-            let result = execute_worker_task(
+            let result = execute_direct_delegate_task(
                 thread_manager.upgrade(),
                 Arc::clone(&context),
+                ProjectTaskExecutor::ProjectAgent {
+                    agent_id: agent_id.clone(),
+                },
                 agent_id,
-                task_id,
                 task,
                 file_system.as_ref(),
                 scope,

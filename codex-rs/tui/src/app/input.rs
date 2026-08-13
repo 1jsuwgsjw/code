@@ -192,6 +192,14 @@ impl App {
         if matches!(key_event.code, KeyCode::Esc)
             && matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat)
         {
+            if self.chat_widget.no_modal_or_popup_active()
+                && self.chat_widget.composer_is_empty()
+                && self
+                    .return_from_project_agent_conversation(tui, app_server)
+                    .await
+            {
+                return;
+            }
             // Esc primes/advances backtracking only in normal (not working) mode
             // with the composer focused and empty. In any other state, forward
             // Esc so the active UI (e.g. status indicator, modals, popups)

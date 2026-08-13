@@ -994,6 +994,98 @@ async fn replayed_in_progress_mcp_tool_call_stays_active() {
 }
 
 #[tokio::test]
+async fn replayed_dynamic_tool_call_renders_full_history() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let _ = drain_insert_history(&mut rx);
+
+    chat.replay_thread_item(
+        AppServerThreadItem::DynamicToolCall {
+            id: "dynamic-1".to_string(),
+            namespace: Some("agent".to_string()),
+            tool: "query".to_string(),
+            arguments: json!({"task": "say hello"}),
+            status: codex_app_server_protocol::DynamicToolCallStatus::Completed,
+            content_items: Some(vec![
+                codex_app_server_protocol::DynamicToolCallOutputContentItem::InputText {
+                    text: "你好".to_string(),
+                },
+            ]),
+            success: Some(true),
+            error: None,
+            duration_ms: Some(25),
+        },
+        "turn-1".to_string(),
+        ReplayKind::ThreadSnapshot,
+    );
+
+    let inserted = drain_insert_history(&mut rx);
+    assert_eq!(inserted.len(), 1);
+    let rendered = lines_to_single_string(&inserted[0]);
+    insta::assert_snapshot!("replayed_dynamic_tool_call", rendered.as_str());
+    assert!(rendered.contains("agent.query"));
+    assert!(rendered.contains("say hello"));
+    assert!(rendered.contains("你好"));
+}
+
+#[tokio::test]
+async fn live_dynamic_tool_call_updates_the_active_card() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let _ = drain_insert_history(&mut rx);
+
+    chat.handle_server_notification(
+        ServerNotification::ItemStarted(ItemStartedNotification {
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            started_at_ms: 0,
+            item: AppServerThreadItem::DynamicToolCall {
+                id: "dynamic-live".to_string(),
+                namespace: Some("x".to_string()),
+                tool: "lookup".to_string(),
+                arguments: json!({"id": "ABC-123"}),
+                status: codex_app_server_protocol::DynamicToolCallStatus::InProgress,
+                content_items: None,
+                success: None,
+                error: None,
+                duration_ms: None,
+            },
+        }),
+        /*replay_kind*/ None,
+    );
+    assert!(active_blob(&chat).contains("Calling x.lookup"));
+
+    chat.handle_server_notification(
+        ServerNotification::ItemCompleted(ItemCompletedNotification {
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            completed_at_ms: 25,
+            item: AppServerThreadItem::DynamicToolCall {
+                id: "dynamic-live".to_string(),
+                namespace: Some("x".to_string()),
+                tool: "lookup".to_string(),
+                arguments: json!({"id": "ABC-123"}),
+                status: codex_app_server_protocol::DynamicToolCallStatus::Completed,
+                content_items: Some(vec![
+                    codex_app_server_protocol::DynamicToolCallOutputContentItem::InputText {
+                        text: "Ticket is open".to_string(),
+                    },
+                ]),
+                success: Some(true),
+                error: None,
+                duration_ms: Some(25),
+            },
+        }),
+        /*replay_kind*/ None,
+    );
+
+    let inserted = drain_insert_history(&mut rx);
+    assert_eq!(inserted.len(), 1);
+    let rendered = lines_to_single_string(&inserted[0]);
+    insta::assert_snapshot!("live_dynamic_tool_call_completed", rendered.as_str());
+    assert!(rendered.contains("Completed x.lookup"));
+    assert!(rendered.contains("Ticket is open"));
+}
+
+#[tokio::test]
 async fn live_reasoning_summary_is_not_rendered_twice_when_item_completes() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.show_welcome_banner = false;

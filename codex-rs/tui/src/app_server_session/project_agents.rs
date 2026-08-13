@@ -102,4 +102,26 @@ impl AppServerSession {
             .await
             .wrap_err("thread/projectAgent/list failed in TUI")
     }
+
+    pub(crate) async fn thread_project_agent_follow_up(
+        &mut self,
+        thread_id: ThreadId,
+        agent_id: &str,
+        session_thread_id: ThreadId,
+        message: String,
+    ) -> Result<protocol::ThreadProjectAgentFollowUpResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::ThreadProjectAgentFollowUp {
+                request_id,
+                params: protocol::ThreadProjectAgentFollowUpParams {
+                    thread_id: thread_id.to_string(),
+                    agent_id: agent_id.to_string(),
+                    session_thread_id: Some(session_thread_id.to_string()),
+                    message,
+                },
+            })
+            .await
+            .wrap_err("thread/projectAgent/followUp failed in TUI")
+    }
 }

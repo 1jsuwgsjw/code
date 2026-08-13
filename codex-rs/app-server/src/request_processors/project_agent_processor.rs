@@ -206,13 +206,31 @@ impl ProjectAgentRequestProcessor {
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         let (_thread_id, thread) = self.loaded_thread(&params.thread_id).await?;
         let agent_id = parse_agent_id(params.agent_id)?;
-        let outcome = codex_project_agents_extension::follow_up_thread_project_agent(
-            self.thread_manager.as_ref(),
-            thread.as_ref(),
-            &agent_id,
-            params.message,
-        )
-        .await
+        let outcome = match params.session_thread_id {
+            Some(session_thread_id) => {
+                let session_thread_id =
+                    ThreadId::from_string(&session_thread_id).map_err(|error| {
+                        invalid_request(format!("invalid session thread id: {error}"))
+                    })?;
+                codex_project_agents_extension::follow_up_thread_project_agent_session(
+                    self.thread_manager.as_ref(),
+                    thread.as_ref(),
+                    &agent_id,
+                    session_thread_id,
+                    params.message,
+                )
+                .await
+            }
+            None => {
+                codex_project_agents_extension::follow_up_thread_project_agent(
+                    self.thread_manager.as_ref(),
+                    thread.as_ref(),
+                    &agent_id,
+                    params.message,
+                )
+                .await
+            }
+        }
         .ok_or_else(|| missing_context(&params.thread_id))?
         .map_err(map_control_error)?;
         Ok(Some(
@@ -732,6 +750,7 @@ fn api_project_task(task: &ProjectTaskNode) -> ProjectTask {
             }
         },
         execution_task_id: task.execution_task_id.clone(),
+        session_thread_id: task.session_thread_id.clone(),
         result: task.result.as_ref().map(api_project_task_result),
         evaluation: task.evaluation.as_ref().map(api_project_task_evaluation),
         created_at: task.created_at,

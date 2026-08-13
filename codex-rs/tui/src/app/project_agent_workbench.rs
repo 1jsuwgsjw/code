@@ -18,6 +18,7 @@ const PROJECT_TASK_WAIT_TIMEOUT: Duration = Duration::from_secs(31 * 60);
 impl App {
     pub(super) async fn handle_project_agent_workbench_action(
         &mut self,
+        tui: &mut crate::tui::Tui,
         app_server: &mut AppServerSession,
         thread_id: ThreadId,
         action: ProjectAgentWorkbenchAction,
@@ -108,11 +109,71 @@ impl App {
                     });
                 });
             }
+            ProjectAgentWorkbenchAction::OpenConversation {
+                task_id,
+                task_title,
+                agent_id,
+                session_thread_id,
+            } => {
+                let session_thread_id = match ThreadId::from_string(&session_thread_id) {
+                    Ok(thread_id) => thread_id,
+                    Err(error) => {
+                        self.chat_widget
+                            .add_error_message(format!("项目 AGENT 会话 ID 无效：{error}"));
+                        return;
+                    }
+                };
+                self.upsert_agent_picker_thread(
+                    session_thread_id,
+                    Some(format!("@{agent_id}")),
+                    Some("project-agent".to_string()),
+                    /*is_closed*/ false,
+                );
+                self.project_agent_conversation_origin =
+                    Some(super::ProjectAgentConversationOrigin {
+                        root_thread_id: thread_id,
+                        task_id,
+                    });
+                if let Err(error) = self
+                    .select_agent_thread(tui, app_server, session_thread_id)
+                    .await
+                {
+                    self.project_agent_conversation_origin = None;
+                    self.chat_widget
+                        .add_error_message(format!("打开项目 AGENT 会话失败：{error}"));
+                    return;
+                }
+                self.chat_widget.set_active_agent_label(Some(format!(
+                    "@{agent_id} · {task_title} · Esc 返回任务树"
+                )));
+            }
             ProjectAgentWorkbenchAction::Refresh(task_id) => {
                 self.open_project_task_workspace(app_server, thread_id, Some(task_id))
                     .await;
             }
         }
+    }
+
+    pub(super) async fn return_from_project_agent_conversation(
+        &mut self,
+        tui: &mut crate::tui::Tui,
+        app_server: &mut AppServerSession,
+    ) -> bool {
+        let Some(origin) = self.project_agent_conversation_origin.take() else {
+            return false;
+        };
+        if let Err(error) = self
+            .select_agent_thread(tui, app_server, origin.root_thread_id)
+            .await
+        {
+            self.project_agent_conversation_origin = Some(origin);
+            self.chat_widget
+                .add_error_message(format!("返回项目任务树失败：{error}"));
+            return true;
+        }
+        self.open_project_task_workspace(app_server, origin.root_thread_id, Some(origin.task_id))
+            .await;
+        true
     }
 
     async fn open_project_task_workspace(

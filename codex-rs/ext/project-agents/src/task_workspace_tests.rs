@@ -8,6 +8,8 @@ use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_extension_api::NoopExtensionEventSink;
 use codex_project_agents::ProjectAgentFileSystemScope;
 use codex_project_agents::ProjectAgentStore;
+use codex_project_agents::ProjectAgentTaskPhase;
+use codex_project_agents::ProjectAgentTaskStatus;
 use codex_project_agents::ProjectTaskEvaluationVerdict;
 use codex_project_agents::ProjectTaskStatus;
 use codex_protocol::ThreadId;
@@ -178,6 +180,82 @@ async fn execution_binding_keeps_worker_lifecycle_inside_one_semantic_task() {
         .await
         .expect("read workspace");
     assert_eq!(workspace.tasks, vec![completed]);
+}
+
+#[tokio::test]
+async fn direct_delegation_failure_terminates_semantic_and_execution_state() {
+    let fixture = TaskWorkspaceFixture::new().await;
+    let agent_id = ProjectAgentId::new("query").expect("agent id");
+    fixture
+        .context
+        .store
+        .create(
+            fixture.context.file_system.as_ref(),
+            ProjectAgentFileSystemScope::Unrestricted,
+            agent_id.clone(),
+            "Query specialist".to_string(),
+        )
+        .await
+        .expect("create project AGENT");
+
+    let result = execute_direct_delegate_task(
+        None,
+        Arc::clone(&fixture.context),
+        ProjectTaskExecutor::ProjectAgent {
+            agent_id: agent_id.clone(),
+        },
+        agent_id.clone(),
+        "Return one bounded finding.".to_string(),
+        fixture.context.file_system.as_ref(),
+        ProjectAgentFileSystemScope::Unrestricted,
+    )
+    .await;
+
+    assert_eq!(result.status, ProjectAgentTaskStatus::Failed);
+    let workspace = read_workspace(fixture.context.as_ref())
+        .await
+        .expect("read workspace");
+    assert_eq!(workspace.tasks.len(), 1);
+    let semantic_task = &workspace.tasks[0];
+    assert_eq!(semantic_task.task_id.as_str(), result.task_id);
+    assert_eq!(semantic_task.status, ProjectTaskStatus::Failed);
+    assert_eq!(
+        semantic_task.execution_task_id.as_deref(),
+        Some(result.task_id.as_str())
+    );
+    assert_eq!(
+        semantic_task.result.as_ref().map(|result| result.status),
+        Some(ProjectTaskResultStatus::Failed)
+    );
+
+    let execution = fixture
+        .context
+        .store
+        .task_metadata(
+            fixture.context.file_system.as_ref(),
+            ProjectAgentFileSystemScope::Unrestricted,
+            &agent_id,
+            &result.task_id,
+        )
+        .await
+        .expect("read execution metadata")
+        .expect("execution metadata");
+    assert_eq!(execution.phase, ProjectAgentTaskPhase::Failed);
+    assert_eq!(execution.session_thread_id, None);
+    assert_eq!(
+        fixture
+            .context
+            .store
+            .task_result(
+                fixture.context.file_system.as_ref(),
+                ProjectAgentFileSystemScope::Unrestricted,
+                &agent_id,
+                &result.task_id,
+            )
+            .await
+            .expect("read persisted result"),
+        Some(result)
+    );
 }
 
 async fn wait_for_terminal_task(

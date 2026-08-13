@@ -8,6 +8,8 @@ use codex_core::config::Config;
 use codex_core::config::ConfigBuilder;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
+use codex_extension_api::CollaborationSurfaceContributor;
+use codex_extension_api::CollaborationSurfacePolicy;
 use codex_extension_api::ExtensionData;
 use codex_extension_api::NoopExtensionEventSink;
 use codex_extension_api::ThreadLifecycleContributor;
@@ -118,6 +120,10 @@ async fn root_tools_skip_disabled_agents() {
         .collect::<Vec<_>>();
 
     assert_eq!(names, vec![ToolName::namespaced("agent", "enabled")]);
+    assert_eq!(
+        extension.policy(&session_store, &thread_store),
+        CollaborationSurfacePolicy::Disabled
+    );
     assert_eq!(
         extension.visibility(&session_store, &thread_store),
         ToolVisibilityPolicy::default()
@@ -236,6 +242,10 @@ async fn worker_visibility_and_wrappers_follow_manifest_targets() {
     assert_eq!(
         extension.visibility(&session_store, &thread_store),
         ToolVisibilityPolicy::allow_only(expected_visible)
+    );
+    assert_eq!(
+        extension.policy(&session_store, &thread_store),
+        CollaborationSurfacePolicy::Disabled
     );
 }
 
@@ -471,6 +481,10 @@ async fn lifecycle_bootstraps_root_and_stops_recursive_worker_bootstrap() {
         .expect("root context");
     assert!(root_context.enabled_agents.is_empty());
     assert!(project.path().join("AGENT/registry.toml").is_file());
+    assert_eq!(
+        extension.policy(&session_store, &root_store),
+        CollaborationSurfacePolicy::Disabled
+    );
 
     let worker_thread_id = ThreadId::new();
     let worker_store = ExtensionData::new(worker_thread_id.to_string());
@@ -493,6 +507,16 @@ async fn lifecycle_bootstraps_root_and_stops_recursive_worker_bootstrap() {
             .expect("worker context")
             .thread_id,
         Some(worker_thread_id)
+    );
+    assert_eq!(
+        extension.policy(&session_store, &worker_store),
+        CollaborationSurfacePolicy::Disabled
+    );
+
+    let unrelated_store = ExtensionData::new(ThreadId::new().to_string());
+    assert_eq!(
+        extension.policy(&session_store, &unrelated_store),
+        CollaborationSurfacePolicy::Enabled
     );
 }
 

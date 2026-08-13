@@ -5590,6 +5590,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         session_configuration.provider.clone(),
         &session_configuration,
         config.multi_agent_version_from_features(),
+        codex_extension_api::CollaborationSurfacePolicy::Enabled,
         services.user_shell.as_ref(),
         services.shell_zsh_path.as_ref(),
         services.main_execve_wrapper_exe.as_ref(),
@@ -7726,6 +7727,7 @@ where
         session_configuration.provider.clone(),
         &session_configuration,
         config.multi_agent_version_from_features(),
+        codex_extension_api::CollaborationSurfacePolicy::Enabled,
         services.user_shell.as_ref(),
         services.shell_zsh_path.as_ref(),
         services.main_execve_wrapper_exe.as_ref(),
@@ -8519,6 +8521,29 @@ async fn build_initial_context_adds_multi_agent_v2_root_usage_hint_as_developer_
             .any(|message| message.as_slice() == ["Subagent guidance."]),
         "did not expect subagent usage hint for root thread, got {developer_messages:?}"
     );
+}
+
+#[tokio::test]
+async fn build_initial_context_omits_generic_collaboration_context_when_surface_is_disabled() {
+    let (session, mut turn_context) =
+        make_multi_agent_v2_usage_hint_test_session(/*enable_multi_agent_v2*/ true).await;
+    Arc::get_mut(&mut turn_context)
+        .expect("thread settings should not be shared")
+        .collaboration_surface_policy = codex_extension_api::CollaborationSurfacePolicy::Disabled;
+
+    let initial_context = build_initial_context(&session, &turn_context).await;
+    let developer_messages = developer_message_texts(&initial_context);
+
+    assert!(
+        !developer_messages.iter().any(|message| {
+            matches!(
+                message.as_slice(),
+                ["Root guidance."] | ["Subagent guidance."]
+            )
+        }),
+        "did not expect generic collaboration usage hints, got {developer_messages:?}"
+    );
+    assert_eq!(turn_context.to_turn_context_item().multi_agent_mode, None);
 }
 
 #[tokio::test]

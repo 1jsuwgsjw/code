@@ -6,11 +6,18 @@ use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 
+fn collaboration_surface_enabled(turn_context: &TurnContext) -> bool {
+    turn_context.collaboration_surface_policy
+        == codex_extension_api::CollaborationSurfacePolicy::Enabled
+}
+
 pub(super) fn usage_hint_text<'a>(
     turn_context: &'a TurnContext,
     session_source: &SessionSource,
 ) -> Option<&'a str> {
-    if turn_context.multi_agent_version != MultiAgentVersion::V2 {
+    if !collaboration_surface_enabled(turn_context)
+        || turn_context.multi_agent_version != MultiAgentVersion::V2
+    {
         return None;
     }
 
@@ -37,10 +44,11 @@ fn configured_usage_hint_text_for_source<'a>(
 }
 
 pub(crate) fn effective_multi_agent_mode(turn_context: &TurnContext) -> Option<MultiAgentMode> {
-    if turn_context.multi_agent_version != MultiAgentVersion::V2 {
+    if !collaboration_surface_enabled(turn_context)
+        || turn_context.multi_agent_version != MultiAgentVersion::V2
+    {
         return None;
     }
-
     // A configured hint, including an empty string, defines a custom policy instead of an
     // effort-derived built-in policy.
     let multi_agent_mode = match &turn_context

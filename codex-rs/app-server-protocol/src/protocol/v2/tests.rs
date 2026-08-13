@@ -2707,6 +2707,7 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
                 text: "ok".to_string(),
             }]),
             success: Some(true),
+            error: None,
             duration_ms: Some(5),
         }
     );

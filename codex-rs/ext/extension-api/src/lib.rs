@@ -1,4 +1,5 @@
 mod capabilities;
+mod collaboration_surface;
 mod contributors;
 mod registry;
 mod state;
@@ -32,6 +33,8 @@ pub use codex_tools::TurnItemEmissionFuture;
 pub use codex_tools::TurnItemEmitter;
 pub use codex_tools::parse_tool_input_schema;
 pub use codex_tools::parse_tool_input_schema_without_compaction;
+pub use collaboration_surface::CollaborationSurfaceContributor;
+pub use collaboration_surface::CollaborationSurfacePolicy;
 pub use contributors::ApprovalReviewContributor;
 pub use contributors::ConfigContributor;
 pub use contributors::ContextContributor;

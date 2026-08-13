@@ -35,6 +35,7 @@ pub use control::ThreadProjectAgentRetryOutcome;
 pub use control::ThreadProjectAgentStartOutcome;
 pub use control::ThreadProjectAgentTaskControl;
 pub use control::follow_up_thread_project_agent;
+pub use control::follow_up_thread_project_agent_session;
 pub use control::rebuild_thread_project_agent_session;
 pub use control::retry_thread_project_agent;
 pub use control::start_thread_project_agent_task;

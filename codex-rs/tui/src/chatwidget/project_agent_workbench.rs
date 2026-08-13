@@ -17,6 +17,7 @@ use ratatui::text::Line;
 use super::ChatWidget;
 use crate::app_event::AppEvent;
 use crate::bottom_pane::ColumnWidthMode;
+use crate::bottom_pane::SelectionAction;
 use crate::bottom_pane::SelectionItem;
 use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::SideContentWidth;
@@ -95,6 +96,12 @@ impl ChatWidget {
                 is_disabled: true,
                 ..Default::default()
             });
+            item_task_indices.push(None);
+            items.push(selected_task_conversation_item(
+                thread_id,
+                Arc::clone(&tasks),
+                Arc::clone(&selected_task_index),
+            ));
             item_task_indices.push(None);
             for (name, description, action) in [
                 (
@@ -310,22 +317,15 @@ fn append_children<'a>(
 }
 
 fn task_item(thread_id: ThreadId, task: &ProjectTask, tree_prefix: &str) -> SelectionItem {
-    let task_id = task.task_id.clone();
     let status = task_status_label(task.status);
+    let action = project_task_open_conversation_action(thread_id, task);
     SelectionItem {
         name: format!("{tree_prefix}{}", task.title),
         name_prefix_spans: vec![task_status_symbol(task.status)],
         description: Some(format!("{status} · {}", executor_label(&task.executor))),
         search_value: Some(format!("{} {}", task.task_id, task.title)),
-        actions: vec![Box::new(move |tx| {
-            tx.send(AppEvent::ProjectAgentWorkbench {
-                thread_id,
-                action: ProjectAgentWorkbenchAction::Open {
-                    selected_task_id: Some(task_id.clone()),
-                },
-            });
-        })],
-        dismiss_on_select: false,
+        actions: action.into_iter().collect(),
+        dismiss_on_select: true,
         ..Default::default()
     }
 }
@@ -438,6 +438,73 @@ fn action_item(
 }
 
 type TaskActionFactory = Arc<dyn Fn(String) -> ProjectAgentWorkbenchAction + Send + Sync>;
+
+fn selected_task_conversation_item(
+    thread_id: ThreadId,
+    tasks: Arc<Vec<ProjectTask>>,
+    selected_task_index: Arc<AtomicUsize>,
+) -> SelectionItem {
+    let selected_task = tasks.get(selected_task_index.load(Ordering::Relaxed));
+    SelectionItem {
+        name: "  打开会话".to_string(),
+        description: Some("进入该任务的完整项目 AGENT 对话".to_string()),
+        actions: vec![Box::new(move |tx| {
+            let Some(task) = tasks.get(selected_task_index.load(Ordering::Relaxed)) else {
+                return;
+            };
+            send_project_task_open_conversation(tx, thread_id, task);
+        })],
+        disabled_reason: selected_task.and_then(project_task_conversation_unavailable_reason),
+        dismiss_on_select: true,
+        ..Default::default()
+    }
+}
+
+fn project_task_open_conversation_action(
+    thread_id: ThreadId,
+    task: &ProjectTask,
+) -> Option<SelectionAction> {
+    project_task_conversation_unavailable_reason(task)
+        .is_none()
+        .then(|| {
+            let task = task.clone();
+            Box::new(move |tx: &crate::app_event_sender::AppEventSender| {
+                send_project_task_open_conversation(tx, thread_id, &task);
+            }) as SelectionAction
+        })
+}
+
+fn send_project_task_open_conversation(
+    tx: &crate::app_event_sender::AppEventSender,
+    thread_id: ThreadId,
+    task: &ProjectTask,
+) {
+    let ProjectTaskExecutor::ProjectAgent { agent_id } = &task.executor else {
+        return;
+    };
+    let Some(session_thread_id) = task.session_thread_id.clone() else {
+        return;
+    };
+    tx.send(AppEvent::ProjectAgentWorkbench {
+        thread_id,
+        action: ProjectAgentWorkbenchAction::OpenConversation {
+            task_id: task.task_id.clone(),
+            task_title: task.title.clone(),
+            agent_id: agent_id.clone(),
+            session_thread_id,
+        },
+    });
+}
+
+fn project_task_conversation_unavailable_reason(task: &ProjectTask) -> Option<String> {
+    match (&task.executor, &task.session_thread_id) {
+        (ProjectTaskExecutor::ProjectAgent { .. }, Some(_)) => None,
+        (ProjectTaskExecutor::ProjectAgent { .. }, None) => {
+            Some("该任务尚未启动或 worker 会话尚未绑定".to_string())
+        }
+        _ => Some("该任务尚未分配项目 AGENT".to_string()),
+    }
+}
 
 fn selected_task_action(
     factory: impl Fn(String) -> ProjectAgentWorkbenchAction + Send + Sync + 'static,

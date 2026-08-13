@@ -2,35 +2,112 @@ schema_version: 1
 task_id: T-003
 title: 原生项目 AGENT 架构需求对齐
 status: active
-phase: decompose
+phase: implement
 mode: use
 objective: 对齐 Codex 项目中的文件化专职 AGENT、隔离工具注册、长期记忆、任务拒绝协议与主从控制架构；经用户确认任务单后再设计和实现。
-current_subtask: 按用户要求直接提交并推送 Slice 1A，由 GitHub Actions 编译验证。
+current_subtask: Format the completed project-AGENT integration batch, stage only its explicit
+  files, commit and push research-state, then use GitHub Actions as the sole compile/test/schema/snapshot
+  validation path.
 use_contract:
-  target_output: null
-  required_information: []
-  done_when: null
+  target_output: A real end-to-end project AGENT run created through the new CLI registration
+    workflow, showing the main AGENT delegates to a specialized worker that can call
+    its bounded script/CLI interface using only the declared help and parameter contract.
+  required_information:
+  - The current Windows artifact/download path for workflow 31522127849.
+  - A minimal agent-local script and JSON schema that produce an attributable result
+    in D:\codex-agent-test.
+  - The exact CLI and Responses Lite invocation path previously used for real-session
+    validation.
+  done_when: The new CLI creates or updates a test project AGENT, registers its bounded
+    command tool without hand-editing agent.toml/.x, a real main-agent request delegates
+    to that worker, the worker calls x.<tool>, and the persisted task/result plus
+    visible response demonstrate specialization without exposing the implementation
+    path.
 known_information:
-- 新增 crate 已通过 rustfmt，但未在本地编译。
-- 静态复核发现公开 API 仍使用不透明 sandbox Option 参数，测试调用缺少 argument_comment_lint 标注。
-- 现有测试应改为整对象比较，并补充注册表路径/结果协议验证。
-- Cargo.lock 尚无 codex-project-agents 条目。
+- The frozen objective remains task/artifacts/T-003-frozen-objective.md and must not
+  drift.
+- Task rows no longer use disabled_reason when a worker session is absent, so every
+  semantic node remains keyboard-selectable while the separate Open conversation action
+  retains its unavailable reason.
+- New project AGENT workers now start with InitialHistory::New; the synthetic Forked
+  SessionMeta workaround was removed.
+- A generic CollaborationSurfacePolicy/Contributor was added to extension-api. ProjectAgentExtension
+  disables it for root and worker thread stores, and core tool planning plus multi-agent
+  usage/mode context now consult the resolved thread policy.
+- DynamicToolCall item reconstruction now explicitly dereferences borrowed Option
+  fields; active/completed/failed coverage exists and replay/live/truncation tests
+  are being converted to snapshots.
+- Unused ProjectAgentConversationOrigin task title/session fields were removed.
+- A focused direct-delegation failure test now asserts one shared semantic/execution
+  UUID, failed metadata, failed semantic result, and persisted execution result.
+- The user forbids local compilation/tests/Clippy/schema/snapshot generation and intermediate
+  validation; only just fmt may run locally at final code closure, with all validation
+  through GitHub Actions.
+- The working tree contains extensive unrelated Bazel/schema changes; only explicit
+  T-003 paths may be staged.
 open_questions:
-- GitHub Actions 首轮结果可能暴露需要修复的编译或平台差异。
-next_action: 提交相关源码、导航和任务文档，推送 research-state 分支并读取 GitHub Actions 状态。
-last_result: 源码、格式化、Cargo 锁文件和 Bazel 锁更新已处理；用户要求停止额外差异审查并直接推送编译。
+- The exact v2 request/response type placement and common.rs dispatch variants must
+  be taken from the existing project-agent route before editing; no new v1 surface.
+- The first app-server slice should remain under the reviewable change limit and may
+  stage read/create/append/start before manual result/evaluation RPCs if the actual
+  diff requires it.
+next_action: Run only just fmt locally, inspect the bounded diff/stat, stage the explicit T-003
+  implementation/docs/workflow paths, commit, and push research-state so GitHub Actions performs
+  compilation and validation.
+last_result: 'Completed the implementation and static closure batch, corrected app-server
+  semantics for execution/session identities and worker conversation history, updated navigation
+  owners, and replaced the research-stage workflow with focused project-AGENT crate validation,
+  schema drift detection, TUI snapshot artifact capture, and the gated Windows build. No local
+  tests, builds, Clippy, schema generation, or snapshot generation were run.'
 scripts: []
 artifacts:
 - D:\codex\task\artifacts\T-003-agent-system-task-sheet.md
 - D:\codex\task\artifacts\T-003-project-agent-architecture.md
+- D:\codex\task\artifacts\start-agent-test.cmd
+- D:\codex\task\artifacts\codex-custom-4c48bd4e4\codex-custom.exe
+- D:\codex\task\artifacts\codex-custom-current\codex-custom.exe
+- D:\codex\task\artifacts\codex-custom-a0ea082eb\codex-custom.exe
+- D:\codex\task\artifacts\T-003-frozen-objective.md
+- D:\codex\task\runs\stage4c4-review\run-31574293983-failed.log
+- D:\codex\task\runs\stage4c5a\run-31591487098-failed.log
+- D:\codex\task\runs\stage4c5a\run-31598702245-failed.log
+- D:\codex\task\runs\stage4c5a\run-31599851875-failed.log
 context_checkpoint:
-  estimated_usage: null
-  reason: null
-  updated_at: null
+  estimated_usage: 0.8002
+  reason: context_threshold
+  updated_at: '2026-08-13T10:31:17+00:00'
 lessons: []
 created_at: '2026-08-10T11:33:25+00:00'
-updated_at: '2026-08-10T13:04:06+00:00'
+updated_at: '2026-08-13T10:31:54+00:00'
 required_information:
-- GitHub Actions 中 codex-project-agents 的编译、专项测试与 lint 结果。
-expected_output: 静态复核问题已修正，Cargo.lock 与 MODULE.bazel.lock 包含新 crate，补丁可提交 GitHub Actions。
-done_when: GitHub Actions 编译及 codex-project-agents 专项测试/lint 通过，空项目 bootstrap 与重复调用保留已有注册表的测试通过。
+- Static compatibility of every TurnContext/make_turn_context construction after adding
+  collaboration_surface_policy.
+- Residual project-agent SessionSource special cases and test expectations that should
+  defer to the explicit collaboration policy.
+- Snapshot file updates to be generated and accepted only in GitHub Actions.
+- Remaining app-server v2 README/navigation alignment and focused workflow definition.
+expected_output: One pushed coherent batch where project AGENT root/worker threads
+  have real agent tools but no generic sub-agent tools or concurrency context, task
+  nodes remain navigable, independent worker history renders bounded DynamicToolCall
+  cards in live/replay/transcript, delegation failures cannot strand tasks, and GitHub
+  Actions publishes a verified Windows artifact.
+done_when: All frozen objective requirements have implementation and coverage; failure
+  paths cannot strand semantic tasks; DynamicToolCall appears consistently in live/replay/transcript
+  with bounded details; generic sub-agent context/tools/UI are suppressed for project-AGENT
+  sessions; just fmt has run; only explicit task files are staged/pushed; GitHub Actions
+  schema/snapshot/tests/Windows build are green; a fresh Windows artifact is available
+  before user validation.
+completed_at: '2026-08-10T15:47:58+00:00'
+execution_reminder:
+  version: 1
+  required: true
+  principles:
+  - 结果可用优先：每一步必须直接推进用户可见、可运行、可验证的最终结果。
+  - 先找直达底部路径：开始和换路前必须检查能否从最终状态、最终写入者或最终消费者反推，禁止因当前路线熟悉而忽略更短路径。
+  - 中间产物不是结果：捕获、扫描、报告、日志、候选和工具成功本身不计进度，除非它立即解锁下一次结果性动作。
+  - 时间盒到点即停：同一点超时或达到停止条件后，记录完成/未完成/卡点并换路，禁止重复挂点、扩大扫描或无限溯源。
+  - 真实状态汇报：未产生可用效果就明确写未完成，不得用命中、闭合、在找或有进度替代可用结果。
+  questions:
+    A: 当前方向真的直接决定最终可用结果吗？如果不是，立即降级或停止。
+    B: 是否存在可以直接到底部的方法范式，只因当前认为不必要或把现场当实验而没有使用？如果存在，优先切换。
+    C: 是否完整执行了任务技能和项目准则，而不是只做了其中方便的部分？不完整则先修正执行方式。

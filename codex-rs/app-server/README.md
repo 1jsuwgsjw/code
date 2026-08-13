@@ -158,16 +158,16 @@ Example with notification opt-out:
 - `thread/projectAgent/list` — list a bounded page of registered project-local specialist AGENTs for a loaded root thread, including enabled state, reusable worker-session metadata, live session identity, and current task metadata.
 - `thread/projectAgent/read` — read one registered project AGENT definition plus bounded recent task metadata and complete persisted result fields (`result`, artifacts, evidence, memory candidates, improvement proposals, and error).
 - `thread/projectAgent/start` — queue a new bounded task directly for one named project AGENT without relying on the root model to select its delegation tool.
-- `thread/projectAgent/followUp` — add a bounded user message to the currently active project AGENT turn without creating a replacement worker session.
+- `thread/projectAgent/followUp` — add a bounded user message to the currently active project AGENT turn without creating a replacement worker session. Clients may pass the task's `sessionThreadId` to target that same worker thread explicitly.
 - `thread/projectAgent/terminate` — interrupt the currently active project AGENT task; the worker loop durably records the task phase as `interrupted`.
 - `thread/projectAgent/retry` — queue a new attempt for a specified task, or the latest task when `taskId` is omitted, while reusing the existing worker session by default.
 - `thread/projectAgent/rebuild` — explicitly shut down and replace an idle project AGENT worker session, returning the old session id and the new durable session generation.
 - `thread/projectAgentMaintenance/run` — apply pending memory candidates and improvement proposals for every project-local specialist AGENT attached to a loaded, idle thread. The request is rejected while the thread has an active task. Returns accepted/rejected counts plus the resulting maintenance status.
 - `thread/projectAgentMaintenance/statusUpdated` — notification emitted when a project AGENT context is loaded or resumed, after a delegated result creates pending maintenance, and after maintenance runs. Includes `threadId`, the canonical `projectRoot`, aggregate `pendingCount`, and `catalogRevision`.
-- `thread/projectTask/workspace/read` — read the durable semantic task tree attached to a root thread. Task nodes contain their parent, objective, requirements, executor, internal execution id, result, and evaluation.
+- `thread/projectTask/workspace/read` — read the durable semantic task tree attached to a root thread. Task nodes contain their parent, objective, requirements, executor, internal execution id, worker `sessionThreadId`, result, and evaluation.
 - `thread/projectTask/create` — create a root or child semantic task. A child is a tree edge, not a new chat session; omit `parentTaskId` for a root node.
 - `thread/projectTask/requirement/append` — append a bounded requirement to an active semantic task without changing its identity.
-- `thread/projectTask/execution/start` — bind a selected semantic task to a named project AGENT and start its internal worker execution. The returned `executionTaskId` is deliberately distinct from the semantic `taskId`.
+- `thread/projectTask/execution/start` — bind a selected semantic task to a named project AGENT and start its internal worker execution. `executionTaskId` identifies the worker execution: manually created workspace tasks may use an execution id distinct from the semantic `taskId`, while direct `agent.<id>` delegation deliberately reuses one UUID for both identities.
 - `thread/projectTask/result/record` — record a bounded result, evidence, artifacts, and suggested child tasks on the semantic node.
 - `thread/projectTask/evaluation/set` — attach the main AGENT's evaluation and evidence to a task after a result exists.
 - `thread/settings/updated` — experimental notification emitted to subscribed clients when a loaded thread’s effective next-turn settings change; includes `threadId` and the full `threadSettings`.
@@ -662,12 +662,19 @@ Use the loaded root thread id to page the roster, then read one AGENT with a bou
 { "method": "thread/projectAgent/read", "id": 32, "params": { "threadId": "thr_123", "agentId": "query", "taskLimit": 25 } }
 ```
 
-While an AGENT task is active, clients can supplement or interrupt it. Retrying preserves the
-worker thread and its prompt cache unless the client deliberately requests a rebuild:
+The semantic task tree is navigation and durable task state; the bound worker thread is the source
+of truth for the complete conversation. Once `ProjectTask.sessionThreadId` is present, use
+`thread/read` to inspect its persisted turns or `thread/resume` to open it as an active conversation.
+Worker history exposes dynamic project tools as `ThreadItem::DynamicToolCall`, including bounded
+arguments, lifecycle status, output content, error text, success, and duration.
+
+While an AGENT task is active, clients can supplement or interrupt it. Passing `sessionThreadId`
+to `thread/projectAgent/followUp` sends the message to that same worker thread. Retrying preserves
+the worker thread and its prompt cache unless the client deliberately requests a rebuild:
 
 ```json
 { "method": "thread/projectAgent/start", "id": 32, "params": { "threadId": "thr_123", "agentId": "query", "task": "Inspect the Windows path." } }
-{ "method": "thread/projectAgent/followUp", "id": 33, "params": { "threadId": "thr_123", "agentId": "query", "message": "Also inspect the Windows path." } }
+{ "method": "thread/projectAgent/followUp", "id": 33, "params": { "threadId": "thr_123", "agentId": "query", "sessionThreadId": "thr_worker_456", "message": "Also inspect the Windows path." } }
 { "method": "thread/projectAgent/terminate", "id": 34, "params": { "threadId": "thr_123", "agentId": "query" } }
 { "method": "thread/projectAgent/retry", "id": 35, "params": { "threadId": "thr_123", "agentId": "query", "taskId": "019f..." } }
 { "method": "thread/projectAgent/rebuild", "id": 36, "params": { "threadId": "thr_123", "agentId": "query" } }

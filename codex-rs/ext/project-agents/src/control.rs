@@ -8,6 +8,7 @@ use codex_project_agents::ProjectAgentFileSystemScope;
 use codex_project_agents::ProjectAgentId;
 use codex_project_agents::ProjectAgentSessionMetadata;
 use codex_project_agents::ProjectAgentStoreError;
+use codex_project_agents::ProjectAgentTaskListLimit;
 use codex_project_agents::ProjectAgentTaskMetadata;
 use codex_project_agents::ProjectAgentTaskPhase;
 use codex_protocol::ThreadId;
@@ -86,6 +87,26 @@ pub async fn follow_up_thread_project_agent(
     Some(follow_up(thread_manager, &context, agent_id, message).await)
 }
 
+pub async fn follow_up_thread_project_agent_session(
+    thread_manager: &ThreadManager,
+    thread: &CodexThread,
+    agent_id: &ProjectAgentId,
+    session_thread_id: ThreadId,
+    message: String,
+) -> Option<Result<ThreadProjectAgentTaskControl, ProjectAgentControlError>> {
+    let context = thread.thread_extension::<ProjectAgentRootContext>()?;
+    Some(
+        follow_up_session(
+            thread_manager,
+            &context,
+            agent_id,
+            session_thread_id,
+            message,
+        )
+        .await,
+    )
+}
+
 pub async fn start_thread_project_agent_task(
     thread_manager: Arc<ThreadManager>,
     thread: &CodexThread,
@@ -157,6 +178,104 @@ async fn follow_up(
     Ok(task_control(&task, worker.thread_id))
 }
 
+async fn follow_up_session(
+    thread_manager: &ThreadManager,
+    context: &ProjectAgentRootContext,
+    agent_id: &ProjectAgentId,
+    session_thread_id: ThreadId,
+    message: String,
+) -> Result<ThreadProjectAgentTaskControl, ProjectAgentControlError> {
+    if message.trim().is_empty() || message.len() > MAX_FOLLOW_UP_BYTES {
+        return Err(ProjectAgentControlError::InvalidRequest(format!(
+            "project AGENT follow-up must be non-empty and at most {MAX_FOLLOW_UP_BYTES} bytes"
+        )));
+    }
+    ensure_enabled(context, agent_id).await?;
+    let worker = reusable_worker(thread_manager, agent_id, session_thread_id)
+        .await
+        .ok_or_else(|| {
+            ProjectAgentControlError::InvalidRequest(format!(
+                "project AGENT `{agent_id}` session `{session_thread_id}` is not reusable"
+            ))
+        })?;
+    if matches!(
+        worker.thread.agent_status().await,
+        codex_protocol::protocol::AgentStatus::Running
+    ) {
+        worker
+            .thread
+            .steer_input(
+                vec![UserInput::Text {
+                    text: message,
+                    text_elements: Vec::new(),
+                }],
+                Default::default(),
+                /*expected_turn_id*/ None,
+                /*client_user_message_id*/ None,
+                /*responsesapi_client_metadata*/ None,
+            )
+            .await
+            .map_err(|error| {
+                ProjectAgentControlError::InvalidRequest(format!(
+                    "project AGENT `{agent_id}` could not accept the follow-up: {error:?}"
+                ))
+            })?;
+    } else {
+        worker
+            .thread
+            .submit(Op::UserInput {
+                items: vec![UserInput::Text {
+                    text: message,
+                    text_elements: Vec::new(),
+                }],
+                final_output_json_schema: None,
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: Default::default(),
+            })
+            .await
+            .map_err(|error| {
+                ProjectAgentControlError::InvalidRequest(format!(
+                    "project AGENT `{agent_id}` could not start the follow-up: {error}"
+                ))
+            })?;
+    }
+    context
+        .remember_session(agent_id.clone(), session_thread_id)
+        .await;
+    Ok(ThreadProjectAgentTaskControl {
+        task_id: active_task_for_session(context, agent_id, session_thread_id)
+            .await?
+            .task_id,
+        session_thread_id: session_thread_id.to_string(),
+    })
+}
+
+async fn active_task_for_session(
+    context: &ProjectAgentRootContext,
+    agent_id: &ProjectAgentId,
+    session_thread_id: ThreadId,
+) -> Result<ProjectAgentTaskMetadata, ProjectAgentControlError> {
+    let session_thread_id = session_thread_id.to_string();
+    context
+        .store
+        .list_task_metadata(
+            context.file_system.as_ref(),
+            ProjectAgentFileSystemScope::Unrestricted,
+            agent_id,
+            ProjectAgentTaskListLimit::new(usize::MAX),
+        )
+        .await?
+        .into_iter()
+        .filter(|task| task.session_thread_id.as_deref() == Some(session_thread_id.as_str()))
+        .max_by_key(|task| task.updated_at)
+        .ok_or_else(|| {
+            ProjectAgentControlError::InvalidRequest(format!(
+                "project AGENT `{agent_id}` session `{session_thread_id}` has no persisted task"
+            ))
+        })
+}
+
 async fn start(
     thread_manager: Arc<ThreadManager>,
     context: Arc<ProjectAgentRootContext>,
@@ -206,6 +325,7 @@ async fn start(
             Some(thread_manager),
             context,
             metadata,
+            /*semantic_task_id*/ None,
             file_system.as_ref(),
             ProjectAgentFileSystemScope::Unrestricted,
             task_permit,
@@ -307,6 +427,7 @@ async fn retry(
             Some(thread_manager),
             context,
             task,
+            /*semantic_task_id*/ None,
             file_system.as_ref(),
             ProjectAgentFileSystemScope::Unrestricted,
             task_permit,

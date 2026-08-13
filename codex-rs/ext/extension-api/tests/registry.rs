@@ -4,6 +4,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use codex_extension_api::ApprovalReviewContributor;
+use codex_extension_api::CollaborationSurfaceContributor;
+use codex_extension_api::CollaborationSurfacePolicy;
 use codex_extension_api::ConfigContributor;
 use codex_extension_api::ContextContributor;
 use codex_extension_api::ContextualUserFragment;
@@ -46,6 +48,16 @@ impl ContextContributor for AllContributors {
         _thread_store: &'a ExtensionData,
     ) -> ExtensionFuture<'a, Vec<PromptFragment>> {
         Box::pin(std::future::ready(Vec::new()))
+    }
+}
+
+impl CollaborationSurfaceContributor for AllContributors {
+    fn policy(
+        &self,
+        _session_store: &ExtensionData,
+        _thread_store: &ExtensionData,
+    ) -> CollaborationSurfacePolicy {
+        CollaborationSurfacePolicy::Enabled
     }
 }
 
@@ -130,6 +142,7 @@ async fn build_round_trips_every_contributor_category() {
     let contributor = Arc::new(AllContributors);
     let mut builder = ExtensionRegistryBuilder::<()>::new();
     builder.thread_lifecycle_contributor(contributor.clone());
+    builder.collaboration_surface_contributor(contributor.clone());
     builder.turn_lifecycle_contributor(contributor.clone());
     builder.config_contributor(contributor.clone());
     builder.token_usage_contributor(contributor.clone());
@@ -144,6 +157,13 @@ async fn build_round_trips_every_contributor_category() {
     let registry = builder.build();
 
     assert_eq!(registry.thread_lifecycle_contributors().len(), 1);
+    assert_eq!(
+        registry.collaboration_surface_policy(
+            &ExtensionData::new("session"),
+            &ExtensionData::new("thread"),
+        ),
+        CollaborationSurfacePolicy::Enabled
+    );
     assert_eq!(registry.turn_lifecycle_contributors().len(), 1);
     assert_eq!(registry.config_contributors().len(), 1);
     assert_eq!(registry.token_usage_contributors().len(), 1);
@@ -173,6 +193,37 @@ async fn build_round_trips_every_contributor_category() {
 }
 
 struct StaticToolVisibilityContributor(ToolVisibilityPolicy);
+
+struct StaticCollaborationSurfaceContributor(CollaborationSurfacePolicy);
+
+impl CollaborationSurfaceContributor for StaticCollaborationSurfaceContributor {
+    fn policy(
+        &self,
+        _session_store: &ExtensionData,
+        _thread_store: &ExtensionData,
+    ) -> CollaborationSurfacePolicy {
+        self.0
+    }
+}
+
+#[test]
+fn collaboration_surface_is_disabled_when_any_contributor_disables_it() {
+    let mut builder = ExtensionRegistryBuilder::<()>::new();
+    builder.collaboration_surface_contributor(Arc::new(StaticCollaborationSurfaceContributor(
+        CollaborationSurfacePolicy::Enabled,
+    )));
+    builder.collaboration_surface_contributor(Arc::new(StaticCollaborationSurfaceContributor(
+        CollaborationSurfacePolicy::Disabled,
+    )));
+
+    assert_eq!(
+        builder.build().collaboration_surface_policy(
+            &ExtensionData::new("session"),
+            &ExtensionData::new("thread"),
+        ),
+        CollaborationSurfacePolicy::Disabled
+    );
+}
 
 impl ToolVisibilityContributor for StaticToolVisibilityContributor {
     fn visibility(
