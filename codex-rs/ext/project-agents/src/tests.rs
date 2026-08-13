@@ -124,9 +124,34 @@ async fn root_tools_skip_disabled_agents() {
         extension.policy(&session_store, &thread_store),
         CollaborationSurfacePolicy::Disabled
     );
+    let mut expected_visibility = ToolVisibilityPolicy::default();
+    for namespace in ["collaboration", "multi_agent_v1"] {
+        for name in [
+            "spawn_agent",
+            "send_message",
+            "followup_task",
+            "wait_agent",
+            "interrupt_agent",
+            "list_agents",
+            "send_input",
+            "resume_agent",
+            "close_agent",
+        ] {
+            expected_visibility
+                .deny
+                .insert(ToolName::namespaced(namespace, name));
+        }
+    }
+    expected_visibility.deny.extend([
+        ToolName::plain("spawn_agent"),
+        ToolName::plain("spawn_agents_on_csv"),
+    ]);
+    expected_visibility
+        .deny
+        .remove(&ToolName::namespaced("agent", "enabled"));
     assert_eq!(
         extension.visibility(&session_store, &thread_store),
-        ToolVisibilityPolicy::default()
+        expected_visibility
     );
 
     let context = thread_store
