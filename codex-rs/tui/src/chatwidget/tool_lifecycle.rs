@@ -316,7 +316,7 @@ impl ChatWidget {
             return;
         };
         let duration = Duration::from_millis(duration_ms.unwrap_or_default().max(0) as u64);
-        let success = success.or_else(|| match status {
+        let success = success.or(match status {
             codex_app_server_protocol::DynamicToolCallStatus::InProgress => None,
             codex_app_server_protocol::DynamicToolCallStatus::Completed => Some(true),
             codex_app_server_protocol::DynamicToolCallStatus::Failed => Some(false),

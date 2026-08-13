@@ -162,7 +162,7 @@ impl HistoryCell for DynamicToolCallCell {
             .flat_map(|detail| {
                 textwrap::wrap(&detail, detail_width)
                     .into_iter()
-                    .map(|line| line.into_owned())
+                    .map(std::borrow::Cow::into_owned)
                     .collect::<Vec<_>>()
             })
             .map(|detail| Line::from(detail.dim()))
@@ -235,7 +235,7 @@ pub(crate) fn dynamic_tool_call_cell_from_item(
         cell.complete(
             Duration::from_millis((*duration_ms).unwrap_or_default().max(0) as u64),
             content_items.clone(),
-            (*success).or_else(|| match status {
+            (*success).or(match status {
                 codex_app_server_protocol::DynamicToolCallStatus::InProgress => None,
                 codex_app_server_protocol::DynamicToolCallStatus::Completed => Some(true),
                 codex_app_server_protocol::DynamicToolCallStatus::Failed => Some(false),
