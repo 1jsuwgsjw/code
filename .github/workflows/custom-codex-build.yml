@@ -55,7 +55,7 @@ jobs:
           )
           for package in "${packages[@]}"; do
             echo "::group::Clippy ${package}"
-            just clippy -p "${package}" -- -D warnings
+            cargo clippy --locked --tests --no-deps -p "${package}" -- -D warnings
             echo "::endgroup::"
           done
 
