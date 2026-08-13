@@ -444,7 +444,9 @@ fn selected_task_conversation_item(
     tasks: Arc<Vec<ProjectTask>>,
     selected_task_index: Arc<AtomicUsize>,
 ) -> SelectionItem {
-    let selected_task = tasks.get(selected_task_index.load(Ordering::Relaxed));
+    let disabled_reason = tasks
+        .get(selected_task_index.load(Ordering::Relaxed))
+        .and_then(project_task_conversation_unavailable_reason);
     SelectionItem {
         name: "  打开会话".to_string(),
         description: Some("进入该任务的完整项目 AGENT 对话".to_string()),
@@ -454,7 +456,7 @@ fn selected_task_conversation_item(
             };
             send_project_task_open_conversation(tx, thread_id, task);
         })],
-        disabled_reason: selected_task.and_then(project_task_conversation_unavailable_reason),
+        disabled_reason,
         dismiss_on_select: true,
         ..Default::default()
     }
