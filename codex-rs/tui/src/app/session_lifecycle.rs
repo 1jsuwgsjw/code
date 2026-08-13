@@ -180,9 +180,6 @@ impl App {
             }
         };
         let channel = self.ensure_thread_channel(thread_id);
-        if !live_attached {
-            channel.mark_replay_only();
-        }
         let mut store = channel.store.lock().await;
         store.set_session(session, turns);
         Ok(live_attached)

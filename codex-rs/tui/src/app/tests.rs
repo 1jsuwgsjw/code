@@ -25,7 +25,6 @@ use crate::history_cell::PlainHistoryCell;
 use crate::history_cell::UserHistoryCell;
 use crate::history_cell::new_session_info;
 use crate::multi_agents::AgentPickerThreadEntry;
-use crate::multi_agents::SubAgentActivityDisplay;
 use assert_matches::assert_matches;
 
 use crate::app_command::AppCommand as Op;
