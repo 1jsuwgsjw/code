@@ -228,7 +228,8 @@ impl App {
     ) -> Result<(), String> {
         let resumed = app_server
             .resume_thread(self.config.clone(), thread_id)
-            .await?;
+            .await
+            .map_err(|error| error.to_string())?;
         self.shutdown_current_thread(app_server).await;
         self.replace_chat_widget_with_app_server_thread(
             tui,
