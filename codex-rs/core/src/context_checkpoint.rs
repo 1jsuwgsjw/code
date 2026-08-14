@@ -61,7 +61,14 @@ pub(crate) async fn install_pending_checkpoint(
     let replacement_history_sha256 = codex_context_checkpoint::content_sha256(&replacement_bytes);
     let (window_number, window_ids) = session.advance_auto_compact_window().await;
     let compacted_item = CompactedItem {
-        message: pending.record.summary.clone(),
+        message: if pending.record.state.is_empty() {
+            pending.record.summary.clone()
+        } else {
+            format!(
+                "Context state: {}\nNext action: {}",
+                pending.record.state.active.objective, pending.record.state.active.next_action
+            )
+        },
         replacement_history: Some(replacement_history.clone()),
         checkpoint: Some(ContextCheckpointRolloutMetadata {
             checkpoint_id: format!("checkpoint-{}", pending.record.record_id),

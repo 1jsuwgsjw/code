@@ -2,6 +2,8 @@ use crate::ArtifactId;
 use crate::CheckpointGenerationId;
 use crate::ToolGroupId;
 use crate::TurnRecordId;
+use crate::state::ContextStateSnapshot;
+use crate::state::ContextStateUpdate;
 use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
@@ -90,35 +92,32 @@ pub struct TurnRecord {
     pub record_id: TurnRecordId,
     pub generation_id: CheckpointGenerationId,
     pub completed_groups: Vec<ToolGroupId>,
+    #[serde(default, skip_serializing_if = "ContextStateSnapshot::is_empty")]
+    pub state: ContextStateSnapshot,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub summary: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<EvidenceRef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub validation: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub decisions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_items: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub next_action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub correction_of: Option<TurnRecordId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UpdateSummaryRequest {
+pub struct UpdateContextStateRequest {
     #[serde(default)]
     pub completed_tool_groups: Vec<ToolGroupId>,
-    pub summary: String,
-    #[serde(default)]
-    pub evidence: Vec<EvidenceRef>,
-    #[serde(default)]
-    pub changes: Vec<String>,
-    #[serde(default)]
-    pub validation: Vec<String>,
-    #[serde(default)]
-    pub decisions: Vec<String>,
-    #[serde(default)]
-    pub open_items: Vec<String>,
-    pub next_action: String,
-    #[serde(default)]
-    pub correction_of: Option<TurnRecordId>,
+    pub state: ContextStateUpdate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -189,6 +188,7 @@ pub struct MemoryStatusSnapshot {
 pub struct PreparedCheckpointRequest {
     pub status: MemoryStatusSnapshot,
     pub tool_policy: CheckpointToolPolicy,
+    pub record: Option<TurnRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

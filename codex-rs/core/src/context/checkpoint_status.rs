@@ -93,7 +93,7 @@ impl ContextualUserFragment for CheckpointStatusFragment {
         format!(
             "generation={} turn={}\ncontext_usage={} usage_source={:?} tool_result_share={}\n\
              tool_groups={} open={} settled={} settleable=[{}]\nlast_checkpoint={}\n\
-             pressure={:?} checkpoint_required={} tool=update_summary recall=recall_checkpoint_artifact{}",
+             pressure={:?} checkpoint_required={} tool=update_context_state recall=recall_checkpoint_artifact{}",
             self.status.generation_id,
             self.status.turn_id,
             format_basis_points(self.status.context_usage_basis_points),

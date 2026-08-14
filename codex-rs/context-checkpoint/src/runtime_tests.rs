@@ -1,7 +1,31 @@
 use super::*;
+use crate::ActiveContextState;
+use crate::ContextStateUpdate;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::tempdir;
+
+fn state_request(
+    completed_tool_groups: Vec<ToolGroupId>,
+    objective: &str,
+    next_action: &str,
+) -> UpdateContextStateRequest {
+    UpdateContextStateRequest {
+        completed_tool_groups,
+        state: ContextStateUpdate {
+            active: ActiveContextState {
+                objective: objective.to_string(),
+                entries: Vec::new(),
+                constraints: Vec::new(),
+                open_questions: Vec::new(),
+                next_action: next_action.to_string(),
+            },
+            session_upserts: Vec::new(),
+            forget_keys: Vec::new(),
+            quarter_promotions: Vec::new(),
+        },
+    }
+}
 
 fn usage() -> ContextUsageSnapshot {
     ContextUsageSnapshot {
@@ -70,17 +94,11 @@ async fn summary_must_select_the_contiguous_settled_prefix() {
     let second = record_group(&runtime, "call-2", 2, 4).await;
 
     let error = runtime
-        .prepare_summary(UpdateSummaryRequest {
-            completed_tool_groups: vec![second.group_id],
-            summary: "second only".to_string(),
-            evidence: Vec::new(),
-            changes: Vec::new(),
-            validation: Vec::new(),
-            decisions: Vec::new(),
-            open_items: Vec::new(),
-            next_action: "continue".to_string(),
-            correction_of: None,
-        })
+        .prepare_context_state(state_request(
+            vec![second.group_id],
+            "settle the second tool group",
+            "continue",
+        ))
         .await
         .expect_err("non-contiguous settlement must fail");
 
@@ -93,17 +111,11 @@ async fn pending_checkpoint_survives_reload_and_installation() {
     let (directory, runtime) = runtime().await;
     let call = record_group(&runtime, "call-1", 1, 3).await;
     let pending = runtime
-        .prepare_summary(UpdateSummaryRequest {
-            completed_tool_groups: vec![call.group_id],
-            summary: "tool work is complete".to_string(),
-            evidence: Vec::new(),
-            changes: vec!["changed file".to_string()],
-            validation: vec!["workflow passed".to_string()],
-            decisions: Vec::new(),
-            open_items: Vec::new(),
-            next_action: "answer the user".to_string(),
-            correction_of: None,
-        })
+        .prepare_context_state(state_request(
+            vec![call.group_id],
+            "complete the tool work",
+            "answer the user",
+        ))
         .await
         .expect("prepare checkpoint");
     assert!(!pending.manifest_sha256.is_empty());

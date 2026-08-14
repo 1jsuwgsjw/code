@@ -1184,7 +1184,7 @@ async fn run_sampling_request(
     let raw_history_len = sess.clone_history().await.raw_items().len();
     let tool_result_share_basis_points =
         crate::context::CheckpointStatusFragment::tool_result_share_basis_points(&input);
-    let checkpoint_status = match sess
+    let checkpoint_request = match sess
         .services
         .context_checkpoint
         .prepare_request(
@@ -1201,7 +1201,7 @@ async fn run_sampling_request(
         )
         .await
     {
-        Ok(prepared) => Some(prepared.status),
+        Ok(prepared) => Some(prepared),
         Err(error) => {
             tracing::warn!(
                 error = %error,
@@ -1238,9 +1238,25 @@ async fn run_sampling_request(
                 .await
                 .for_prompt(&turn_context.model_info.input_modalities)
         };
-        if let Some(status) = checkpoint_status.clone() {
+        if let Some(prepared) = checkpoint_request.clone() {
+            if let Some(record) = prepared.record {
+                match crate::context::CheckpointRecordFragment::new(&record) {
+                    Ok(fragment) => {
+                        prompt_input.retain(|item| {
+                            !crate::context::CheckpointRecordFragment::matches_item(item)
+                        });
+                        prompt_input.push(fragment.into_response_input_item().into());
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            error = %error,
+                            "context state projection failed; retaining historical checkpoints"
+                        );
+                    }
+                }
+            }
             prompt_input.push(
-                crate::context::CheckpointStatusFragment::new(status)
+                crate::context::CheckpointStatusFragment::new(prepared.status)
                     .into_response_input_item()
                     .into(),
             );

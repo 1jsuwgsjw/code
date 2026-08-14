@@ -7,7 +7,7 @@ use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
 use codex_context_checkpoint::ArtifactId;
 use codex_context_checkpoint::RecallRequest;
-use codex_context_checkpoint::UpdateSummaryRequest;
+use codex_context_checkpoint::UpdateContextStateRequest;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiTool;
 use codex_tools::ToolName;
@@ -16,35 +16,35 @@ use serde::Deserialize;
 use serde_json::json;
 use std::collections::BTreeMap;
 
-pub struct UpdateSummaryHandler;
+pub struct UpdateContextStateHandler;
 
-impl ToolExecutor<ToolInvocation> for UpdateSummaryHandler {
+impl ToolExecutor<ToolInvocation> for UpdateContextStateHandler {
     fn tool_name(&self) -> ToolName {
-        ToolName::plain("update_summary")
+        ToolName::plain("update_context_state")
     }
 
     fn spec(&self) -> ToolSpec {
-        update_summary_spec()
+        update_context_state_spec()
     }
 
     fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
         Box::pin(async move {
             let ToolPayload::Function { arguments } = invocation.payload else {
                 return Err(FunctionCallError::RespondToModel(
-                    "update_summary received an unsupported payload".to_string(),
+                    "update_context_state received an unsupported payload".to_string(),
                 ));
             };
             let request =
-                serde_json::from_str::<UpdateSummaryRequest>(&arguments).map_err(|error| {
+                serde_json::from_str::<UpdateContextStateRequest>(&arguments).map_err(|error| {
                     FunctionCallError::RespondToModel(format!(
-                        "failed to parse update_summary arguments: {error}"
+                        "failed to parse update_context_state arguments: {error}"
                     ))
                 })?;
             let pending = invocation
                 .session
                 .services
                 .context_checkpoint
-                .prepare_summary(request)
+                .prepare_context_state(request)
                 .await
                 .map_err(|error| FunctionCallError::RespondToModel(error.to_string()))?;
             let output = json!({
@@ -63,7 +63,7 @@ impl ToolExecutor<ToolInvocation> for UpdateSummaryHandler {
     }
 }
 
-impl CoreToolRuntime for UpdateSummaryHandler {}
+impl CoreToolRuntime for UpdateContextStateHandler {}
 
 pub struct RecallCheckpointArtifactHandler;
 
@@ -125,7 +125,7 @@ impl ToolExecutor<ToolInvocation> for RecallCheckpointArtifactHandler {
 
 impl CoreToolRuntime for RecallCheckpointArtifactHandler {}
 
-fn update_summary_spec() -> ToolSpec {
+fn update_context_state_spec() -> ToolSpec {
     let string_array = |description: &str| {
         JsonSchema::array(JsonSchema::string(None), Some(description.to_string()))
     };
@@ -158,58 +158,123 @@ fn update_summary_spec() -> ToolSpec {
         Some(vec!["kind".to_string()]),
         Some(false.into()),
     );
+    let state_entry = JsonSchema::object(
+        BTreeMap::from([
+            (
+                "key".to_string(),
+                JsonSchema::string(Some(
+                    "Stable key that owns this fact in exactly one memory layer.".to_string(),
+                )),
+            ),
+            (
+                "kind".to_string(),
+                JsonSchema::string_enum(
+                    vec![
+                        serde_json::Value::String("sourceFact".to_string()),
+                        serde_json::Value::String("userDecision".to_string()),
+                        serde_json::Value::String("constraint".to_string()),
+                        serde_json::Value::String("validation".to_string()),
+                    ],
+                    Some("Semantic state category.".to_string()),
+                ),
+            ),
+            (
+                "content".to_string(),
+                JsonSchema::string(Some(
+                    "Current effective fact, never a description of tool activity.".to_string(),
+                )),
+            ),
+            (
+                "evidence".to_string(),
+                JsonSchema::array(
+                    evidence,
+                    Some("Evidence needed to verify or recall this state.".to_string()),
+                ),
+            ),
+            (
+                "sourceRevision".to_string(),
+                JsonSchema::string(Some(
+                    "Optional source revision or content hash used for invalidation.".to_string(),
+                )),
+            ),
+        ]),
+        Some(vec![
+            "key".to_string(),
+            "kind".to_string(),
+            "content".to_string(),
+        ]),
+        Some(false.into()),
+    );
+    let active_state = JsonSchema::object(
+        BTreeMap::from([
+            (
+                "objective".to_string(),
+                JsonSchema::string(Some("Current user-visible objective.".to_string())),
+            ),
+            (
+                "entries".to_string(),
+                JsonSchema::array(
+                    state_entry.clone(),
+                    Some("Precise facts needed for the next action.".to_string()),
+                ),
+            ),
+            (
+                "constraints".to_string(),
+                string_array("Task-specific constraints not already present in memory."),
+            ),
+            (
+                "openQuestions".to_string(),
+                string_array("Only unresolved questions that can change the next action."),
+            ),
+            (
+                "nextAction".to_string(),
+                JsonSchema::string(Some("The next direct action.".to_string())),
+            ),
+        ]),
+        Some(vec!["objective".to_string(), "nextAction".to_string()]),
+        Some(false.into()),
+    );
+    let state = JsonSchema::object(
+        BTreeMap::from([
+            ("active".to_string(), active_state),
+            (
+                "sessionUpserts".to_string(),
+                JsonSchema::array(
+                    state_entry,
+                    Some("Reusable session facts to insert or replace by key.".to_string()),
+                ),
+            ),
+            (
+                "forgetKeys".to_string(),
+                string_array(
+                    "Stale session or quarter keys to remove from the current projection.",
+                ),
+            ),
+            (
+                "quarterPromotions".to_string(),
+                string_array("Existing session keys stable enough to promote to quarter memory."),
+            ),
+        ]),
+        Some(vec!["active".to_string()]),
+        Some(false.into()),
+    );
     let properties = BTreeMap::from([
         (
             "completedToolGroups".to_string(),
-            string_array("Contiguous settled ToolGroup ids to freeze."),
+            string_array("Contiguous settled ToolGroup ids whose raw history can be replaced."),
         ),
-        (
-            "summary".to_string(),
-            JsonSchema::string(Some("Purpose, key process, and actual result.".to_string())),
-        ),
-        (
-            "evidence".to_string(),
-            JsonSchema::array(
-                evidence,
-                Some("Verifiable evidence references.".to_string()),
-            ),
-        ),
-        ("changes".to_string(), string_array("Actual changes made.")),
-        (
-            "validation".to_string(),
-            string_array("Validation methods and real outcomes."),
-        ),
-        (
-            "decisions".to_string(),
-            string_array("User and engineering decisions."),
-        ),
-        (
-            "openItems".to_string(),
-            string_array("Unfinished items and why they remain open."),
-        ),
-        (
-            "nextAction".to_string(),
-            JsonSchema::string(Some("The next direct action.".to_string())),
-        ),
-        (
-            "correctionOf".to_string(),
-            JsonSchema::string(Some("Optional prior TurnRecord id to correct.".to_string())),
-        ),
+        ("state".to_string(), state),
     ]);
     ToolSpec::Function(ResponsesApiTool {
-        name: "update_summary".to_string(),
-        description: "Freeze a completed, contiguous tool-work prefix into a durable checkpoint."
+        name: "update_context_state".to_string(),
+        description: "Replace completed tool history with current effective Active, Session, and Quarter state. Do not describe tool activity or duplicate current source files."
             .to_string(),
         output_schema: None,
         strict: false,
         defer_loading: None,
         parameters: JsonSchema::object(
             properties,
-            Some(vec![
-                "completedToolGroups".to_string(),
-                "summary".to_string(),
-                "nextAction".to_string(),
-            ]),
+            Some(vec!["completedToolGroups".to_string(), "state".to_string()]),
             Some(false.into()),
         ),
     })

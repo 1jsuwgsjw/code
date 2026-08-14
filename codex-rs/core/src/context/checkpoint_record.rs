@@ -1,7 +1,21 @@
 use super::ContextualUserFragment;
 use crate::compact::SUMMARY_PREFIX;
 use codex_context_checkpoint::CheckpointError;
+use codex_context_checkpoint::ContextStateSnapshot;
+use codex_context_checkpoint::EvidenceRef;
 use codex_context_checkpoint::TurnRecord;
+use codex_protocol::models::ContentItem;
+use codex_protocol::models::ResponseItem;
+use serde::Serialize;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ContextStateProjection<'a> {
+    #[serde(flatten)]
+    state: &'a ContextStateSnapshot,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    recall_evidence: Vec<&'a EvidenceRef>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CheckpointRecordFragment {
@@ -10,11 +24,40 @@ pub(crate) struct CheckpointRecordFragment {
 
 impl CheckpointRecordFragment {
     pub(crate) fn new(record: &TurnRecord) -> Result<Self, CheckpointError> {
-        let record = serde_json::to_string(record)
-            .map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?;
+        let projected = if record.state.is_empty() {
+            serde_json::to_string(record)
+        } else {
+            let state_evidence = record
+                .state
+                .quarter
+                .iter()
+                .chain(&record.state.session)
+                .chain(&record.state.active.entries)
+                .flat_map(|entry| &entry.evidence)
+                .collect::<Vec<_>>();
+            serde_json::to_string(&ContextStateProjection {
+                state: &record.state,
+                recall_evidence: record
+                    .evidence
+                    .iter()
+                    .filter(|reference| !state_evidence.contains(reference))
+                    .collect(),
+            })
+        };
+        let record =
+            projected.map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?;
         Ok(Self {
             body: format!("{SUMMARY_PREFIX}\n{record}"),
         })
+    }
+
+    pub(crate) fn matches_item(item: &ResponseItem) -> bool {
+        let ResponseItem::Message { content, .. } = item else {
+            return false;
+        };
+        content
+            .iter()
+            .any(|item| matches!(item, ContentItem::InputText { text } if Self::matches_text(text)))
     }
 }
 

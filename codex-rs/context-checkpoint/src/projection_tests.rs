@@ -11,6 +11,7 @@ fn pending(start: usize, end: usize) -> PendingCheckpoint {
             record_id: TurnRecordId::new(1),
             generation_id: CheckpointGenerationId::new(1),
             completed_groups: vec![ToolGroupId::new(1)],
+            state: crate::ContextStateSnapshot::default(),
             summary: "summary".to_string(),
             evidence: Vec::new(),
             changes: Vec::new(),

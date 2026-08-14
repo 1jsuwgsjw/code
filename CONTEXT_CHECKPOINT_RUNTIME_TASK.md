@@ -23,6 +23,62 @@ objective.
   consolidation remain later stages; they must build on the verified checkpoint ancestry rather
   than re-summarize raw rollout history.
 
+### Three-layer state correction
+
+This section is the authoritative model-visible architecture. Any later section that describes
+ToolGroup or TurnRecord activity summaries is retained only as implementation history and must not
+override this state model.
+
+Compression is a state reduction, not an execution-log summary. After historical interaction is
+removed, the projected state must let a fresh model choose the same next action without rereading
+the removed tools in the normal case.
+
+```text
+QuarterState  stable cross-session facts, user rules, architecture, and verified milestones
+SessionState  reusable understanding and decisions accumulated in the current session
+ActiveState   precise objective, current facts, constraints, open questions, and next action
+```
+
+Raw ToolCall and ToolGroup data remains outside model context as immutable Artifact evidence. It is
+available for selective recall but is not a fourth memory layer.
+
+State ownership rules:
+
+- A stable key has one current owner across Quarter, Session, and Active state.
+- Active state is replaced as a complete current working set.
+- Session entries are inserted or replaced by stable key.
+- Quarter entries can only be promoted from memory that already existed in Session state before the
+  current update; a model cannot create and promote a durable fact in one operation.
+- Source facts and validation results require evidence. Source revision or content hash is retained
+  when available so later source changes can invalidate the derived fact.
+- Current source, Git diff, and commits remain authoritative for code. State stores intent,
+  constraints, verified behavior, unresolved questions, and external validation rather than copying
+  file contents or modification logs.
+- Stale keys are explicitly forgotten before replacement. Historical versions remain immutable on
+  disk but are absent from the current model projection.
+- Normal requests filter all historical checkpoint fragments and append exactly one latest state
+  projection at the request tail. If state projection fails, historical fragments remain visible as
+  the conservative recovery path.
+
+The model tool is `update_context_state`. ToolGroups only delimit raw history that may be removed;
+they do not determine semantic memory content. The request writes a complete Active state, Session
+upserts, stale keys to forget, and existing Session keys to promote to Quarter state.
+
+Implemented in the current working stage:
+
+- bounded typed Active, Session, and Quarter state;
+- deterministic key merge, cross-layer uniqueness, evidence requirements, and delayed promotion;
+- current-state checkpoint persistence through the existing immutable record and manifest chain;
+- latest-only request projection with historical checkpoint fallback;
+- legacy TurnRecord payload fields retained only for reading earlier manifests.
+
+Still required before this correction is complete:
+
+- automatic invalidation when a referenced source revision changes;
+- explicit session-boundary accounting for scheduled Quarter consolidation;
+- core integration coverage proving exactly one latest state projection reaches the model;
+- CI confirmation of the new tool schema and request projection.
+
 ## Problem
 
 Codex currently treats compaction primarily as a whole-history replacement. Local compaction asks
@@ -42,7 +98,8 @@ remain available only as the final recovery path when a controlled checkpoint ca
 ## Required Model
 
 ```text
-ToolCall -> ToolGroup -> TurnRecord -> SessionSummary -> QuarterSummary -> LongTermMemory
+ToolCall -> Artifact
+ActiveState -> SessionState -> QuarterState
 ```
 
 - Runtime owns mechanical facts: IDs, paths, hashes, byte/token counts, timestamps, exit status,
@@ -57,10 +114,11 @@ ToolCall -> ToolGroup -> TurnRecord -> SessionSummary -> QuarterSummary -> LongT
 1. Persist every tool invocation and result before model-history truncation or formatting loss.
 2. Maintain one append-only active tail after an immutable frozen prefix.
 3. Append an ephemeral runtime-computed `MEMORY_STATUS` to each model request tail.
-4. Allow the model to close completed contiguous ToolGroups with `update_summary`.
-5. Validate all references and atomically freeze the resulting TurnRecord.
-6. On the next model request, install a new context generation containing the stable frozen prefix,
-   the new immutable record, and the still-open activity tail.
+4. Allow the model to replace effective state with `update_context_state` after a semantic work unit
+   closes.
+5. Validate state ownership, evidence, bounds, and ToolGroup ranges before atomically freezing it.
+6. On the next model request, install a new context generation, filter historical state fragments
+   from the model projection, and append the one latest Quarter/Session/Active state at the tail.
 7. Preserve replaced raw interactions outside model context and expose exact recall by turn, group,
    call, or artifact ID.
 8. Freeze SessionSummary generations without re-summarizing earlier generations. Consolidate every

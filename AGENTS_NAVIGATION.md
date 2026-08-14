@@ -252,8 +252,8 @@ Important variations:
     `codex-rs/core/src/tools/context.rs`, `codex-rs/core/src/tools/handlers/checkpoint.rs`;
   - rollout metadata: `codex-rs/protocol/src/protocol.rs` (`CompactedItem`,
     `ContextCheckpointRolloutMetadata`);
-  - representative symbols: `CheckpointRuntime`, `CheckpointStore`, `update_summary`,
-    `recall_checkpoint_artifact`, `reconcile_reconstructed_checkpoint`;
+  - representative symbols: `CheckpointRuntime`, `CheckpointStore`, `ContextStateSnapshot`,
+    `update_context_state`, `recall_checkpoint_artifact`, `reconcile_reconstructed_checkpoint`;
   - focused validation: `cd codex-rs && just test -p codex-context-checkpoint`, then
     `cd codex-rs && just test -p codex-core` for integration changes.
 - If `ConfigToml` or nested types change, run:

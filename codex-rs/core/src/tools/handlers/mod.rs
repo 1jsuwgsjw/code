@@ -57,7 +57,7 @@ pub(crate) use crate::tools::code_mode::CodeModeExecuteHandler;
 pub(crate) use crate::tools::code_mode::CodeModeWaitHandler;
 pub use apply_patch::ApplyPatchHandler;
 pub use checkpoint::RecallCheckpointArtifactHandler;
-pub use checkpoint::UpdateSummaryHandler;
+pub use checkpoint::UpdateContextStateHandler;
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 pub use current_time::CurrentTimeHandler;

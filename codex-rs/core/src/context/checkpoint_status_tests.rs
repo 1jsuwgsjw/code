@@ -28,7 +28,7 @@ generation=G000002 turn=turn-7\n\
 context_usage=85.12% usage_source=Provider tool_result_share=20.50%\n\
 tool_groups=3 open=1 settled=2 settleable=[TG000003,TG000004]\n\
 last_checkpoint=none\n\
-pressure=Required checkpoint_required=true tool=update_summary recall=recall_checkpoint_artifact\n\
+             pressure=Required checkpoint_required=true tool=update_context_state recall=recall_checkpoint_artifact\n\
 </MEMORY_STATUS>"
     );
 }

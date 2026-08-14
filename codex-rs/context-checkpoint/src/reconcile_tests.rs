@@ -1,7 +1,9 @@
+use crate::ActiveContextState;
 use crate::ArtifactCaptureOutcome;
 use crate::CheckpointBudget;
 use crate::CheckpointRuntime;
 use crate::CheckpointStore;
+use crate::ContextStateUpdate;
 use crate::ContextUsageSnapshot;
 use crate::InstalledCheckpoint;
 use crate::RecallRequest;
@@ -9,7 +11,7 @@ use crate::ToolCallOutcome;
 use crate::ToolInvocationRecord;
 use crate::ToolResultRecord;
 use crate::TruncationProvenance;
-use crate::UpdateSummaryRequest;
+use crate::UpdateContextStateRequest;
 use crate::UsageSource;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
@@ -54,16 +56,20 @@ async fn fork_reconciliation_copies_checkpoint_dependencies() {
         .await
         .expect("settle source tool group");
     let pending = source
-        .prepare_summary(UpdateSummaryRequest {
+        .prepare_context_state(UpdateContextStateRequest {
             completed_tool_groups: vec![call.group_id],
-            summary: "source stage complete".to_string(),
-            evidence: Vec::new(),
-            changes: Vec::new(),
-            validation: Vec::new(),
-            decisions: Vec::new(),
-            open_items: Vec::new(),
-            next_action: "continue in fork".to_string(),
-            correction_of: None,
+            state: ContextStateUpdate {
+                active: ActiveContextState {
+                    objective: "preserve source state in the fork".to_string(),
+                    entries: Vec::new(),
+                    constraints: Vec::new(),
+                    open_questions: Vec::new(),
+                    next_action: "continue in fork".to_string(),
+                },
+                session_upserts: Vec::new(),
+                forget_keys: Vec::new(),
+                quarter_promotions: Vec::new(),
+            },
         })
         .await
         .expect("prepare source checkpoint");

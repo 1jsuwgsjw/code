@@ -27,7 +27,9 @@ use crate::ToolResultRecord;
 use crate::TruncationProvenance;
 use crate::TurnRecord;
 use crate::TurnRecordId;
-use crate::UpdateSummaryRequest;
+use crate::UpdateContextStateRequest;
+use crate::state::apply_context_state_update;
+use crate::state::update_evidence;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -35,7 +37,7 @@ use tokio::sync::Mutex;
 
 pub(crate) const MANIFEST_SCHEMA_VERSION: u32 = 1;
 const MAX_RECALL_BYTES: usize = 256 * 1024;
-const MAX_TURN_RECORD_BYTES: usize = 32 * 1024;
+const MAX_CHECKPOINT_RECORD_BYTES: usize = 32 * 1024;
 
 pub struct CheckpointRuntime {
     pub(crate) store: CheckpointStore,
@@ -314,11 +316,10 @@ impl CheckpointRuntime {
         }
     }
 
-    pub async fn prepare_summary(
+    pub async fn prepare_context_state(
         &self,
-        request: UpdateSummaryRequest,
+        request: UpdateContextStateRequest,
     ) -> Result<PendingCheckpoint, CheckpointError> {
-        validate_summary_text(&request)?;
         let snapshot = {
             let state = self.state.lock().await;
             if let Some(reason) = &state.degraded_reason {
@@ -332,7 +333,13 @@ impl CheckpointRuntime {
             state.manifest.clone()
         };
         let selected = validate_group_selection(&snapshot, &request)?;
-        let mut evidence = request.evidence.clone();
+        let current_state = snapshot
+            .turn_records
+            .last()
+            .map(|record| record.state.clone())
+            .unwrap_or_default();
+        let context_state = apply_context_state_update(&current_state, &request.state)?;
+        let mut evidence = update_evidence(&request.state);
         append_required_recall_evidence(&selected, &mut evidence);
         let artifacts = referenced_artifacts(&snapshot, &evidence)?;
         for artifact in &artifacts {
@@ -356,20 +363,21 @@ impl CheckpointRuntime {
             record_id,
             generation_id: snapshot.generation_id,
             completed_groups: request.completed_tool_groups.clone(),
-            summary: request.summary,
+            state: context_state,
+            summary: String::new(),
             evidence,
-            changes: request.changes,
-            validation: request.validation,
-            decisions: request.decisions,
-            open_items: request.open_items,
-            next_action: request.next_action,
-            correction_of: request.correction_of,
+            changes: Vec::new(),
+            validation: Vec::new(),
+            decisions: Vec::new(),
+            open_items: Vec::new(),
+            next_action: String::new(),
+            correction_of: None,
         };
         let record_bytes = serde_json::to_vec(&record)
             .map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?;
-        if record_bytes.len() > MAX_TURN_RECORD_BYTES {
+        if record_bytes.len() > MAX_CHECKPOINT_RECORD_BYTES {
             return Err(CheckpointError::InvalidRequest(format!(
-                "TurnRecord is {} bytes; maximum is {MAX_TURN_RECORD_BYTES}",
+                "context state checkpoint is {} bytes; maximum is {MAX_CHECKPOINT_RECORD_BYTES}",
                 record_bytes.len()
             )));
         }
@@ -549,6 +557,7 @@ impl CheckpointRuntime {
         };
         state.last_tool_policy = tool_policy;
         PreparedCheckpointRequest {
+            record: state.manifest.turn_records.last().cloned(),
             status: MemoryStatusSnapshot {
                 generation_id: state.manifest.generation_id,
                 turn_id: state
@@ -601,23 +610,9 @@ impl CheckpointRuntime {
     }
 }
 
-fn validate_summary_text(request: &UpdateSummaryRequest) -> Result<(), CheckpointError> {
-    if request.summary.trim().is_empty() {
-        return Err(CheckpointError::InvalidRequest(
-            "summary must not be empty".to_string(),
-        ));
-    }
-    if request.next_action.trim().is_empty() {
-        return Err(CheckpointError::InvalidRequest(
-            "nextAction must not be empty".to_string(),
-        ));
-    }
-    Ok(())
-}
-
 fn validate_group_selection<'a>(
     manifest: &'a RuntimeManifest,
-    request: &UpdateSummaryRequest,
+    request: &UpdateContextStateRequest,
 ) -> Result<Vec<&'a ToolGroupRecord>, CheckpointError> {
     if request.completed_tool_groups.is_empty() {
         return Err(CheckpointError::InvalidRequest(
