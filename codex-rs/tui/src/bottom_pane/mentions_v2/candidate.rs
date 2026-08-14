@@ -5,11 +5,14 @@ use ratatui::style::Styled;
 use ratatui::style::Stylize;
 use ratatui::text::Span;
 
+use crate::project_agent_workbench::ProjectAgentTaskMention;
+
 const TAG_WIDTH: usize = "Plugin".len();
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Selection {
     File(PathBuf),
+    ProjectAgentTask(ProjectAgentTaskMention),
     Tool {
         insert_text: String,
         path: Option<String>,
@@ -18,6 +21,7 @@ pub(crate) enum Selection {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum MentionType {
+    ProjectAgentTask,
     ProjectAgent,
     Plugin,
     Skill,
@@ -32,6 +36,7 @@ impl MentionType {
 
     pub(super) fn span(self, base_style: Style) -> Span<'static> {
         let style = match self {
+            Self::ProjectAgentTask => base_style.green().bold(),
             Self::ProjectAgent => base_style.cyan().bold(),
             Self::Plugin => base_style.magenta(),
             Self::Skill => base_style.dim(),
@@ -43,6 +48,7 @@ impl MentionType {
 
     fn label(self) -> &'static str {
         match self {
+            Self::ProjectAgentTask => "TASK",
             Self::ProjectAgent => "AGENT",
             Self::Plugin => "Plugin",
             Self::Skill => "Skill",

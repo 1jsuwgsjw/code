@@ -32,7 +32,10 @@ impl SearchMode {
             }
             Self::Tools => matches!(
                 mention_type,
-                MentionType::ProjectAgent | MentionType::Plugin | MentionType::Skill
+                MentionType::ProjectAgentTask
+                    | MentionType::ProjectAgent
+                    | MentionType::Plugin
+                    | MentionType::Skill
             ),
         }
     }

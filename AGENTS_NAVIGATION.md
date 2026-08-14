@@ -319,8 +319,10 @@ Important variations:
   normal thread routing owns the independent worker conversation and its composer continues on the
   same thread. Completing an execution started from the workbench selects the newly bound worker
   thread directly. Generic sub-agent picker aliases are not the project-AGENT interface.
-- Unified `@` mentions load enabled project AGENTs through `thread/projectAgent/list` and insert the
-  registered `@<id>` name; ownership runs from `tui/src/app/project_agent_workbench.rs` through
+- Unified `@` mentions load enabled project AGENTs through `thread/projectAgent/list` plus the 20
+  most recent worker-bound tasks from `thread/projectTask/workspace/read`. Registered `@<id>` rows
+  insert delegation text; task rows resume the persisted worker thread and open its exact
+  conversation. Ownership runs from `tui/src/app/project_agent_workbench.rs` through
   `ChatWidget`/`BottomPane` into `tui/src/bottom_pane/mentions_v2/search_catalog.rs`.
 - Dynamic project-tool history is represented by app-server
   `ThreadItem::DynamicToolCall` (`codex-rs/app-server-protocol/src/protocol/v2/item.rs` and

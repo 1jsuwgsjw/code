@@ -61,13 +61,20 @@ fn best_tool_match(candidate: &Candidate, filter: &str) -> Option<(Option<Vec<us
 
 fn sort_rows(rows: &mut [SearchResult], filter: &str) {
     let type_order = |mention_type: MentionType| match mention_type {
-        MentionType::ProjectAgent => 0,
-        MentionType::Plugin => 1,
-        MentionType::Skill => 2,
-        MentionType::File | MentionType::Directory => 3,
+        MentionType::ProjectAgentTask => 0,
+        MentionType::ProjectAgent => 1,
+        MentionType::Plugin => 2,
+        MentionType::Skill => 3,
+        MentionType::File | MentionType::Directory => 4,
     };
 
     rows.sort_by(|a, b| {
+        if filter.is_empty()
+            && a.mention_type == MentionType::ProjectAgentTask
+            && b.mention_type == MentionType::ProjectAgentTask
+        {
+            return std::cmp::Ordering::Equal;
+        }
         type_order(a.mention_type)
             .cmp(&type_order(b.mention_type))
             .then_with(|| compare_within_rank(a, b, filter))

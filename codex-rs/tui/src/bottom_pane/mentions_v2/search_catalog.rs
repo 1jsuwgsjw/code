@@ -3,6 +3,8 @@ use codex_plugin::PluginCapabilitySummary;
 
 use crate::skills_helpers::skill_description;
 use crate::skills_helpers::skill_display_name;
+use crate::project_agent_workbench::ProjectAgentMentionCatalog;
+use crate::project_agent_workbench::ProjectAgentTaskMention;
 
 use super::candidate::Candidate;
 use super::candidate::MentionType;
@@ -11,12 +13,19 @@ use super::candidate::Selection;
 pub(crate) fn build_search_catalog(
     skills: Option<&[SkillMetadata]>,
     plugins: Option<&[PluginCapabilitySummary]>,
-    project_agents: Option<&[codex_app_server_protocol::ProjectAgentRosterEntry]>,
+    project_agents: Option<&ProjectAgentMentionCatalog>,
 ) -> Vec<Candidate> {
     let mut candidates = Vec::new();
     if let Some(project_agents) = project_agents {
         candidates.extend(
             project_agents
+                .recent_tasks
+                .iter()
+                .map(project_agent_task_candidate),
+        );
+        candidates.extend(
+            project_agents
+                .agents
                 .iter()
                 .filter(|agent| agent.enabled)
                 .map(project_agent_candidate),
@@ -31,6 +40,21 @@ pub(crate) fn build_search_catalog(
     }
 
     candidates
+}
+
+fn project_agent_task_candidate(task: &ProjectAgentTaskMention) -> Candidate {
+    Candidate {
+        display_name: format!("@{} · {}", task.agent_id, task.task_title),
+        description: Some(task.task_id.clone()),
+        search_terms: vec![
+            task.agent_id.clone(),
+            task.task_id.clone(),
+            task.task_title.clone(),
+            task.session_thread_id.clone(),
+        ],
+        mention_type: MentionType::ProjectAgentTask,
+        selection: Selection::ProjectAgentTask(task.clone()),
+    }
 }
 
 fn project_agent_candidate(
@@ -259,7 +283,14 @@ mod tests {
         ];
 
         assert_eq!(
-            build_search_catalog(None, None, Some(&agents)),
+            build_search_catalog(
+                /*skills*/ None,
+                /*plugins*/ None,
+                Some(&ProjectAgentMentionCatalog {
+                    agents,
+                    recent_tasks: Vec::new(),
+                }),
+            ),
             vec![Candidate {
                 display_name: "@query".to_string(),
                 description: Some("Project query specialist".to_string()),
@@ -271,5 +302,59 @@ mod tests {
                 },
             }]
         );
+    }
+
+    #[test]
+    fn recent_project_agent_task_is_first_and_searchable_by_all_identifiers() {
+        let session_thread_id = codex_protocol::ThreadId::new().to_string();
+        let task = ProjectAgentTaskMention {
+            root_thread_id: codex_protocol::ThreadId::new(),
+            task_id: "task-auth".to_string(),
+            task_title: "Review auth flow".to_string(),
+            agent_id: "query".to_string(),
+            session_thread_id: session_thread_id.clone(),
+        };
+        let catalog = ProjectAgentMentionCatalog {
+            agents: vec![codex_app_server_protocol::ProjectAgentRosterEntry {
+                id: "query".to_string(),
+                description: "Project query specialist".to_string(),
+                enabled: true,
+                active_session_thread_id: None,
+                session: None,
+                current_task: None,
+            }],
+            recent_tasks: vec![task.clone()],
+        };
+        let candidates = build_search_catalog(
+            /*skills*/ None,
+            /*plugins*/ None,
+            Some(&catalog),
+        );
+
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|candidate| candidate.mention_type)
+                .collect::<Vec<_>>(),
+            vec![MentionType::ProjectAgentTask, MentionType::ProjectAgent]
+        );
+        for query in [
+            task.agent_id.as_str(),
+            task.task_id.as_str(),
+            task.task_title.as_str(),
+            session_thread_id.as_str(),
+        ] {
+            let rows = super::super::filter::filtered_candidates(
+                &candidates,
+                &[],
+                query,
+                super::super::search_mode::SearchMode::Tools,
+                /*show_file_matches*/ false,
+            );
+            assert!(matches!(
+                rows.first().map(|row| &row.selection),
+                Some(Selection::ProjectAgentTask(selected)) if selected == &task
+            ));
+        }
     }
 }

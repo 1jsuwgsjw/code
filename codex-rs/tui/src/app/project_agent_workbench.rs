@@ -10,25 +10,50 @@ use codex_protocol::ThreadId;
 use super::App;
 use crate::app_event::AppEvent;
 use crate::app_server_session::AppServerSession;
+use crate::project_agent_workbench::ProjectAgentMentionCatalog;
+use crate::project_agent_workbench::ProjectAgentTaskMention;
 use crate::project_agent_workbench::ProjectAgentWorkbenchAction;
 
 const PROJECT_TASK_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const PROJECT_TASK_WAIT_TIMEOUT: Duration = Duration::from_secs(31 * 60);
+const RECENT_PROJECT_AGENT_TASK_LIMIT: usize = 20;
 
 impl App {
     pub(super) async fn refresh_project_agent_mentions(
         &mut self,
         app_server: &mut AppServerSession,
     ) {
-        let Some(thread_id) = self.current_displayed_thread_id() else {
+        let Some(displayed_thread_id) = self.current_displayed_thread_id() else {
             self.chat_widget.on_project_agent_mentions_loaded(None);
             return;
         };
-        let project_agents = app_server
-            .thread_project_agent_list(thread_id)
+        let root_thread_id = self
+            .project_agent_conversation_origin
+            .as_ref()
+            .filter(|origin| origin.worker_thread_id == displayed_thread_id)
+            .map_or(displayed_thread_id, |origin| origin.root_thread_id);
+        let agents = app_server
+            .thread_project_agent_list(root_thread_id)
             .await
             .ok()
             .map(|response| response.data);
+        let workspace = app_server
+            .thread_project_task_workspace_read(root_thread_id)
+            .await
+            .ok()
+            .map(|response| response.workspace);
+        let project_agents = if agents.is_none() && workspace.is_none() {
+            None
+        } else {
+            Some(project_agent_mention_catalog(
+                root_thread_id,
+                agents.unwrap_or_default(),
+                workspace
+                    .as_ref()
+                    .map(|workspace| workspace.tasks.as_slice())
+                    .unwrap_or_default(),
+            ))
+        };
         self.chat_widget
             .on_project_agent_mentions_loaded(project_agents);
     }
@@ -140,12 +165,15 @@ impl App {
                         return;
                     }
                 };
-                self.upsert_agent_picker_thread(
-                    session_thread_id,
-                    Some(format!("@{agent_id}")),
-                    Some("project-agent".to_string()),
-                    /*is_closed*/ false,
-                );
+                if let Err(error) = self
+                    .resume_project_agent_thread(tui, app_server, session_thread_id)
+                    .await
+                {
+                    self.sync_active_agent_label();
+                    self.chat_widget
+                        .add_error_message(format!("打开项目 AGENT 会话失败：{error}"));
+                    return;
+                }
                 self.project_agent_conversation_origin =
                     Some(super::ProjectAgentConversationOrigin {
                         root_thread_id: thread_id,
@@ -155,23 +183,6 @@ impl App {
                             "@{agent_id} · {task_title} · Esc 返回任务树"
                         ),
                     });
-                if let Err(error) = self
-                    .select_agent_thread(tui, app_server, session_thread_id)
-                    .await
-                {
-                    self.project_agent_conversation_origin = None;
-                    self.sync_active_agent_label();
-                    self.chat_widget
-                        .add_error_message(format!("打开项目 AGENT 会话失败：{error}"));
-                    return;
-                }
-                if self.current_displayed_thread_id() != Some(session_thread_id) {
-                    self.project_agent_conversation_origin = None;
-                    self.sync_active_agent_label();
-                    self.chat_widget
-                        .add_error_message("打开项目 AGENT 会话失败：worker 会话未激活".to_string());
-                    return;
-                }
                 self.sync_active_agent_label();
             }
             ProjectAgentWorkbenchAction::Refresh(task_id) => {
@@ -186,7 +197,7 @@ impl App {
         tui: &mut crate::tui::Tui,
         app_server: &mut AppServerSession,
     ) -> bool {
-        let Some(origin) = self.project_agent_conversation_origin.take() else {
+        let Some(origin) = self.project_agent_conversation_origin.clone() else {
             return false;
         };
         if self.current_displayed_thread_id() != Some(origin.worker_thread_id) {
@@ -194,26 +205,39 @@ impl App {
             return false;
         }
         if let Err(error) = self
-            .select_agent_thread(tui, app_server, origin.root_thread_id)
+            .resume_project_agent_thread(tui, app_server, origin.root_thread_id)
             .await
         {
-            self.project_agent_conversation_origin = Some(origin);
             self.sync_active_agent_label();
             self.chat_widget
                 .add_error_message(format!("返回项目任务树失败：{error}"));
             return true;
         }
-        if self.current_displayed_thread_id() != Some(origin.root_thread_id) {
-            self.project_agent_conversation_origin = Some(origin);
-            self.sync_active_agent_label();
-            self.chat_widget
-                .add_error_message("返回项目任务树失败：主会话未激活".to_string());
-            return true;
-        }
+        self.project_agent_conversation_origin = None;
         self.sync_active_agent_label();
         self.open_project_task_workspace(app_server, origin.root_thread_id, Some(origin.task_id))
             .await;
         true
+    }
+
+    async fn resume_project_agent_thread(
+        &mut self,
+        tui: &mut crate::tui::Tui,
+        app_server: &mut AppServerSession,
+        thread_id: ThreadId,
+    ) -> Result<(), String> {
+        let resumed = app_server
+            .resume_thread(self.config.clone(), thread_id)
+            .await?;
+        self.shutdown_current_thread(app_server).await;
+        self.replace_chat_widget_with_app_server_thread(
+            tui,
+            app_server,
+            resumed,
+            /*initial_user_message*/ None,
+        )
+            .await
+            .map_err(|error| error.to_string())
     }
 
     async fn open_project_task_workspace(
@@ -233,8 +257,13 @@ impl App {
                     .map(|response| response.data)
                     .unwrap_or_default();
                 if self.current_displayed_thread_id() == Some(thread_id) {
+                    let mention_catalog = project_agent_mention_catalog(
+                        thread_id,
+                        agents.clone(),
+                        &response.workspace.tasks,
+                    );
                     self.chat_widget
-                        .on_project_agent_mentions_loaded(Some(agents.clone()));
+                        .on_project_agent_mentions_loaded(Some(mention_catalog));
                     self.chat_widget.show_project_task_workspace(
                         thread_id,
                         response.workspace,
@@ -301,6 +330,41 @@ impl App {
                 .chat_widget
                 .add_error_message(format!("项目任务状态读取失败：{err}")),
         }
+    }
+}
+
+fn project_agent_mention_catalog(
+    root_thread_id: ThreadId,
+    agents: Vec<protocol::ProjectAgentRosterEntry>,
+    tasks: &[protocol::ProjectTask],
+) -> ProjectAgentMentionCatalog {
+    let mut recent_tasks = tasks
+        .iter()
+        .filter_map(|task| {
+            let protocol::ProjectTaskExecutor::ProjectAgent { agent_id } = &task.executor else {
+                return None;
+            };
+            Some((
+                task.updated_at,
+                ProjectAgentTaskMention {
+                    root_thread_id,
+                    task_id: task.task_id.clone(),
+                    task_title: task.title.clone(),
+                    agent_id: agent_id.clone(),
+                    session_thread_id: task.session_thread_id.clone()?,
+                },
+            ))
+        })
+        .collect::<Vec<_>>();
+    recent_tasks.sort_by(|(left, _), (right, _)| right.cmp(left));
+
+    ProjectAgentMentionCatalog {
+        agents,
+        recent_tasks: recent_tasks
+            .into_iter()
+            .take(RECENT_PROJECT_AGENT_TASK_LIMIT)
+            .map(|(_, task)| task)
+            .collect(),
     }
 }
 

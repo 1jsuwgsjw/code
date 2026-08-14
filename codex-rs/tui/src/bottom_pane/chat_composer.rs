@@ -252,6 +252,7 @@ use self::slash_input::SubmissionValidation;
 use crate::app_event::AppEvent;
 use crate::app_event::ConnectorsSnapshot;
 use crate::app_event_sender::AppEventSender;
+use crate::project_agent_workbench::ProjectAgentWorkbenchAction;
 use crate::bottom_pane::LocalImageAttachment;
 use crate::bottom_pane::MentionBinding;
 use crate::bottom_pane::textarea::TextArea;
@@ -388,7 +389,7 @@ pub(crate) struct ChatComposer {
     pending_slash_command_history: Option<HistoryEntry>,
     skills: Option<Vec<SkillMetadata>>,
     plugins: Option<Vec<PluginCapabilitySummary>>,
-    project_agents: Option<Vec<codex_app_server_protocol::ProjectAgentRosterEntry>>,
+    project_agents: Option<crate::project_agent_workbench::ProjectAgentMentionCatalog>,
     connectors_snapshot: Option<ConnectorsSnapshot>,
     collaboration_modes_enabled: bool,
     config: ChatComposerConfig,
@@ -600,7 +601,7 @@ impl ChatComposer {
 
     pub fn set_project_agent_mentions(
         &mut self,
-        project_agents: Option<Vec<codex_app_server_protocol::ProjectAgentRosterEntry>>,
+        project_agents: Option<crate::project_agent_workbench::ProjectAgentMentionCatalog>,
     ) {
         self.project_agents = project_agents;
         self.sync_popups();
@@ -2059,6 +2060,20 @@ impl ChatComposer {
                             path.to_string_lossy().as_ref(),
                         );
                     }
+                    MentionV2Selection::ProjectAgentTask(task) => {
+                        let cursor = token_range.start;
+                        self.draft.textarea.replace_range(token_range, "");
+                        self.draft.textarea.set_cursor(cursor);
+                        self.app_event_tx.send(AppEvent::ProjectAgentWorkbench {
+                            thread_id: task.root_thread_id,
+                            action: ProjectAgentWorkbenchAction::OpenConversation {
+                                task_id: task.task_id,
+                                task_title: task.task_title,
+                                agent_id: task.agent_id,
+                                session_thread_id: task.session_thread_id,
+                            },
+                        });
+                    }
                     MentionV2Selection::Tool { insert_text, path } => {
                         self.insert_selected_mention(token_range, &insert_text, path.as_deref());
                     }
@@ -2301,7 +2316,9 @@ impl ChatComposer {
     pub fn project_agents(
         &self,
     ) -> Option<&Vec<codex_app_server_protocol::ProjectAgentRosterEntry>> {
-        self.project_agents.as_ref()
+        self.project_agents
+            .as_ref()
+            .map(|project_agents| &project_agents.agents)
     }
 
     fn mentions_enabled(&self) -> bool {
@@ -3717,7 +3734,7 @@ impl ChatComposer {
         let candidates = super::mentions_v2::build_search_catalog(
             self.skills.as_deref(),
             self.plugins.as_deref(),
-            self.project_agents.as_deref(),
+            self.project_agents.as_ref(),
         );
 
         match &mut self.popups.active {
@@ -4490,6 +4507,28 @@ mod tests {
             ),
             rx,
         )
+    }
+
+    fn test_project_agent_mentions(
+        root_thread_id: codex_protocol::ThreadId,
+    ) -> crate::project_agent_workbench::ProjectAgentMentionCatalog {
+        crate::project_agent_workbench::ProjectAgentMentionCatalog {
+            agents: vec![codex_app_server_protocol::ProjectAgentRosterEntry {
+                id: "query".to_string(),
+                description: "Project query specialist".to_string(),
+                enabled: true,
+                active_session_thread_id: None,
+                session: None,
+                current_task: None,
+            }],
+            recent_tasks: vec![crate::project_agent_workbench::ProjectAgentTaskMention {
+                root_thread_id,
+                task_id: "task-auth".to_string(),
+                task_title: "Review auth flow".to_string(),
+                agent_id: "query".to_string(),
+                session_thread_id: codex_protocol::ThreadId::new().to_string(),
+            }],
+        }
     }
 
     #[test]
@@ -6814,16 +6853,9 @@ mod tests {
                 composer
                     .set_mentions_v2_enabled(features.enabled(codex_features::Feature::MentionsV2));
                 composer.set_text_content("@qu".to_string(), Vec::new(), Vec::new());
-                composer.set_project_agent_mentions(Some(vec![
-                    codex_app_server_protocol::ProjectAgentRosterEntry {
-                        id: "query".to_string(),
-                        description: "Project query specialist".to_string(),
-                        enabled: true,
-                        active_session_thread_id: None,
-                        session: None,
-                        current_task: None,
-                    },
-                ]));
+                composer.set_project_agent_mentions(Some(test_project_agent_mentions(
+                    codex_protocol::ThreadId::new(),
+                )));
                 composer.set_plugin_mentions(Some(vec![PluginCapabilitySummary {
                     config_name: "sample@test".to_string(),
                     display_name: "Sample Plugin".to_string(),
@@ -7530,6 +7562,68 @@ mod tests {
         match result {
             InputResult::Submitted { text, .. } => assert_eq!(text, input),
             _ => panic!("expected Submitted"),
+        }
+    }
+
+    #[test]
+    fn project_agent_task_mention_opens_exact_worker_conversation() {
+        let (mut composer, mut rx) = new_test_composer();
+        let root_thread_id = codex_protocol::ThreadId::new();
+        let project_agents = test_project_agent_mentions(root_thread_id);
+        let task = project_agents.recent_tasks[0].clone();
+        composer.set_mentions_v2_enabled(/*enabled*/ true);
+        composer.set_project_agent_mentions(Some(project_agents));
+        composer.set_text_content("@qu".to_string(), Vec::new(), Vec::new());
+        composer.sync_popups();
+
+        let (result, consumed) = composer.handle_key_event(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        assert!(consumed);
+        assert!(matches!(result, InputResult::None));
+        assert_eq!(composer.draft.textarea.text(), "");
+        loop {
+            match rx.try_recv().expect("expected project AGENT workbench event") {
+                AppEvent::ProjectAgentWorkbench { thread_id, action } => {
+                    assert_eq!(thread_id, root_thread_id);
+                    assert_eq!(
+                        action,
+                        ProjectAgentWorkbenchAction::OpenConversation {
+                            task_id: task.task_id,
+                            task_title: task.task_title,
+                            agent_id: task.agent_id,
+                            session_thread_id: task.session_thread_id,
+                        }
+                    );
+                    break;
+                }
+                _ => continue,
+            }
+        }
+    }
+
+    #[test]
+    fn registered_project_agent_mention_still_inserts_delegation_text() {
+        let (mut composer, mut rx) = new_test_composer();
+        let mut project_agents = test_project_agent_mentions(codex_protocol::ThreadId::new());
+        project_agents.recent_tasks.clear();
+        composer.set_mentions_v2_enabled(/*enabled*/ true);
+        composer.set_project_agent_mentions(Some(project_agents));
+        composer.set_text_content("@qu".to_string(), Vec::new(), Vec::new());
+        composer.sync_popups();
+
+        let (result, consumed) = composer.handle_key_event(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        assert!(consumed);
+        assert!(matches!(result, InputResult::None));
+        assert_eq!(composer.draft.textarea.text(), "@query ");
+        while let Ok(event) = rx.try_recv() {
+            assert!(!matches!(event, AppEvent::ProjectAgentWorkbench { .. }));
         }
     }
 

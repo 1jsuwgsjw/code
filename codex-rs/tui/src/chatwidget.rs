@@ -1848,7 +1848,7 @@ impl ChatWidget {
 
     pub(crate) fn on_project_agent_mentions_loaded(
         &mut self,
-        project_agents: Option<Vec<codex_app_server_protocol::ProjectAgentRosterEntry>>,
+        project_agents: Option<crate::project_agent_workbench::ProjectAgentMentionCatalog>,
     ) {
         self.bottom_pane.set_project_agent_mentions(project_agents);
     }
