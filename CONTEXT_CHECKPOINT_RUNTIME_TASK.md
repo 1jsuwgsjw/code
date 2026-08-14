@@ -88,9 +88,13 @@ Implemented in the current working stage:
 - regenerated app-server JSON and TypeScript schema fixtures, with an opt-in Windows workflow export
   path that does not add work to normal push builds.
 
-Still required before this correction is complete:
+Runtime acceptance evidence:
 
-- a real resumed-thread smoke of projection, semantic artifact recall, and checkpoint history replay.
+- Windows workflow `31846792396` generated and uploaded the app-server schemas, and final-head
+  workflow `31848095705` compiled and uploaded the Windows CLI successfully.
+- Resumed-thread smoke `01a00283-6275-7e93-a1e0-59ca8cc77eac` created
+  `ctx:G000001/TR000001`, restored its Active and Session state in the next request, and recalled
+  `artifact:TR000001/A001` as `CONTEXT_CHECKPOINT_SMOKE_EVIDENCE` with exit status `0`.
 
 ## Problem
 
