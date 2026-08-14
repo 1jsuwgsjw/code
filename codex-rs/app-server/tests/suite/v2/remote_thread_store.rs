@@ -60,7 +60,7 @@ use uuid::Uuid;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn thread_delete_with_non_local_thread_store_does_not_create_local_persistence() -> Result<()>
 {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
@@ -196,7 +196,7 @@ async fn thread_delete_with_non_local_thread_store_does_not_create_local_persist
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cold_thread_resume_reuses_non_local_history_probe() -> Result<()> {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
