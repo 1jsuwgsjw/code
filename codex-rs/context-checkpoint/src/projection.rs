@@ -14,9 +14,8 @@ pub fn project_history<T: Clone>(
             history.len()
         )));
     }
-    let mut projected = Vec::with_capacity(
-        history.len() - (pending.history_end - pending.history_start) + 1,
-    );
+    let mut projected =
+        Vec::with_capacity(history.len() - (pending.history_end - pending.history_start) + 1);
     projected.extend_from_slice(&history[..pending.history_start]);
     projected.push(checkpoint_item);
     projected.extend_from_slice(&history[pending.history_end..]);

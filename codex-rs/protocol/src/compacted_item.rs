@@ -97,6 +97,7 @@ mod tests {
                 generation_id: "G000003".to_string(),
                 turn_record_id: "TR000007".to_string(),
                 manifest_sha256: "abc123".to_string(),
+                source_thread_id: Some("01900000-0000-7000-8000-000000000001".to_string()),
                 fallback_kind: Some(crate::protocol::ContextFallbackKind::RemoteProvider),
             }),
             window_number: Some(4),

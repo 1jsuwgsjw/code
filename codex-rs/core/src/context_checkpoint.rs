@@ -1,13 +1,19 @@
-use crate::compact::SUMMARY_PREFIX;
+use crate::context::CheckpointRecordFragment;
 use crate::session::Session;
 use crate::session::turn_context::TurnContext;
 use codex_context_checkpoint::CheckpointError;
 use codex_context_checkpoint::InstalledCheckpoint;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
+use codex_context_fragments::ContextualUserFragment;
 use codex_protocol::protocol::CompactedItem;
 use codex_protocol::protocol::ContextCheckpointRolloutMetadata;
 use codex_protocol::protocol::ContextFallbackKind;
+
+#[derive(Debug)]
+pub(crate) struct ReconstructedCheckpoint {
+    pub(crate) metadata: ContextCheckpointRolloutMetadata,
+    pub(crate) replacement_history_sha256: String,
+    pub(crate) replacement_item_count: usize,
+}
 
 pub(crate) async fn fallback_metadata(
     session: &Session,
@@ -25,6 +31,7 @@ pub(crate) async fn fallback_metadata(
         manifest_sha256: state
             .manifest_sha256
             .unwrap_or_else(|| "unavailable".to_string()),
+        source_thread_id: Some(session.thread_id().to_string()),
         fallback_kind: Some(fallback_kind),
     }
 }
@@ -42,29 +49,13 @@ pub(crate) async fn install_pending_checkpoint(
         return Ok(false);
     };
     let history = session.clone_history().await;
-    let checkpoint_text = format!(
-        "{SUMMARY_PREFIX}\n{}",
-        serde_json::to_string_pretty(&pending.record)
-            .map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?
-    );
-    let checkpoint_item = ResponseItem::Message {
-        id: None,
-        role: "user".to_string(),
-        content: vec![ContentItem::InputText {
-            text: checkpoint_text,
-        }],
-        phase: None,
-        internal_chat_message_metadata_passthrough: None,
-    };
-    let replacement_history = codex_context_checkpoint::project_history(
-        history.raw_items(),
-        &pending,
-        checkpoint_item,
-    )?;
+    let checkpoint_item =
+        CheckpointRecordFragment::new(&pending.record)?.into_response_input_item();
+    let replacement_history =
+        codex_context_checkpoint::project_history(history.raw_items(), &pending, checkpoint_item)?;
     let replacement_bytes = serde_json::to_vec(&replacement_history)
         .map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?;
-    let replacement_history_sha256 =
-        codex_context_checkpoint::content_sha256(&replacement_bytes);
+    let replacement_history_sha256 = codex_context_checkpoint::content_sha256(&replacement_bytes);
     let (window_number, window_ids) = session.advance_auto_compact_window().await;
     let compacted_item = CompactedItem {
         message: pending.record.summary.clone(),
@@ -74,6 +65,7 @@ pub(crate) async fn install_pending_checkpoint(
             generation_id: pending.record.generation_id.to_string(),
             turn_record_id: pending.record.record_id.to_string(),
             manifest_sha256: pending.manifest_sha256,
+            source_thread_id: Some(session.thread_id().to_string()),
             fallback_kind: None,
         }),
         window_number: Some(window_number),
@@ -107,4 +99,51 @@ pub(crate) async fn install_pending_checkpoint(
         );
     }
     Ok(true)
+}
+
+pub(crate) async fn reconcile_reconstructed_checkpoint(
+    session: &Session,
+    checkpoint: Option<&ReconstructedCheckpoint>,
+    had_checkpoint_metadata: bool,
+) -> Result<(), CheckpointError> {
+    let Some(checkpoint) = checkpoint else {
+        if had_checkpoint_metadata {
+            session
+                .services
+                .context_checkpoint
+                .clear_reconstructed_checkpoint()
+                .await?;
+        }
+        return Ok(());
+    };
+
+    let generation_id = checkpoint
+        .metadata
+        .generation_id
+        .parse::<codex_context_checkpoint::CheckpointGenerationId>()
+        .map_err(CheckpointError::InvalidRequest)?;
+    let record_id = checkpoint
+        .metadata
+        .turn_record_id
+        .parse::<codex_context_checkpoint::TurnRecordId>()
+        .map_err(CheckpointError::InvalidRequest)?;
+    let source_thread_id = checkpoint
+        .metadata
+        .source_thread_id
+        .clone()
+        .unwrap_or_else(|| session.thread_id().to_string());
+    session
+        .services
+        .context_checkpoint
+        .reconcile_reconstructed_checkpoint(
+            &source_thread_id,
+            &checkpoint.metadata.manifest_sha256,
+            generation_id,
+            InstalledCheckpoint {
+                record_id,
+                replacement_history_sha256: checkpoint.replacement_history_sha256.clone(),
+                replacement_item_count: checkpoint.replacement_item_count,
+            },
+        )
+        .await
 }

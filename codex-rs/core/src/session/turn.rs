@@ -320,6 +320,16 @@ pub(crate) async fn run_turn(
                 .await;
                 let needs_follow_up = model_needs_follow_up || has_pending_input;
                 let token_limit_reached = token_status.token_limit_reached;
+                let checkpoint_fallback_required = sess.services.context_checkpoint.pressure(
+                    codex_context_checkpoint::ContextUsageSnapshot {
+                        active_tokens: token_status.active_context_tokens.max(0) as u64,
+                        context_window: turn_context
+                            .model_context_window()
+                            .and_then(|tokens| u64::try_from(tokens).ok()),
+                        usage_source: codex_context_checkpoint::UsageSource::TokenizerEstimate,
+                    },
+                )
+                    == codex_context_checkpoint::CheckpointPressure::FallbackRequired;
 
                 trace!(
                     turn_id = %turn_context.sub_id,
@@ -366,7 +376,8 @@ pub(crate) async fn run_turn(
 
                 // as long as compaction works well in getting us way below the token limit, we shouldn't worry about being in an infinite loop.
                 if needs_follow_up
-                    && (sess.take_new_context_window_request().await || token_limit_reached)
+                    && (sess.take_new_context_window_request().await
+                        || (token_limit_reached && checkpoint_fallback_required))
                 {
                     if let Err(err) = run_auto_compact(
                         &sess,
@@ -840,15 +851,16 @@ async fn run_pre_sampling_compact(
         super::context_window::context_window_token_status(sess.as_ref(), turn_context.as_ref())
             .await;
     // Compact if the configured auto-compaction budget or usable context window is exhausted.
-    let checkpoint_pressure = sess.services.context_checkpoint.pressure(
-        codex_context_checkpoint::ContextUsageSnapshot {
-            active_tokens: token_status.active_context_tokens.max(0) as u64,
-            context_window: turn_context
-                .model_context_window()
-                .and_then(|tokens| u64::try_from(tokens).ok()),
-            usage_source: codex_context_checkpoint::UsageSource::TokenizerEstimate,
-        },
-    );
+    let checkpoint_pressure =
+        sess.services
+            .context_checkpoint
+            .pressure(codex_context_checkpoint::ContextUsageSnapshot {
+                active_tokens: token_status.active_context_tokens.max(0) as u64,
+                context_window: turn_context
+                    .model_context_window()
+                    .and_then(|tokens| u64::try_from(tokens).ok()),
+                usage_source: codex_context_checkpoint::UsageSource::TokenizerEstimate,
+            });
     if token_status.token_limit_reached
         && checkpoint_pressure == codex_context_checkpoint::CheckpointPressure::FallbackRequired
     {
@@ -1169,6 +1181,7 @@ async fn run_sampling_request(
     let token_status =
         super::context_window::context_window_token_status(sess.as_ref(), turn_context.as_ref())
             .await;
+    let raw_history_len = sess.clone_history().await.raw_items().len();
     let tool_result_share_basis_points =
         crate::context::CheckpointStatusFragment::tool_result_share_basis_points(&input);
     let checkpoint_status = match sess
@@ -1176,7 +1189,7 @@ async fn run_sampling_request(
         .context_checkpoint
         .prepare_request(
             step_context.turn.sub_id.to_string(),
-            input.len(),
+            raw_history_len,
             codex_context_checkpoint::ContextUsageSnapshot {
                 active_tokens: token_status.active_context_tokens.max(0) as u64,
                 context_window: turn_context
@@ -1227,7 +1240,9 @@ async fn run_sampling_request(
         };
         if let Some(status) = checkpoint_status.clone() {
             prompt_input.push(
-                crate::context::CheckpointStatusFragment::new(status).into_response_input_item(),
+                crate::context::CheckpointStatusFragment::new(status)
+                    .into_response_input_item()
+                    .into(),
             );
         }
         let prompt = build_prompt(

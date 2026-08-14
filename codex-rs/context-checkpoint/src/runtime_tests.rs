@@ -33,12 +33,10 @@ async fn runtime() -> (tempfile::TempDir, CheckpointRuntime) {
     let directory = tempdir().expect("create temporary checkpoint directory");
     let root = AbsolutePathBuf::try_from(directory.path().to_path_buf())
         .expect("temporary directory is absolute");
-    let runtime = CheckpointRuntime::try_load(
-        CheckpointStore::new(root),
-        CheckpointBudget::default(),
-    )
-    .await
-    .expect("load checkpoint runtime");
+    let runtime =
+        CheckpointRuntime::try_load(CheckpointStore::new(root), CheckpointBudget::default())
+            .await
+            .expect("load checkpoint runtime");
     (directory, runtime)
 }
 
@@ -113,12 +111,10 @@ async fn pending_checkpoint_survives_reload_and_installation() {
 
     let root = AbsolutePathBuf::try_from(directory.path().to_path_buf())
         .expect("temporary directory is absolute");
-    let restored = CheckpointRuntime::try_load(
-        CheckpointStore::new(root),
-        CheckpointBudget::default(),
-    )
-    .await
-    .expect("restore checkpoint runtime");
+    let restored =
+        CheckpointRuntime::try_load(CheckpointStore::new(root), CheckpointBudget::default())
+            .await
+            .expect("restore checkpoint runtime");
     let restored_pending = restored
         .take_pending_checkpoint()
         .await
@@ -134,6 +130,14 @@ async fn pending_checkpoint_survives_reload_and_installation() {
         .await
         .expect("mark checkpoint installed");
     assert!(restored.take_pending_checkpoint().await.is_none());
+    let recalled = restored
+        .recall(RecallRequest {
+            artifact_id: call.output.artifact_id,
+            max_bytes: 1024,
+        })
+        .await
+        .expect("recall artifact after its tool group was settled");
+    assert_eq!(recalled.data, b"call-1".to_vec());
 }
 
 #[tokio::test]

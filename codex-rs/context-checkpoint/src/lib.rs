@@ -8,6 +8,7 @@ mod budget;
 mod ids;
 mod model;
 mod projection;
+mod reconcile;
 mod runtime;
 mod store;
 
@@ -43,5 +44,5 @@ pub use model::UpdateSummaryRequest;
 pub use model::UsageSource;
 pub use projection::project_history;
 pub use runtime::CheckpointRuntime;
-pub use store::content_sha256;
 pub use store::CheckpointStore;
+pub use store::content_sha256;

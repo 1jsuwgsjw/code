@@ -7,6 +7,22 @@ Implementation is now the active follow-up to the Project AGENT return-path buil
 the fixed task definition and source map; implementation must not silently narrow or replace its
 objective.
 
+### Implementation checkpoint
+
+- `d4ac1eee0` established the default-on runtime, typed IDs, pressure policy, Artifact capture,
+  ToolGroup settlement, TurnRecord projection, model tools, pending installation, rollout metadata,
+  and legacy fallback routing.
+- The current recovery stage archives pre-truncation shell bytes and raw MCP JSON, uses typed
+  contextual fragments, writes content-addressed manifest snapshots, retains a durable Artifact
+  index, and reconciles resume/fork/rollback against the surviving rollout checkpoint.
+- Fork recovery copies the referenced Artifact and TurnRecord dependencies from the source thread;
+  rollback restores the surviving ancestor or clears checkpoint state when every checkpoint was
+  rolled back. Recovery errors preserve the reconstructed conversation and are reported instead of
+  preventing session startup.
+- SessionSummary, five-generation QuarterSummary, LongTermMemory promotion, and memory citation
+  consolidation remain later stages; they must build on the verified checkpoint ancestry rather
+  than re-summarize raw rollout history.
+
 ## Problem
 
 Codex currently treats compaction primarily as a whole-history replacement. Local compaction asks

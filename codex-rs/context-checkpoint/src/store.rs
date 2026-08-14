@@ -18,6 +18,7 @@ use tokio::io::AsyncWriteExt;
 
 const MANIFEST_FILE: &str = "manifest.json";
 const PREVIOUS_MANIFEST_FILE: &str = "manifest.previous.json";
+const MANIFESTS_DIR: &str = "manifests";
 
 #[derive(Clone, Debug)]
 pub struct CheckpointStore {
@@ -35,6 +36,24 @@ impl CheckpointStore {
 
     pub fn root(&self) -> &AbsolutePathBuf {
         &self.root
+    }
+
+    pub fn sibling_thread_store(&self, thread_id: &str) -> Result<Self, CheckpointError> {
+        let thread_path = Path::new(thread_id);
+        if thread_id.is_empty()
+            || thread_path.components().count() != 1
+            || thread_path.file_name().and_then(|name| name.to_str()) != Some(thread_id)
+        {
+            return Err(CheckpointError::InvalidRequest(format!(
+                "invalid checkpoint source thread id {thread_id:?}"
+            )));
+        }
+        let parent = self.root.as_path().parent().ok_or_else(|| {
+            CheckpointError::Storage("checkpoint store has no parent directory".to_string())
+        })?;
+        let root = AbsolutePathBuf::try_from(parent.join(thread_path))
+            .map_err(|error| CheckpointError::Storage(error.to_string()))?;
+        Ok(Self::new(root))
     }
 
     pub async fn load_manifest<T: DeserializeOwned>(&self) -> Result<Option<T>, CheckpointError> {
@@ -67,8 +86,30 @@ impl CheckpointStore {
         let bytes = serde_json::to_vec_pretty(manifest)
             .map_err(|error| CheckpointError::Storage(error.to_string()))?;
         let sha256 = sha256_hex(&bytes);
+        let snapshot_path = self.manifest_snapshot_path(&sha256)?;
+        self.write_immutable(snapshot_path.as_path(), &bytes)
+            .await?;
         self.write_replaceable(MANIFEST_FILE, &bytes).await?;
         Ok(sha256)
+    }
+
+    pub(crate) async fn load_manifest_by_sha256<T: DeserializeOwned>(
+        &self,
+        expected_sha256: &str,
+    ) -> Result<T, CheckpointError> {
+        let path = self.manifest_snapshot_path(expected_sha256)?;
+        let bytes = tokio::fs::read(path.as_path()).await.map_err(|error| {
+            CheckpointError::Storage(format!(
+                "failed to read checkpoint manifest {expected_sha256}: {error}"
+            ))
+        })?;
+        let actual_sha256 = sha256_hex(&bytes);
+        if actual_sha256 != expected_sha256 {
+            return Err(CheckpointError::UntrustedEvidence(format!(
+                "checkpoint manifest hash mismatch: expected {expected_sha256}, got {actual_sha256}"
+            )));
+        }
+        serde_json::from_slice(&bytes).map_err(|error| CheckpointError::Storage(error.to_string()))
     }
 
     pub async fn current_manifest_sha256(&self) -> Result<Option<String>, CheckpointError> {
@@ -108,6 +149,24 @@ impl CheckpointStore {
         Ok(())
     }
 
+    pub(crate) async fn copy_artifact_from(
+        &self,
+        source: &Self,
+        artifact: &ArtifactRef,
+    ) -> Result<(), CheckpointError> {
+        let data = source.read_verified_artifact(artifact).await?;
+        let copied = self
+            .write_artifact(artifact.media_type.clone(), &data)
+            .await?;
+        if copied != *artifact {
+            return Err(CheckpointError::UntrustedEvidence(format!(
+                "copied artifact {} changed identity",
+                artifact.artifact_id
+            )));
+        }
+        Ok(())
+    }
+
     pub async fn recall_artifact(
         &self,
         artifact: &ArtifactRef,
@@ -141,6 +200,15 @@ impl CheckpointStore {
             .join(format!("{id}.blob")))
     }
 
+    fn manifest_snapshot_path(&self, sha256: &str) -> Result<AbsolutePathBuf, CheckpointError> {
+        if sha256.len() != 64 || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(CheckpointError::InvalidRequest(format!(
+                "invalid checkpoint manifest hash {sha256:?}"
+            )));
+        }
+        Ok(self.root.join(MANIFESTS_DIR).join(format!("{sha256}.json")))
+    }
+
     async fn read_verified_artifact(
         &self,
         artifact: &ArtifactRef,
@@ -163,10 +231,7 @@ impl CheckpointStore {
     }
 
     async fn write_immutable(&self, path: &Path, bytes: &[u8]) -> Result<(), CheckpointError> {
-        if tokio::fs::try_exists(path)
-            .await
-            .map_err(storage_error)?
-        {
+        if tokio::fs::try_exists(path).await.map_err(storage_error)? {
             let existing = tokio::fs::read(path).await.map_err(storage_error)?;
             if existing == bytes {
                 return Ok(());
@@ -226,7 +291,10 @@ impl CheckpointStore {
                 .map_err(storage_error)?;
         }
         if let Err(error) = tokio::fs::rename(&temporary, path.as_path()).await {
-            if tokio::fs::try_exists(previous.as_path()).await.unwrap_or(false) {
+            if tokio::fs::try_exists(previous.as_path())
+                .await
+                .unwrap_or(false)
+            {
                 let _ = tokio::fs::rename(previous.as_path(), path.as_path()).await;
             }
             let _ = tokio::fs::remove_file(&temporary).await;

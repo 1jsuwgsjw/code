@@ -7,6 +7,7 @@ use codex_protocol::ThreadId;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::CompactedItem;
+use codex_protocol::protocol::ContextCheckpointRolloutMetadata;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::ResumedHistory;
@@ -105,6 +106,45 @@ fn completed_user_turn_rollout(
         },
     )));
     rollout_items
+}
+
+#[tokio::test]
+async fn reconstruct_history_returns_the_surviving_checkpoint_anchor() {
+    let (session, turn_context) = make_session_and_context().await;
+    let replacement_history = vec![user_message("checkpoint base")];
+    let metadata = ContextCheckpointRolloutMetadata {
+        checkpoint_id: "checkpoint-TR000007".to_string(),
+        generation_id: "G000003".to_string(),
+        turn_record_id: "TR000007".to_string(),
+        manifest_sha256: "manifest-sha".to_string(),
+        source_thread_id: Some(session.thread_id().to_string()),
+        fallback_kind: None,
+    };
+    let rollout_items = vec![RolloutItem::Compacted(CompactedItem {
+        message: "checkpoint summary".to_string(),
+        replacement_history: Some(replacement_history.clone()),
+        checkpoint: Some(metadata.clone()),
+        window_number: None,
+        first_window_id: None,
+        previous_window_id: None,
+        window_id: None,
+    })];
+
+    let reconstructed = session
+        .reconstruct_history_from_rollout(&turn_context, &rollout_items)
+        .await;
+    let checkpoint = reconstructed
+        .checkpoint
+        .expect("checkpoint anchor should survive reconstruction");
+    assert!(reconstructed.had_checkpoint_metadata);
+    assert_eq!(checkpoint.metadata, metadata);
+    assert_eq!(
+        checkpoint.replacement_history_sha256,
+        codex_context_checkpoint::content_sha256(
+            &serde_json::to_vec(&replacement_history).expect("serialize replacement history")
+        )
+    );
+    assert_eq!(checkpoint.replacement_item_count, 1);
 }
 
 #[tokio::test]

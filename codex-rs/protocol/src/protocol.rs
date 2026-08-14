@@ -3207,6 +3207,8 @@ pub struct ContextCheckpointRolloutMetadata {
     pub turn_record_id: String,
     pub manifest_sha256: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_kind: Option<ContextFallbackKind>,
 }
 

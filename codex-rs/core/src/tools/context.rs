@@ -15,6 +15,7 @@ use codex_protocol::models::FunctionCallOutputContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::function_call_output_content_items_to_text;
+use codex_tools::ArchivalToolOutput;
 use codex_tools::LoadableToolSpec;
 use codex_tools::ToolName;
 use codex_utils_output_truncation::TruncationPolicy;
@@ -96,6 +97,21 @@ impl ToolOutput for McpToolOutput {
         ResponseInputItem::FunctionCallOutput {
             call_id: call_id.to_string(),
             output: self.response_payload(),
+        }
+    }
+
+    fn archival_payload(&self, _call_id: &str, _payload: &ToolPayload) -> ArchivalToolOutput {
+        match serde_json::to_vec(&self.result) {
+            Ok(payload) => ArchivalToolOutput {
+                media_type: "application/json".to_string(),
+                payload,
+                model_facing_fallback: false,
+            },
+            Err(_) => ArchivalToolOutput {
+                media_type: "text/plain".to_string(),
+                payload: self.log_preview().into_bytes(),
+                model_facing_fallback: true,
+            },
         }
     }
 
@@ -346,6 +362,14 @@ impl ToolOutput for ExecCommandToolOutput {
             }],
             Some(true),
         )
+    }
+
+    fn archival_payload(&self, _call_id: &str, _payload: &ToolPayload) -> ArchivalToolOutput {
+        ArchivalToolOutput {
+            media_type: "application/octet-stream".to_string(),
+            payload: self.raw_output.clone(),
+            model_facing_fallback: self.output_omitted_bytes.is_some(),
+        }
     }
 
     fn post_tool_use_id(&self, call_id: &str) -> String {

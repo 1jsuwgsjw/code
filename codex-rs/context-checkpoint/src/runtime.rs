@@ -33,37 +33,39 @@ use serde::Serialize;
 use std::collections::HashSet;
 use tokio::sync::Mutex;
 
-const MANIFEST_SCHEMA_VERSION: u32 = 1;
+pub(crate) const MANIFEST_SCHEMA_VERSION: u32 = 1;
 const MAX_RECALL_BYTES: usize = 256 * 1024;
 const MAX_TURN_RECORD_BYTES: usize = 32 * 1024;
 
 pub struct CheckpointRuntime {
-    store: CheckpointStore,
+    pub(crate) store: CheckpointStore,
     budget: CheckpointBudget,
-    state: Mutex<RuntimeState>,
+    pub(crate) state: Mutex<RuntimeState>,
     persist_lock: Mutex<()>,
 }
 
 #[derive(Debug, Clone)]
-struct RuntimeState {
-    manifest: RuntimeManifest,
-    degraded_reason: Option<String>,
-    manifest_sha256: Option<String>,
+pub(crate) struct RuntimeState {
+    pub(crate) manifest: RuntimeManifest,
+    pub(crate) degraded_reason: Option<String>,
+    pub(crate) manifest_sha256: Option<String>,
     last_tool_policy: CheckpointToolPolicy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RuntimeManifest {
-    schema_version: u32,
-    generation_id: CheckpointGenerationId,
-    next_turn_record_id: u64,
-    next_tool_group_id: u64,
-    active_sampling: Option<SamplingBoundary>,
-    tool_groups: Vec<ToolGroupRecord>,
-    turn_records: Vec<TurnRecord>,
-    pending_checkpoint: Option<PendingCheckpoint>,
-    last_installed: Option<InstalledCheckpoint>,
+pub(crate) struct RuntimeManifest {
+    pub(crate) schema_version: u32,
+    pub(crate) generation_id: CheckpointGenerationId,
+    pub(crate) next_turn_record_id: u64,
+    pub(crate) next_tool_group_id: u64,
+    pub(crate) active_sampling: Option<SamplingBoundary>,
+    pub(crate) tool_groups: Vec<ToolGroupRecord>,
+    pub(crate) turn_records: Vec<TurnRecord>,
+    #[serde(default)]
+    pub(crate) artifacts: Vec<ArtifactRef>,
+    pub(crate) pending_checkpoint: Option<PendingCheckpoint>,
+    pub(crate) last_installed: Option<InstalledCheckpoint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,7 +77,7 @@ struct SamplingBoundary {
 }
 
 impl RuntimeManifest {
-    fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self {
             schema_version: MANIFEST_SCHEMA_VERSION,
             generation_id: CheckpointGenerationId::new(1),
@@ -84,6 +86,7 @@ impl RuntimeManifest {
             active_sampling: None,
             tool_groups: Vec::new(),
             turn_records: Vec::new(),
+            artifacts: Vec::new(),
             pending_checkpoint: None,
             last_installed: None,
         }
@@ -145,8 +148,7 @@ impl CheckpointRuntime {
     }
 
     pub fn pressure(&self, usage: ContextUsageSnapshot) -> CheckpointPressure {
-        self.budget
-            .pressure(self.budget.usage_basis_points(usage))
+        self.budget.pressure(self.budget.usage_basis_points(usage))
     }
 
     pub async fn tool_policy(&self) -> CheckpointToolPolicy {
@@ -284,6 +286,16 @@ impl CheckpointRuntime {
                 outcome: result.outcome,
                 truncation: result.truncation,
             };
+            for artifact in [&record.input, &record.output] {
+                if !state
+                    .manifest
+                    .artifacts
+                    .iter()
+                    .any(|existing| existing.artifact_id == artifact.artifact_id)
+                {
+                    state.manifest.artifacts.push(artifact.clone());
+                }
+            }
             let group = state
                 .manifest
                 .tool_groups
@@ -330,7 +342,9 @@ impl CheckpointRuntime {
         let history_start = selected
             .first()
             .map(|group| group.history_start)
-            .ok_or_else(|| CheckpointError::InvalidRequest("no tool groups selected".to_string()))?;
+            .ok_or_else(|| {
+                CheckpointError::InvalidRequest("no tool groups selected".to_string())
+            })?;
         let history_end = selected
             .last()
             .and_then(|group| group.history_end)
@@ -401,10 +415,14 @@ impl CheckpointRuntime {
 
     pub async fn take_pending_checkpoint(&self) -> Option<PendingCheckpoint> {
         let state = self.state.lock().await;
-        state.manifest.pending_checkpoint.clone().map(|mut pending| {
-            pending.manifest_sha256 = state.manifest_sha256.clone().unwrap_or_default();
-            pending
-        })
+        state
+            .manifest
+            .pending_checkpoint
+            .clone()
+            .map(|mut pending| {
+                pending.manifest_sha256 = state.manifest_sha256.clone().unwrap_or_default();
+                pending
+            })
     }
 
     pub async fn mark_installed(
@@ -452,9 +470,8 @@ impl CheckpointRuntime {
             }
             state.manifest.pending_checkpoint = None;
             state.manifest.last_installed = Some(installed);
-            state.manifest.generation_id = CheckpointGenerationId::new(
-                state.manifest.generation_id.get().saturating_add(1),
-            );
+            state.manifest.generation_id =
+                CheckpointGenerationId::new(state.manifest.generation_id.get().saturating_add(1));
         }
         match self.persist().await {
             Ok(_) => Ok(()),
@@ -558,7 +575,7 @@ impl CheckpointRuntime {
         }
     }
 
-    async fn persist(&self) -> Result<String, CheckpointError> {
+    pub(crate) async fn persist(&self) -> Result<String, CheckpointError> {
         let _persist_guard = self.persist_lock.lock().await;
         let manifest = self.state.lock().await.manifest.clone();
         let sha256 = self.store.write_manifest(&manifest).await?;
@@ -654,10 +671,7 @@ fn referenced_artifacts(
         .collect()
 }
 
-fn append_required_recall_evidence(
-    selected: &[&ToolGroupRecord],
-    evidence: &mut Vec<EvidenceRef>,
-) {
+fn append_required_recall_evidence(selected: &[&ToolGroupRecord], evidence: &mut Vec<EvidenceRef>) {
     let mut evidence_ids = evidence
         .iter()
         .filter_map(|reference| match reference {
@@ -681,10 +695,15 @@ fn append_required_recall_evidence(
 
 fn find_artifact(manifest: &RuntimeManifest, artifact_id: &ArtifactId) -> Option<ArtifactRef> {
     manifest
-        .tool_groups
+        .artifacts
         .iter()
-        .flat_map(|group| &group.calls)
-        .flat_map(|call| [&call.input, &call.output])
+        .chain(
+            manifest
+                .tool_groups
+                .iter()
+                .flat_map(|group| &group.calls)
+                .flat_map(|call| [&call.input, &call.output]),
+        )
         .find(|artifact| &artifact.artifact_id == artifact_id)
         .cloned()
 }

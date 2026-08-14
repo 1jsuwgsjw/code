@@ -464,6 +464,36 @@ fn exec_command_tool_output_formats_truncated_response() {
 }
 
 #[test]
+fn exec_command_tool_output_archives_raw_bytes_before_model_truncation() {
+    let payload = ToolPayload::Function {
+        arguments: "{}".to_string(),
+    };
+    let raw_output = b"token one token two token three token four token five".to_vec();
+    let output = ExecCommandToolOutput {
+        event_call_id: "call-archive".to_string(),
+        chunk_id: "archive".to_string(),
+        wall_time: std::time::Duration::from_millis(/*millis*/ 10),
+        raw_output: raw_output.clone(),
+        truncation_policy: TruncationPolicy::Tokens(10_000),
+        max_output_tokens: Some(1),
+        process_id: None,
+        exit_code: Some(0),
+        original_token_count: Some(10),
+        output_omitted_bytes: None,
+        hook_command: None,
+    };
+
+    assert_eq!(
+        output.archival_payload("call-archive", &payload),
+        ArchivalToolOutput {
+            media_type: "application/octet-stream".to_string(),
+            payload: raw_output,
+            model_facing_fallback: false,
+        }
+    );
+}
+
+#[test]
 fn exec_command_tool_output_preserves_omission_metadata_when_truncated() {
     let payload = ToolPayload::Function {
         arguments: "{}".to_string(),

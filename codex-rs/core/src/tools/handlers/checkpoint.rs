@@ -34,13 +34,12 @@ impl ToolExecutor<ToolInvocation> for UpdateSummaryHandler {
                     "update_summary received an unsupported payload".to_string(),
                 ));
             };
-            let request = serde_json::from_str::<UpdateSummaryRequest>(&arguments).map_err(
-                |error| {
+            let request =
+                serde_json::from_str::<UpdateSummaryRequest>(&arguments).map_err(|error| {
                     FunctionCallError::RespondToModel(format!(
                         "failed to parse update_summary arguments: {error}"
                     ))
-                },
-            )?;
+                })?;
             let pending = invocation
                 .session
                 .services
@@ -92,11 +91,12 @@ impl ToolExecutor<ToolInvocation> for RecallCheckpointArtifactHandler {
                     "recall_checkpoint_artifact received an unsupported payload".to_string(),
                 ));
             };
-            let arguments = serde_json::from_str::<RecallArguments>(&arguments).map_err(|error| {
-                FunctionCallError::RespondToModel(format!(
-                    "failed to parse recall_checkpoint_artifact arguments: {error}"
-                ))
-            })?;
+            let arguments =
+                serde_json::from_str::<RecallArguments>(&arguments).map_err(|error| {
+                    FunctionCallError::RespondToModel(format!(
+                        "failed to parse recall_checkpoint_artifact arguments: {error}"
+                    ))
+                })?;
             let recalled = invocation
                 .session
                 .services
@@ -127,10 +127,7 @@ impl CoreToolRuntime for RecallCheckpointArtifactHandler {}
 
 fn update_summary_spec() -> ToolSpec {
     let string_array = |description: &str| {
-        JsonSchema::array(
-            JsonSchema::string(None),
-            Some(description.to_string()),
-        )
+        JsonSchema::array(JsonSchema::string(None), Some(description.to_string()))
     };
     let evidence = JsonSchema::object(
         BTreeMap::from([
@@ -138,7 +135,7 @@ fn update_summary_spec() -> ToolSpec {
                 "kind".to_string(),
                 JsonSchema::string_enum(
                     vec![
-                        "artifact".to_string(),
+                        serde_json::Value::String("artifact".to_string()),
                         "workspacePath".to_string(),
                         "symbol".to_string(),
                     ],
@@ -172,7 +169,10 @@ fn update_summary_spec() -> ToolSpec {
         ),
         (
             "evidence".to_string(),
-            JsonSchema::array(evidence, Some("Verifiable evidence references.".to_string())),
+            JsonSchema::array(
+                evidence,
+                Some("Verifiable evidence references.".to_string()),
+            ),
         ),
         ("changes".to_string(), string_array("Actual changes made.")),
         (
@@ -200,6 +200,7 @@ fn update_summary_spec() -> ToolSpec {
         name: "update_summary".to_string(),
         description: "Freeze a completed, contiguous tool-work prefix into a durable checkpoint."
             .to_string(),
+        output_schema: None,
         strict: false,
         defer_loading: None,
         parameters: JsonSchema::object(
@@ -219,6 +220,7 @@ fn recall_checkpoint_artifact_spec() -> ToolSpec {
         name: "recall_checkpoint_artifact".to_string(),
         description: "Read a bounded, hash-verified artifact referenced by this session."
             .to_string(),
+        output_schema: None,
         strict: false,
         defer_loading: None,
         parameters: JsonSchema::object(

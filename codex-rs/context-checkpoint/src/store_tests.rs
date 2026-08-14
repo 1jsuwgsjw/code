@@ -53,7 +53,7 @@ async fn artifact_hash_mismatch_is_rejected() {
 #[tokio::test]
 async fn manifest_replacement_and_previous_file_recovery_are_supported() {
     let (_directory, store) = test_store();
-    store
+    let first_sha256 = store
         .write_manifest(&json!({"version": 1}))
         .await
         .expect("write first manifest");
@@ -61,6 +61,11 @@ async fn manifest_replacement_and_previous_file_recovery_are_supported() {
         .write_manifest(&json!({"version": 2}))
         .await
         .expect("replace manifest");
+    let first_snapshot: serde_json::Value = store
+        .load_manifest_by_sha256(&first_sha256)
+        .await
+        .expect("load immutable first manifest");
+    assert_eq!(first_snapshot, json!({"version": 1}));
     let current: serde_json::Value = store
         .load_manifest()
         .await

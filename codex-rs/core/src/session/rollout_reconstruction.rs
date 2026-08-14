@@ -1,6 +1,8 @@
 use super::*;
 use crate::context::world_state::WorldStateSnapshot;
+use crate::context_checkpoint::ReconstructedCheckpoint;
 use crate::context_manager::is_user_turn_boundary;
+use codex_protocol::protocol::ContextCheckpointRolloutMetadata;
 use codex_protocol::protocol::SessionContextWindow;
 use uuid::Uuid;
 
@@ -16,6 +18,8 @@ pub(super) struct RolloutReconstruction {
     pub(super) first_window_id: Option<Uuid>,
     pub(super) previous_window_id: Option<Uuid>,
     pub(super) window_id: Option<Uuid>,
+    pub(super) checkpoint: Option<ReconstructedCheckpoint>,
+    pub(super) had_checkpoint_metadata: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -50,6 +54,7 @@ struct ActiveReplaySegment<'a> {
     reference_context_item: TurnReferenceContextItem,
     world_state_replay: Vec<&'a RolloutItem>,
     base_replacement_history: Option<&'a [ResponseItem]>,
+    base_checkpoint: Option<&'a ContextCheckpointRolloutMetadata>,
     window: Option<ReconstructedWindow>,
 }
 
@@ -61,6 +66,7 @@ fn turn_ids_are_compatible(active_turn_id: Option<&str>, item_turn_id: Option<&s
 fn finalize_active_segment<'a>(
     active_segment: ActiveReplaySegment<'a>,
     base_replacement_history: &mut Option<&'a [ResponseItem]>,
+    base_checkpoint: &mut Option<&'a ContextCheckpointRolloutMetadata>,
     previous_turn_settings: &mut Option<PreviousTurnSettings>,
     reference_context_item: &mut TurnReferenceContextItem,
     world_state_replay: &mut Vec<&'a RolloutItem>,
@@ -85,6 +91,7 @@ fn finalize_active_segment<'a>(
         && let Some(segment_base_replacement_history) = active_segment.base_replacement_history
     {
         *base_replacement_history = Some(segment_base_replacement_history);
+        *base_checkpoint = active_segment.base_checkpoint;
     }
 
     if window.is_none() {
@@ -137,6 +144,17 @@ impl Session {
             })
         };
         let mut base_replacement_history: Option<&[ResponseItem]> = None;
+        let mut base_checkpoint = None;
+        let had_checkpoint_metadata = rollout_items.iter().any(|item| {
+            matches!(
+                item,
+                RolloutItem::Compacted(compacted)
+                    if compacted
+                        .checkpoint
+                        .as_ref()
+                        .is_some_and(|checkpoint| checkpoint.fallback_kind.is_none())
+            )
+        });
         let mut previous_turn_settings = None;
         let mut reference_context_item = TurnReferenceContextItem::NeverSet;
         let mut world_state_replay = Vec::new();
@@ -182,6 +200,10 @@ impl Session {
                         && let Some(replacement_history) = &compacted.replacement_history
                     {
                         active_segment.base_replacement_history = Some(replacement_history);
+                        active_segment.base_checkpoint = compacted
+                            .checkpoint
+                            .as_ref()
+                            .filter(|checkpoint| checkpoint.fallback_kind.is_none());
                         rollout_suffix = &rollout_items[index + 1..];
                     }
                 }
@@ -260,6 +282,7 @@ impl Session {
                         finalize_active_segment(
                             active_segment,
                             &mut base_replacement_history,
+                            &mut base_checkpoint,
                             &mut previous_turn_settings,
                             &mut reference_context_item,
                             &mut world_state_replay,
@@ -298,6 +321,7 @@ impl Session {
             finalize_active_segment(
                 active_segment,
                 &mut base_replacement_history,
+                &mut base_checkpoint,
                 &mut previous_turn_settings,
                 &mut reference_context_item,
                 &mut world_state_replay,
@@ -427,6 +451,7 @@ impl Session {
             previous_id: None,
             id: None,
         });
+        let checkpoint = reconstructed_checkpoint(base_checkpoint, base_replacement_history);
         RolloutReconstruction {
             history: history.into_raw_items(),
             previous_turn_settings,
@@ -436,8 +461,24 @@ impl Session {
             first_window_id: window.first_id,
             previous_window_id: window.previous_id,
             window_id: window.id,
+            checkpoint,
+            had_checkpoint_metadata,
         }
     }
+}
+
+fn reconstructed_checkpoint(
+    metadata: Option<&ContextCheckpointRolloutMetadata>,
+    replacement_history: Option<&[ResponseItem]>,
+) -> Option<ReconstructedCheckpoint> {
+    let metadata = metadata?.clone();
+    let replacement_history = replacement_history?;
+    let bytes = serde_json::to_vec(replacement_history).ok()?;
+    Some(ReconstructedCheckpoint {
+        metadata,
+        replacement_history_sha256: codex_context_checkpoint::content_sha256(&bytes),
+        replacement_item_count: replacement_history.len(),
+    })
 }
 
 fn parse_uuid_v7(value: &str) -> Option<Uuid> {

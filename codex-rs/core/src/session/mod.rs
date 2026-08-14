@@ -231,7 +231,7 @@ pub(crate) use self::input_queue::TurnInputQueue;
 pub use self::mcp_runtime::McpRuntimeSnapshot;
 use self::review::spawn_review_thread;
 use self::session::AppServerClientMetadata;
-use self::session::Session;
+pub(crate) use self::session::Session;
 use self::session::SessionConfiguration;
 pub(crate) use self::session::SessionSettingsUpdate;
 #[cfg(test)]
@@ -1436,6 +1436,8 @@ impl Session {
             first_window_id,
             previous_window_id,
             window_id,
+            checkpoint,
+            had_checkpoint_metadata,
         } = self
             .reconstruct_history_from_rollout(turn_context, rollout_items)
             .await;
@@ -1461,6 +1463,15 @@ impl Session {
                 },
             );
             state.set_previous_turn_settings(previous_turn_settings.clone());
+        }
+        if let Err(error) = crate::context_checkpoint::reconcile_reconstructed_checkpoint(
+            self,
+            checkpoint.as_ref(),
+            had_checkpoint_metadata,
+        )
+        .await
+        {
+            warn!("failed to reconcile reconstructed context checkpoint: {error}");
         }
         let prefix_tokens = if matches!(
             turn_context.config.model_auto_compact_token_limit_scope,

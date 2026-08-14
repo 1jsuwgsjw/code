@@ -240,6 +240,22 @@ Important variations:
 - Shared prompt assets: `codex-rs/prompts/`,
   `codex-rs/collaboration-mode-templates/`
 - Context fragment contracts: `codex-rs/context-fragments/`
+- Durable context checkpointing:
+  - design and delivery state: `CONTEXT_CHECKPOINT_RUNTIME_TASK.md`;
+  - storage, pressure, settlement, projection, recall, and recovery:
+    `codex-rs/context-checkpoint/src/`;
+  - request/status and checkpoint installation facade:
+    `codex-rs/core/src/context_checkpoint.rs`, `codex-rs/core/src/session/turn.rs`;
+  - resume/fork/rollback ancestor selection:
+    `codex-rs/core/src/session/rollout_reconstruction.rs`;
+  - tool boundary and model tools: `codex-rs/core/src/tools/registry.rs`,
+    `codex-rs/core/src/tools/context.rs`, `codex-rs/core/src/tools/handlers/checkpoint.rs`;
+  - rollout metadata: `codex-rs/protocol/src/protocol.rs` (`CompactedItem`,
+    `ContextCheckpointRolloutMetadata`);
+  - representative symbols: `CheckpointRuntime`, `CheckpointStore`, `update_summary`,
+    `recall_checkpoint_artifact`, `reconcile_reconstructed_checkpoint`;
+  - focused validation: `cd codex-rs && just test -p codex-context-checkpoint`, then
+    `cd codex-rs && just test -p codex-core` for integration changes.
 - If `ConfigToml` or nested types change, run:
   - `cd codex-rs && just write-config-schema`
   - `cd codex-rs && just test -p codex-core`.
