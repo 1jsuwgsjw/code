@@ -18,5 +18,6 @@ fn checkpoint_tool_specs_have_stable_names_and_required_fields() {
         serde_json::json!(["completedToolGroups", "state"])
     );
     let recall_schema = serde_json::to_value(recall.parameters).expect("serialize recall schema");
-    assert_eq!(recall_schema["required"], serde_json::json!(["artifactId"]));
+    assert_eq!(recall_schema["required"], serde_json::Value::Null);
+    assert!(recall_schema["properties"]["reference"].is_object());
 }

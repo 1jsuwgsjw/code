@@ -77,11 +77,19 @@ Implemented in the current working stage:
 - core integration coverage that drives two consecutive checkpoints and asserts that the final
   model request contains exactly one latest state projection;
 - legacy TurnRecord payload fields retained only for reading earlier manifests.
+- semantic `ctx:Gxxxxxx/TRxxxxxx` checkpoint identities and deterministic
+  `artifact:TRxxxxxx/Axxx` recall references, while SHA-256 remains integrity metadata only;
+- a bounded model projection that preserves both three-layer state and legacy summary semantics
+  without injecting manifest, artifact, or source-revision hashes;
+- structured checkpoint lifecycle metadata through core protocol and app-server history, including
+  labels, state-entry count, and the context-window chain;
+- an adaptive TUI checkpoint history tree with narrow-window folding, raw transcript recovery, and
+  Unicode Windows Terminal / ASCII legacy-console rendering.
 
 Still required before this correction is complete:
 
-- CI confirmation of source invalidation, the revised tool schema, scheduled Quarter promotion,
-  and latest-only request projection.
+- GitHub Windows workflow confirmation for the semantic recall, protocol, app-server, and TUI
+  changes, followed by a real resumed-thread smoke of projection, recall, and history replay.
 
 ## Problem
 
@@ -281,6 +289,109 @@ behavior contradicts it.
   checkpoint runtime.
 - The checkpoint implementation workflow must run the focused matrix under **CI Execution** and must
   not add unrelated workspace-wide gates.
+
+## Semantic References, Compact Recovery, And TUI History
+
+The next delivery stage must treat content hashes as integrity metadata, not as the primary identity
+shown to the model or user. Long SHA-256 values remain authoritative for immutable storage,
+deduplication, and verification, but normal state, recall, diagnostics, and TUI surfaces use stable
+semantic references.
+
+### Semantic Reference Layer
+
+- Checkpoints use a hierarchical reference such as `ctx:S001/G001/TR001`; Session, Generation, and
+  TurnRecord components remain independently addressable.
+- State entries use typed references such as `fact:source/source.smoke`,
+  `decision:architecture/checkpoint-projection`, and `open:validation/cold-resume`.
+- Recallable tool evidence uses a short deterministic reference such as `evidence:TG003/C001/output`.
+- Entries carry bounded category labels for filtering and projection. Labels are Runtime-validated;
+  the model does not invent storage paths, hashes, or sequence numbers.
+- The manifest owns the semantic-reference-to-content-hash mapping. Default model projections and
+  TUI rows omit full hashes; detail and integrity views may reveal them on demand.
+- Existing content-addressed paths remain unchanged so this layer does not weaken verification or
+  require rewriting immutable artifacts.
+
+### Compact Recovery Projection
+
+Before rendering `<CONTEXT_CHECKPOINT>`, Runtime deterministically reduces the durable state:
+
+1. Merge entries by typed semantic key and keep only the latest valid revision.
+2. Remove superseded, resolved, or source-invalidated entries from the active projection while
+   retaining their immutable records for history and recall.
+3. Preserve user decisions, active constraints, verified facts, unresolved failures, open questions,
+   and the next direct action.
+4. Replace repeated artifact hashes and evidence arrays with grouped semantic recall references.
+5. Keep settled tool process and raw results outside model context unless an entry is marked as
+   requiring recall. Open reasoning tails remain visible until settled.
+6. Apply deterministic per-category and total byte/token caps. Overflow remains externally
+   recallable and is represented by a bounded omission index, never silently discarded.
+7. Serialize the same logical state in the same order so the frozen prefix remains cacheable.
+
+The full manifest, TurnRecord, tool calls, outputs, and integrity hashes remain recoverable. Compact
+projection changes model-visible recovery cost, not evidence retention.
+
+### TUI Observability And History
+
+- Normal conversation shows concise lifecycle events for collecting, validating, preparing,
+  installing, restoring, invalidating, and recalling checkpoint state.
+- Events show semantic checkpoint references, category labels, state, generation transition, and
+  measured context reduction. Raw hashes are relegated to the detail view.
+- A dedicated history tree presents `Session -> Generation -> TurnRecord -> state entries/evidence`
+  without treating checkpoint generations as sub-agents.
+- Selecting an entry opens a separate detail view with its summary, source revision, trust state,
+  originating tool groups, and recallable evidence.
+- Read-only history inspection and artifact recall must never mutate the active conversation.
+- Restore, rollback, and fork are separate explicit actions. Their confirmation surface states which
+  thread/window will change and preserves the current checkpoint before mutation.
+- Resume and restoration failures remain visible on the corresponding tree node instead of being
+  reduced to a transient toast or raw backend error.
+- The TUI consumes structured lifecycle events; it does not infer checkpoint state by parsing text
+  messages or hashes.
+
+### Adaptive Folding And Windows Rendering
+
+- Build the history surface from semantic nodes, not rendered text lines. Session, Generation,
+  TurnRecord, state entry, tool group, and evidence nodes retain stable identity across refresh,
+  resume, and resize.
+- Keep the current generation, active work, failures, unresolved entries, and the selected path
+  expanded. Fold completed older generations, settled tool groups, and repeated evidence by default.
+- Collapse consecutive calls belonging to one settled ToolGroup into one row with status, call count,
+  duration, and context cost. Load individual calls and raw output only when that node is opened.
+- Manual expand/collapse choices override automatic folding and are persisted by semantic reference.
+  Incoming events must not steal focus, collapse the selected branch, or reset scroll position.
+- Adapt folding to viewport pressure without hiding failures, user decisions, active constraints, or
+  `nextAction`. A bounded visible-row model virtualizes large trees and avoids rendering off-screen
+  history.
+- Keep thread identity separate from live worker/process state. A resumed or completed thread remains
+  navigable from its persisted checkpoint index even when no worker is active.
+- Load the checkpoint index first on resume and fetch TurnRecord, state-entry, and artifact details
+  lazily. Opening history must not deserialize or inject the entire rollout into model context.
+- Detect Windows terminal capabilities and select a rendering profile. Use box-drawing glyphs only
+  where width and VT behavior are reliable; provide an aligned ASCII tree for legacy ConHost or
+  incompatible terminals.
+- Avoid emoji and ambiguous-width symbols in structural columns. Calculate CJK text width through the
+  existing TUI width/wrapping utilities and reserve stable columns for status and tree indentation.
+- Coalesce rapid lifecycle updates and redraw only changed visible rows. Resize, alternate-screen
+  restoration, and resume must preserve selection, expansion state, and scroll anchor.
+- Do not depend on OSC features, true color, or terminal-specific cursor behavior for correctness.
+  Color and richer glyphs are progressive enhancements over a complete plain-text representation.
+- Add snapshots for Unicode and ASCII profiles at narrow and wide Windows-oriented viewports,
+  including CJK labels, deep nesting, long tool groups, resize, resume, failure, and restored state.
+
+### Required Runtime Acceptance
+
+- Verify a checkpoint installation and projection transition in one live turn.
+- Restart the process and resume the same thread, proving semantic IDs and projected state survive.
+- Install multiple generations and prove only the latest applicable checkpoint is injected while
+  earlier generations remain navigable.
+- Change a referenced source file and prove the stale fact is invalidated in both projection and UI.
+- Recall evidence through a semantic reference and verify its underlying content hash.
+- Exercise read-only history, restore, rollback, and fork independently in the TUI.
+- Exercise automatic folding, manual expansion persistence, lazy detail loading, and selection
+  stability across resize and resume.
+- Verify both Windows Terminal and legacy-compatible rendering profiles without overlap, width drift,
+  flicker-inducing full-tree rebuilds, or inaccessible history nodes.
+- Snapshot all user-visible checkpoint lifecycle and history-tree states.
 
 ## Acceptance Criteria
 

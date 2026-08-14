@@ -4,6 +4,9 @@ use crate::session::turn_context::TurnContext;
 use codex_context_checkpoint::CheckpointError;
 use codex_context_checkpoint::InstalledCheckpoint;
 use codex_context_fragments::ContextualUserFragment;
+use codex_protocol::items::ContextCheckpointDetails;
+use codex_protocol::items::ContextCompactionItem;
+use codex_protocol::items::TurnItem;
 use codex_protocol::protocol::CompactedItem;
 use codex_protocol::protocol::ContextCheckpointRolloutMetadata;
 use codex_protocol::protocol::ContextFallbackKind;
@@ -60,6 +63,24 @@ pub(crate) async fn install_pending_checkpoint(
         .map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?;
     let replacement_history_sha256 = codex_context_checkpoint::content_sha256(&replacement_bytes);
     let (window_number, window_ids) = session.advance_auto_compact_window().await;
+    let checkpoint_ref = codex_context_checkpoint::checkpoint_reference(
+        pending.record.generation_id,
+        pending.record.record_id,
+    );
+    let first_window_id = window_ids.first_window_id.to_string();
+    let previous_window_id = window_ids.previous_window_id.map(|id| id.to_string());
+    let window_id = window_ids.window_id.to_string();
+    let checkpoint_details = ContextCheckpointDetails {
+        checkpoint_ref: checkpoint_ref.clone(),
+        generation_id: pending.record.generation_id.to_string(),
+        turn_record_id: pending.record.record_id.to_string(),
+        labels: codex_context_checkpoint::checkpoint_labels(&pending.record),
+        state_entry_count: codex_context_checkpoint::checkpoint_state_entry_count(&pending.record),
+        window_number,
+        first_window_id: first_window_id.clone(),
+        previous_window_id: previous_window_id.clone(),
+        window_id: window_id.clone(),
+    };
     let compacted_item = CompactedItem {
         message: if pending.record.state.is_empty() {
             pending.record.summary.clone()
@@ -71,7 +92,7 @@ pub(crate) async fn install_pending_checkpoint(
         },
         replacement_history: Some(replacement_history.clone()),
         checkpoint: Some(ContextCheckpointRolloutMetadata {
-            checkpoint_id: format!("checkpoint-{}", pending.record.record_id),
+            checkpoint_id: checkpoint_ref,
             generation_id: pending.record.generation_id.to_string(),
             turn_record_id: pending.record.record_id.to_string(),
             manifest_sha256: pending.manifest_sha256,
@@ -79,9 +100,9 @@ pub(crate) async fn install_pending_checkpoint(
             fallback_kind: None,
         }),
         window_number: Some(window_number),
-        first_window_id: Some(window_ids.first_window_id.to_string()),
-        previous_window_id: window_ids.previous_window_id.map(|id| id.to_string()),
-        window_id: Some(window_ids.window_id.to_string()),
+        first_window_id: Some(first_window_id),
+        previous_window_id,
+        window_id: Some(window_id),
     };
     session
         .replace_compacted_history(
@@ -108,6 +129,14 @@ pub(crate) async fn install_pending_checkpoint(
             "checkpoint history was installed but Runtime finalization degraded"
         );
     }
+    let checkpoint_item =
+        TurnItem::ContextCompaction(ContextCompactionItem::with_checkpoint(checkpoint_details));
+    session
+        .emit_turn_item_started(turn_context, &checkpoint_item)
+        .await;
+    session
+        .emit_turn_item_completed(turn_context, checkpoint_item)
+        .await;
     Ok(true)
 }
 

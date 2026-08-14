@@ -213,8 +213,14 @@ pub struct ArtifactCaptureFailure {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArtifactLocator {
+    ArtifactId(ArtifactId),
+    Reference(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecallRequest {
-    pub artifact_id: ArtifactId,
+    pub locator: ArtifactLocator,
     pub max_bytes: usize,
 }
 

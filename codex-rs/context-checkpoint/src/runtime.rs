@@ -1,6 +1,7 @@
 use crate::ArtifactCaptureFailure;
 use crate::ArtifactCaptureOutcome;
 use crate::ArtifactId;
+use crate::ArtifactLocator;
 use crate::ArtifactRef;
 use crate::CheckpointBudget;
 use crate::CheckpointError;
@@ -511,10 +512,19 @@ impl CheckpointRuntime {
         }
         let artifact = {
             let state = self.state.lock().await;
-            find_artifact(&state.manifest, &request.artifact_id).ok_or_else(|| {
+            let artifact_id = match &request.locator {
+                ArtifactLocator::ArtifactId(artifact_id) => artifact_id.clone(),
+                ArtifactLocator::Reference(reference) => {
+                    resolve_artifact_reference(&state.manifest, reference).ok_or_else(|| {
+                        CheckpointError::UntrustedEvidence(format!(
+                            "unknown checkpoint artifact reference {reference}"
+                        ))
+                    })?
+                }
+            };
+            find_artifact(&state.manifest, &artifact_id).ok_or_else(|| {
                 CheckpointError::UntrustedEvidence(format!(
-                    "artifact {} is not referenced by this session",
-                    request.artifact_id
+                    "artifact {artifact_id} is not referenced by this session"
                 ))
             })?
         };
@@ -720,6 +730,20 @@ fn find_artifact(manifest: &RuntimeManifest, artifact_id: &ArtifactId) -> Option
         )
         .find(|artifact| &artifact.artifact_id == artifact_id)
         .cloned()
+}
+
+fn resolve_artifact_reference(manifest: &RuntimeManifest, reference: &str) -> Option<ArtifactId> {
+    let record_id = reference
+        .strip_prefix("artifact:")?
+        .split_once("/A")?
+        .0
+        .parse::<TurnRecordId>()
+        .ok()?;
+    let record = manifest
+        .turn_records
+        .iter()
+        .find(|record| record.record_id == record_id)?;
+    crate::model_projection::artifact_id_for_reference(record, reference).cloned()
 }
 
 fn shifted_history_index(

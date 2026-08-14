@@ -232,7 +232,12 @@ impl ChatWidget {
             | ServerNotification::WindowsWorldWritableWarning(_)
             | ServerNotification::WindowsSandboxSetupCompleted(_)
             | ServerNotification::AccountLoginCompleted(_) => {}
-            ServerNotification::ContextCompacted(_) => {}
+            ServerNotification::ContextCompacted(notification) => {
+                self.add_to_history(history_cell::ContextCheckpointCell::new(
+                    notification.checkpoint,
+                ));
+                self.request_redraw();
+            }
         }
     }
 

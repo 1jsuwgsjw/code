@@ -6,6 +6,7 @@ use crate::tools::context::boxed_tool_output;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
 use codex_context_checkpoint::ArtifactId;
+use codex_context_checkpoint::ArtifactLocator;
 use codex_context_checkpoint::RecallRequest;
 use codex_context_checkpoint::UpdateContextStateRequest;
 use codex_tools::JsonSchema;
@@ -50,11 +51,14 @@ impl ToolExecutor<ToolInvocation> for UpdateContextStateHandler {
                 .map_err(|error| FunctionCallError::RespondToModel(error.to_string()))?;
             let output = json!({
                 "status": "pending",
+                "checkpointRef": codex_context_checkpoint::checkpoint_reference(
+                    pending.record.generation_id,
+                    pending.record.record_id,
+                ),
                 "recordId": pending.record.record_id.to_string(),
                 "generationId": pending.record.generation_id.to_string(),
                 "historyStart": pending.history_start,
                 "historyEnd": pending.history_end,
-                "manifestSha256": pending.manifest_sha256,
             });
             Ok(boxed_tool_output(FunctionToolOutput::from_text(
                 output.to_string(),
@@ -71,7 +75,10 @@ pub struct RecallCheckpointArtifactHandler;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RecallArguments {
-    artifact_id: String,
+    #[serde(default)]
+    reference: Option<String>,
+    #[serde(default)]
+    artifact_id: Option<String>,
     #[serde(default = "default_recall_bytes")]
     max_bytes: usize,
 }
@@ -98,17 +105,29 @@ impl ToolExecutor<ToolInvocation> for RecallCheckpointArtifactHandler {
                         "failed to parse recall_checkpoint_artifact arguments: {error}"
                     ))
                 })?;
+            let locator = match (&arguments.reference, &arguments.artifact_id) {
+                (Some(reference), None) => ArtifactLocator::Reference(reference.clone()),
+                (None, Some(artifact_id)) => {
+                    ArtifactLocator::ArtifactId(ArtifactId::from_sha256(artifact_id.clone()))
+                }
+                _ => {
+                    return Err(FunctionCallError::RespondToModel(
+                        "provide exactly one of reference or artifactId".to_string(),
+                    ));
+                }
+            };
             let recalled = invocation
                 .session
                 .services
                 .context_checkpoint
                 .recall(RecallRequest {
-                    artifact_id: ArtifactId::from_sha256(arguments.artifact_id),
+                    locator,
                     max_bytes: arguments.max_bytes,
                 })
                 .await
                 .map_err(|error| FunctionCallError::RespondToModel(error.to_string()))?;
             let output = json!({
+                "reference": arguments.reference,
                 "artifactId": recalled.artifact.artifact_id.as_str(),
                 "sha256": recalled.artifact.sha256,
                 "mediaType": recalled.artifact.media_type,
@@ -280,7 +299,7 @@ fn update_context_state_spec() -> ToolSpec {
 fn recall_checkpoint_artifact_spec() -> ToolSpec {
     ToolSpec::Function(ResponsesApiTool {
         name: "recall_checkpoint_artifact".to_string(),
-        description: "Read a bounded, hash-verified artifact referenced by this session."
+        description: "Read a bounded, hash-verified artifact referenced by this session. Provide exactly one of reference or legacy artifactId."
             .to_string(),
         output_schema: None,
         strict: false,
@@ -288,8 +307,17 @@ fn recall_checkpoint_artifact_spec() -> ToolSpec {
         parameters: JsonSchema::object(
             BTreeMap::from([
                 (
+                    "reference".to_string(),
+                    JsonSchema::string(Some(
+                        "Semantic artifact reference, for example artifact:TR000001/A001."
+                            .to_string(),
+                    )),
+                ),
+                (
                     "artifactId".to_string(),
-                    JsonSchema::string(Some("Artifact SHA-256 id.".to_string())),
+                    JsonSchema::string(Some(
+                        "Legacy artifact SHA-256 id. Prefer reference when available.".to_string(),
+                    )),
                 ),
                 (
                     "maxBytes".to_string(),
@@ -298,7 +326,7 @@ fn recall_checkpoint_artifact_spec() -> ToolSpec {
                     )),
                 ),
             ]),
-            Some(vec!["artifactId".to_string()]),
+            /*required*/ None,
             Some(false.into()),
         ),
     })

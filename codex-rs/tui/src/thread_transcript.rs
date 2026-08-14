@@ -216,8 +216,24 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
         ThreadItem::ExitedReviewMode { review, .. } => {
             vec![vec!["review finished: ".dim(), review.clone().into()].into()]
         }
-        ThreadItem::ContextCompaction { .. } => {
-            vec!["context compacted".dim().into()]
+        ThreadItem::ContextCompaction { checkpoint, .. } => {
+            if let Some(checkpoint) = checkpoint {
+                vec![
+                    format!("context checkpoint {}", checkpoint.checkpoint_ref)
+                        .dim()
+                        .into(),
+                    format!(
+                        "  state {} · window {} · {}",
+                        checkpoint.state_entry_count,
+                        checkpoint.window_number,
+                        checkpoint.labels.join(", ")
+                    )
+                    .dim()
+                    .into(),
+                ]
+            } else {
+                vec!["context compacted".dim().into()]
+            }
         }
         ThreadItem::UserMessage { .. }
         | ThreadItem::AgentMessage { .. }

@@ -110,6 +110,7 @@ const RAW_TOOL_OUTPUT_WIDTH: usize = 10_000;
 
 mod approvals;
 mod base;
+mod context_checkpoint;
 mod dynamic_tool;
 mod exec;
 mod hook_cell;
@@ -126,6 +127,7 @@ mod session;
 
 pub(crate) use approvals::*;
 pub(crate) use base::*;
+pub(crate) use context_checkpoint::*;
 pub(crate) use dynamic_tool::*;
 pub(crate) use exec::*;
 pub(crate) use hook_cell::HookCell;

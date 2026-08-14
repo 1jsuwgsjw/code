@@ -65,6 +65,13 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
 
     let requests = mock.requests();
     assert_eq!(requests.len(), 4);
+    let first_update_output: serde_json::Value = serde_json::from_str(
+        &mock
+            .function_call_output_text("call-state-1")
+            .expect("first checkpoint tool output"),
+    )?;
+    assert_eq!(first_update_output["checkpointRef"], "ctx:G000001/TR000001");
+    assert!(first_update_output.get("manifestSha256").is_none());
     let final_request = requests
         .last()
         .expect("final model request")
@@ -72,6 +79,8 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
         .to_string();
     assert_eq!(final_request.matches("<CONTEXT_CHECKPOINT>").count(), 1);
     assert!(final_request.contains("second objective"));
+    assert!(final_request.contains("ctx:G000002/TR000002"));
+    assert!(!final_request.contains("manifestSha256"));
 
     Ok(())
 }

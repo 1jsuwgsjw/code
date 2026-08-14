@@ -70,7 +70,9 @@ pub trait HasLegacyEvent {
 
 impl ContextCompactionItem {
     pub fn as_legacy_event(&self) -> EventMsg {
-        EventMsg::ContextCompacted(ContextCompactedEvent {})
+        EventMsg::ContextCompacted(ContextCompactedEvent {
+            checkpoint: self.checkpoint.clone(),
+        })
     }
 }
 

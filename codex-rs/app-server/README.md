@@ -1455,8 +1455,8 @@ Today both notifications carry an empty `items` array even when item events were
 - `sleep` — `{id, durationMs}` emitted while the agent waits for a duration or new input.
 - `enteredReviewMode` — `{id, review}` sent when the reviewer starts; `review` is a short user-facing label such as `"current changes"` or the requested target description.
 - `exitedReviewMode` — `{id, review}` emitted when the reviewer finishes; `review` is the full plain-text review (usually, overall notes plus bullet point findings).
-- `contextCompaction` — `{id}` emitted when codex compacts the conversation history. This can happen automatically.
-- `compacted` - `{threadId, turnId}` when codex compacts the conversation history. This can happen automatically. **Deprecated:** Use `contextCompaction` instead.
+- `contextCompaction` — `{id, checkpoint}` emitted when codex compacts the conversation history. `checkpoint` is null for ordinary compaction; controlled checkpoints include `checkpointRef`, generation/record ids, state labels/count, and the context-window chain.
+- `compacted` - `{threadId, turnId, checkpoint}` when codex compacts the conversation history. This can happen automatically. **Deprecated:** Use `contextCompaction` instead.
 
 All items emit shared lifecycle events:
 

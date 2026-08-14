@@ -408,6 +408,26 @@ pub struct McpToolCallError {
 #[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
 pub struct ContextCompactionItem {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub checkpoint: Option<ContextCheckpointDetails>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ContextCheckpointDetails {
+    pub checkpoint_ref: String,
+    pub generation_id: String,
+    pub turn_record_id: String,
+    pub labels: Vec<String>,
+    pub state_entry_count: usize,
+    pub window_number: u64,
+    pub first_window_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub previous_window_id: Option<String>,
+    pub window_id: String,
 }
 
 fn new_item_id() -> String {
@@ -416,7 +436,17 @@ fn new_item_id() -> String {
 
 impl ContextCompactionItem {
     pub fn new() -> Self {
-        Self { id: new_item_id() }
+        Self {
+            id: new_item_id(),
+            checkpoint: None,
+        }
+    }
+
+    pub fn with_checkpoint(checkpoint: ContextCheckpointDetails) -> Self {
+        Self {
+            id: new_item_id(),
+            checkpoint: Some(checkpoint),
+        }
     }
 }
 

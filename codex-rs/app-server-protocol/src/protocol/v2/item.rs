@@ -23,6 +23,7 @@ use codex_protocol::items::AgentMessageContent as CoreAgentMessageContent;
 use codex_protocol::items::CollabAgentTool as CoreCollabAgentTool;
 use codex_protocol::items::CollabAgentToolCallStatus as CoreCollabAgentToolCallStatus;
 use codex_protocol::items::CommandExecutionStatus as CoreCommandExecutionStatus;
+use codex_protocol::items::ContextCheckpointDetails as CoreContextCheckpointDetails;
 use codex_protocol::items::DynamicToolCallStatus as CoreDynamicToolCallStatus;
 use codex_protocol::items::McpToolCallStatus as CoreMcpToolCallStatus;
 use codex_protocol::items::TurnItem as CoreTurnItem;
@@ -55,6 +56,7 @@ use ts_rs::TS;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub enum CommandExecutionApprovalDecision {
     /// User approved the command.
@@ -111,6 +113,37 @@ pub enum FileChangeApprovalDecision {
     Decline,
     /// User denied the file changes. The turn will also be immediately interrupted.
     Cancel,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ContextCheckpointDetails {
+    pub checkpoint_ref: String,
+    pub generation_id: String,
+    pub turn_record_id: String,
+    pub labels: Vec<String>,
+    pub state_entry_count: usize,
+    pub window_number: u64,
+    pub first_window_id: String,
+    pub previous_window_id: Option<String>,
+    pub window_id: String,
+}
+
+impl From<CoreContextCheckpointDetails> for ContextCheckpointDetails {
+    fn from(value: CoreContextCheckpointDetails) -> Self {
+        Self {
+            checkpoint_ref: value.checkpoint_ref,
+            generation_id: value.generation_id,
+            turn_record_id: value.turn_record_id,
+            labels: value.labels,
+            state_entry_count: value.state_entry_count,
+            window_number: value.window_number,
+            first_window_id: value.first_window_id,
+            previous_window_id: value.previous_window_id,
+            window_id: value.window_id,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -393,6 +426,7 @@ pub enum ThreadItem {
     #[ts(rename_all = "camelCase")]
     ContextCompaction {
         id: String,
+        checkpoint: Option<ContextCheckpointDetails>,
     },
 }
 
@@ -969,9 +1003,10 @@ impl From<CoreTurnItem> for ThreadItem {
                     duration_ms,
                 }
             }
-            CoreTurnItem::ContextCompaction(compaction) => {
-                ThreadItem::ContextCompaction { id: compaction.id }
-            }
+            CoreTurnItem::ContextCompaction(compaction) => ThreadItem::ContextCompaction {
+                id: compaction.id,
+                checkpoint: compaction.checkpoint.map(Into::into),
+            },
         }
     }
 }

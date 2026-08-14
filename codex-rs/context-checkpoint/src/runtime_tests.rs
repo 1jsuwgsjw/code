@@ -144,7 +144,7 @@ async fn pending_checkpoint_survives_reload_and_installation() {
     assert!(restored.take_pending_checkpoint().await.is_none());
     let recalled = restored
         .recall(RecallRequest {
-            artifact_id: call.output.artifact_id,
+            locator: ArtifactLocator::Reference("artifact:TR000001/A001".to_string()),
             max_bytes: 1024,
         })
         .await
@@ -168,7 +168,7 @@ async fn recall_is_bounded_and_hash_verified() {
 
     let recalled = runtime
         .recall(RecallRequest {
-            artifact_id: call.output.artifact_id.clone(),
+            locator: ArtifactLocator::ArtifactId(call.output.artifact_id.clone()),
             max_bytes: 4,
         })
         .await

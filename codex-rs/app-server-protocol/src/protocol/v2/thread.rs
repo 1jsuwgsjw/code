@@ -1,6 +1,7 @@
 use super::ActivePermissionProfile;
 use super::ApprovalsReviewer;
 use super::AskForApproval;
+use super::ContextCheckpointDetails;
 use super::SandboxMode;
 use super::SandboxPolicy;
 use super::Thread;
@@ -1500,4 +1501,5 @@ pub struct ThreadGoalClearedNotification {
 pub struct ContextCompactedNotification {
     pub thread_id: String,
     pub turn_id: String,
+    pub checkpoint: Option<ContextCheckpointDetails>,
 }

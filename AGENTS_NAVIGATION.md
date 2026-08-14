@@ -252,8 +252,17 @@ Important variations:
     `codex-rs/core/src/tools/context.rs`, `codex-rs/core/src/tools/handlers/checkpoint.rs`;
   - rollout metadata: `codex-rs/protocol/src/protocol.rs` (`CompactedItem`,
     `ContextCheckpointRolloutMetadata`);
+  - semantic model projection and short artifact references:
+    `codex-rs/context-checkpoint/src/model_projection.rs`;
+  - app-server lifecycle/history projection: `codex-rs/protocol/src/items.rs`,
+    `codex-rs/app-server-protocol/src/protocol/v2/item.rs`,
+    `codex-rs/app-server-protocol/src/protocol/thread_history.rs`;
+  - adaptive TUI history tree and transcript replay:
+    `codex-rs/tui/src/history_cell/context_checkpoint.rs`,
+    `codex-rs/tui/src/chatwidget/replay.rs`, `codex-rs/tui/src/thread_transcript.rs`;
   - representative symbols: `CheckpointRuntime`, `CheckpointStore`, `ContextStateSnapshot`,
-    `update_context_state`, `recall_checkpoint_artifact`, `reconcile_reconstructed_checkpoint`;
+    `model_checkpoint_json`, `ContextCheckpointDetails`, `update_context_state`,
+    `recall_checkpoint_artifact`, `reconcile_reconstructed_checkpoint`;
   - focused validation: `cd codex-rs && just test -p codex-context-checkpoint`, then
     `cd codex-rs && just test -p codex-core` for integration changes.
 - If `ConfigToml` or nested types change, run:

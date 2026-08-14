@@ -1955,8 +1955,34 @@ pub struct SafetyBufferingEvent {
     pub faster_model: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
-pub struct ContextCompactedEvent;
+#[derive(Debug, Clone, Serialize, JsonSchema, TS)]
+pub struct ContextCompactedEvent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub checkpoint: Option<crate::items::ContextCheckpointDetails>,
+}
+
+impl<'de> Deserialize<'de> for ContextCompactedEvent {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Wire {
+            Legacy(()),
+            Current {
+                #[serde(default)]
+                checkpoint: Option<crate::items::ContextCheckpointDetails>,
+            },
+        }
+
+        Ok(match Wire::deserialize(deserializer)? {
+            Wire::Legacy(()) => Self { checkpoint: None },
+            Wire::Current { checkpoint } => Self { checkpoint },
+        })
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
 pub struct TurnCompleteEvent {
@@ -6125,6 +6151,14 @@ mod tests {
         });
         assert_eq!(expected, serde_json::to_value(&event)?);
         Ok(())
+    }
+
+    #[test]
+    fn deserialize_legacy_null_context_compacted_event() {
+        let event: ContextCompactedEvent =
+            serde_json::from_str("null").expect("deserialize legacy compaction event");
+
+        assert!(event.checkpoint.is_none());
     }
 
     #[test]
