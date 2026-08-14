@@ -199,6 +199,58 @@
       ],
       "type": "string"
     },
+    "ContextCheckpointDetails": {
+      "properties": {
+        "checkpointRef": {
+          "type": "string"
+        },
+        "firstWindowId": {
+          "type": "string"
+        },
+        "generationId": {
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "previousWindowId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stateEntryCount": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "turnRecordId": {
+          "type": "string"
+        },
+        "windowId": {
+          "type": "string"
+        },
+        "windowNumber": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "checkpointRef",
+        "firstWindowId",
+        "generationId",
+        "labels",
+        "stateEntryCount",
+        "turnRecordId",
+        "windowId",
+        "windowNumber"
+      ],
+      "type": "object"
+    },
     "DynamicToolCallOutputContentItem": {
       "oneOf": [
         {
@@ -1268,6 +1320,16 @@
         },
         {
           "properties": {
+            "checkpoint": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ContextCheckpointDetails"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "id": {
               "type": "string"
             },
