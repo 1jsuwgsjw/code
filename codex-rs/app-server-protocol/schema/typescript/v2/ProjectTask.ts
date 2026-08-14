@@ -6,4 +6,4 @@ import type { ProjectTaskExecutor } from "./ProjectTaskExecutor";
 import type { ProjectTaskResult } from "./ProjectTaskResult";
 import type { ProjectTaskStatus } from "./ProjectTaskStatus";
 
-export type ProjectTask = { taskId: string, parentTaskId: string | null, title: string, objective: string, requirements: Array<string>, status: ProjectTaskStatus, executor: ProjectTaskExecutor, executionTaskId: string | null, result: ProjectTaskResult | null, evaluation: ProjectTaskEvaluation | null, createdAt: bigint, updatedAt: bigint, };
+export type ProjectTask = { taskId: string, parentTaskId: string | null, title: string, objective: string, requirements: Array<string>, status: ProjectTaskStatus, executor: ProjectTaskExecutor, executionTaskId: string | null, sessionThreadId: string | null, result: ProjectTaskResult | null, evaluation: ProjectTaskEvaluation | null, createdAt: bigint, updatedAt: bigint, };

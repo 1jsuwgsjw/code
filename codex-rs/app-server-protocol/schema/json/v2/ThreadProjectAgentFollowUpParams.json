@@ -7,6 +7,12 @@
     "message": {
       "type": "string"
     },
+    "sessionThreadId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "threadId": {
       "type": "string"
     }

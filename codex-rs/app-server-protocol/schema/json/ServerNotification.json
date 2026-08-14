@@ -4337,6 +4337,12 @@
                 "null"
               ]
             },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "id": {
               "type": "string"
             },

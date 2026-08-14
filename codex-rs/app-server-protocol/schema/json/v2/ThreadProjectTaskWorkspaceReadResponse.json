@@ -51,6 +51,12 @@
             }
           ]
         },
+        "sessionThreadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "status": {
           "$ref": "#/definitions/ProjectTaskStatus"
         },

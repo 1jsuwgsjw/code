@@ -11681,6 +11681,12 @@
             }
           ]
         },
+        "sessionThreadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "status": {
           "$ref": "#/definitions/ProjectTaskStatus"
         },
@@ -17064,6 +17070,12 @@
                 "null"
               ]
             },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "id": {
               "type": "string"
             },
@@ -17699,6 +17711,12 @@
         },
         "message": {
           "type": "string"
+        },
+        "sessionThreadId": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "threadId": {
           "type": "string"
