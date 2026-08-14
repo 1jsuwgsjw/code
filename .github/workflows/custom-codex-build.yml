@@ -1,4 +1,4 @@
-name: Project AGENT Integration
+name: Project AGENT Windows Build
 
 on:
   workflow_dispatch:
@@ -10,181 +10,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: project-agent-integration-${{ github.ref }}
+  group: project-agent-windows-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  validate-linux:
-    name: Validate project AGENT integration
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    defaults:
-      run:
-        working-directory: codex-rs
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-ci
-
-      - name: Use a fresh Cargo target for this validation job
-        shell: bash
-        run: echo "CARGO_TARGET_DIR=${RUNNER_TEMP}/codex-target" >> "${GITHUB_ENV}"
-
-      - name: Install Linux sandbox dependencies
-        run: |
-          sudo apt-get update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends pkg-config libcap-dev bubblewrap
-
-      - name: Install pinned Rust toolchain
-        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-        with:
-          components: rustfmt, clippy
-
-      - name: Install pinned cargo-nextest
-        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
-        with:
-          tool: nextest
-          version: 0.9.103
-
-      - name: Enable unprivileged user namespaces
-        run: |
-          sudo sysctl -w kernel.unprivileged_userns_clone=1
-          if sudo sysctl -a 2>/dev/null | grep -q '^kernel.apparmor_restrict_unprivileged_userns'; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
-
-      - name: Check formatting
-        run: cargo fmt -- --config imports_granularity=Item --check
-
-      - name: Check changed crates with Clippy
-        env:
-          RUST_MIN_STACK: 8388608
-        shell: bash
-        run: |
-          set -euo pipefail
-          packages=(
-            codex-extension-api
-            codex-project-agents
-            codex-project-agents-extension
-            codex-app-server-protocol
-            codex-app-server
-            codex-core
-            codex-tui
-          )
-          for package in "${packages[@]}"; do
-            echo "::group::Clippy ${package}"
-            cargo clippy --locked --tests --no-deps -p "${package}" -- -D warnings
-            echo "::endgroup::"
-          done
-
-      - name: Test extension API
-        env:
-          RUST_MIN_STACK: 8388608
-        run: just test -p codex-extension-api
-
-      - name: Test project AGENT persistence
-        env:
-          RUST_MIN_STACK: 8388608
-        run: just test -p codex-project-agents
-
-      - name: Test project AGENT registration CLI
-        env:
-          RUST_MIN_STACK: 8388608
-        run: just test -p codex-cli --test agents
-
-      - name: Test project AGENT runtime extension
-        env:
-          RUST_MIN_STACK: 8388608
-        run: just test -p codex-project-agents-extension
-
-      - name: Regenerate app-server schema
-        run: just write-app-server-schema
-
-      - name: Upload generated app-server schema
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: app-server-schema-${{ github.sha }}
-          path: codex-rs/app-server-protocol/schema
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Test app-server protocol
-        env:
-          RUST_MIN_STACK: 8388608
-        run: just test -p codex-app-server-protocol
-
-      - name: Build app-server runtime test binaries
-        run: |
-          cargo build --bins \
-            -p codex-app-server \
-            -p codex-cli \
-            -p codex-code-mode-host \
-            -p codex-linux-sandbox \
-            -p codex-rmcp-client
-
-      - name: Test app-server integration
-        env:
-          RUST_BACKTRACE: 1
-          RUST_MIN_STACK: 8388608
-          NEXTEST_STATUS_LEVEL: leak
-        shell: bash
-        run: |
-          set -euo pipefail
-          target_dir="${CARGO_TARGET_DIR}/debug"
-          env \
-            "CARGO_BIN_EXE_codex-app-server=${target_dir}/codex-app-server" \
-            "CARGO_BIN_EXE_codex_app_server=${target_dir}/codex-app-server" \
-            "CARGO_BIN_EXE_codex-app-server-test-notify-capture=${target_dir}/codex-app-server-test-notify-capture" \
-            "CARGO_BIN_EXE_codex_app_server_test_notify_capture=${target_dir}/codex-app-server-test-notify-capture" \
-            "CARGO_BIN_EXE_exec-server=${target_dir}/exec-server" \
-            "CARGO_BIN_EXE_exec_server=${target_dir}/exec-server" \
-            "CARGO_BIN_EXE_codex=${target_dir}/codex" \
-            "CARGO_BIN_EXE_codex-code-mode-host=${target_dir}/codex-code-mode-host" \
-            "CARGO_BIN_EXE_codex_code_mode_host=${target_dir}/codex-code-mode-host" \
-            "CARGO_BIN_EXE_test_stdio_server=${target_dir}/test_stdio_server" \
-            "CARGO_BIN_EXE_codex-linux-sandbox=${target_dir}/codex-linux-sandbox" \
-            "CARGO_BIN_EXE_codex_linux_sandbox=${target_dir}/codex-linux-sandbox" \
-            cargo nextest run --no-fail-fast -p codex-app-server
-
-      - name: Test core collaboration policy
-        env:
-          RUST_MIN_STACK: 8388608
-        run: just test -p codex-core
-
-      - name: Test TUI and snapshots
-        env:
-          RUST_MIN_STACK: 8388608
-        run: just test -p codex-tui
-
-      - name: Upload pending TUI snapshots
-        if: ${{ always() }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: pending-tui-snapshots-${{ github.sha }}
-          path: codex-rs/tui/src/**/snapshots/*.snap.new
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Verify app-server schema is committed
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          if [[ -n "$(git status --porcelain -- app-server-protocol/schema)" ]]; then
-            git status --short -- app-server-protocol/schema
-            git diff -- app-server-protocol/schema
-            exit 1
-          fi
-
   build-windows:
     name: Build custom codex.exe
     runs-on: windows-latest
     timeout-minutes: 360
-    needs:
-      - validate-linux
     defaults:
       run:
         working-directory: codex-rs
