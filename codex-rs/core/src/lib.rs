@@ -40,6 +40,7 @@ mod command_canonicalization;
 pub mod config;
 pub mod connectors;
 pub mod context;
+mod context_checkpoint;
 mod context_manager;
 mod current_time;
 mod elicitation;

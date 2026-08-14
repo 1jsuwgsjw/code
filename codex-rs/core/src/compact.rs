@@ -352,6 +352,14 @@ async fn run_compact_task_inner_impl(
     let compacted_item = CompactedItem {
         message: summary_text.clone(),
         replacement_history: Some(new_history.clone()),
+        checkpoint: Some(
+            crate::context_checkpoint::fallback_metadata(
+                sess.as_ref(),
+                codex_protocol::protocol::ContextFallbackKind::LocalWholeHistory,
+                window_number,
+            )
+            .await,
+        ),
         window_number: Some(window_number),
         first_window_id: Some(window_ids.first_window_id.to_string()),
         previous_window_id: window_ids.previous_window_id.map(|id| id.to_string()),

@@ -3182,6 +3182,8 @@ pub struct CompactedItem {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replacement_history: Option<Vec<ResponseItem>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<ContextCheckpointRolloutMetadata>,
     /// Monotonic position of this context window within the thread.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_number: Option<u64>,
@@ -3194,6 +3196,28 @@ pub struct CompactedItem {
     /// UUIDv7 identity of this context window.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ContextCheckpointRolloutMetadata {
+    pub checkpoint_id: String,
+    pub generation_id: String,
+    pub turn_record_id: String,
+    pub manifest_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_kind: Option<ContextFallbackKind>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ContextFallbackKind {
+    LocalWholeHistory,
+    RemoteProvider,
+    ModelSwitch,
+    Manual,
 }
 
 impl From<CompactedItem> for ResponseItem {

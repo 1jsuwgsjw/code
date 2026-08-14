@@ -19,8 +19,10 @@ use crate::tools::handlers::ListMcpResourcesHandler;
 use crate::tools::handlers::McpHandler;
 use crate::tools::handlers::NewContextWindowHandler;
 use crate::tools::handlers::PlanHandler;
+use crate::tools::handlers::RecallCheckpointArtifactHandler;
 use crate::tools::handlers::ReadMcpResourceHandler;
 use crate::tools::handlers::RequestPermissionsHandler;
+use crate::tools::handlers::UpdateSummaryHandler;
 use crate::tools::handlers::RequestPluginInstallHandler;
 use crate::tools::handlers::RequestUserInputHandler;
 use crate::tools::handlers::ShellCommandHandler;
@@ -749,6 +751,8 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mut
     let environment_mode = tool_environment_mode(context.step_context);
 
     planned_tools.add(PlanHandler);
+    planned_tools.add(UpdateSummaryHandler);
+    planned_tools.add(RecallCheckpointArtifactHandler);
 
     if features.enabled(Feature::DeferredExecutor) {
         planned_tools.add(WaitForEnvironmentHandler);

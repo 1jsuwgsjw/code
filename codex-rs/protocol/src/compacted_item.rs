@@ -22,6 +22,7 @@ impl<'de> Deserialize<'de> for CompactedItem {
         Ok(Self {
             message: serialized.message,
             replacement_history: serialized.replacement_history,
+            checkpoint: serialized.checkpoint,
             window_number,
             first_window_id: serialized.first_window_id,
             previous_window_id: serialized.previous_window_id,
@@ -35,6 +36,8 @@ struct SerializedCompactedItem {
     message: String,
     #[serde(default)]
     replacement_history: Option<Vec<ResponseItem>>,
+    #[serde(default)]
+    checkpoint: Option<crate::protocol::ContextCheckpointRolloutMetadata>,
     #[serde(default)]
     window_number: Option<u64>,
     #[serde(default)]
@@ -64,6 +67,7 @@ mod tests {
         let item = CompactedItem {
             message: "summary".to_string(),
             replacement_history: None,
+            checkpoint: None,
             window_number: Some(3),
             first_window_id: Some("019b3f6e-0000-7000-8000-000000000001".to_string()),
             previous_window_id: Some("019b3f6e-0000-7000-8000-000000000002".to_string()),
@@ -84,6 +88,40 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_checkpoint_metadata() -> Result<()> {
+        let item = CompactedItem {
+            message: "checkpoint summary".to_string(),
+            replacement_history: None,
+            checkpoint: Some(crate::protocol::ContextCheckpointRolloutMetadata {
+                checkpoint_id: "checkpoint-TR000007".to_string(),
+                generation_id: "G000003".to_string(),
+                turn_record_id: "TR000007".to_string(),
+                manifest_sha256: "abc123".to_string(),
+                fallback_kind: Some(crate::protocol::ContextFallbackKind::RemoteProvider),
+            }),
+            window_number: Some(4),
+            first_window_id: None,
+            previous_window_id: None,
+            window_id: None,
+        };
+
+        let serialized = serde_json::to_value(&item)?;
+        assert_eq!(
+            serialized["checkpoint"],
+            serde_json::json!({
+                "checkpointId": "checkpoint-TR000007",
+                "generationId": "G000003",
+                "turnRecordId": "TR000007",
+                "manifestSha256": "abc123",
+                "fallbackKind": "remoteProvider",
+            })
+        );
+        assert_eq!(serde_json::from_value::<CompactedItem>(serialized)?, item);
+
+        Ok(())
+    }
+
+    #[test]
     fn migrates_legacy_numeric_window_id() -> Result<()> {
         let item = serde_json::from_value::<CompactedItem>(json!({
             "message": "summary",
@@ -95,6 +133,7 @@ mod tests {
             CompactedItem {
                 message: "summary".to_string(),
                 replacement_history: None,
+                checkpoint: None,
                 window_number: Some(3),
                 first_window_id: None,
                 previous_window_id: None,

@@ -32,6 +32,7 @@ members = [
     "collaboration-mode-templates",
     "connectors",
     "config",
+    "context-checkpoint",
     "context-fragments",
     "shell-command",
     "shell-escalation",
@@ -174,6 +175,7 @@ codex-websocket-client = { path = "websocket-client" }
 codex-config = { path = "config" }
 codex-connectors = { path = "connectors" }
 codex-connectors-extension = { path = "ext/connectors" }
+codex-context-checkpoint = { path = "context-checkpoint" }
 codex-context-fragments = { path = "context-fragments" }
 codex-core = { path = "core" }
 codex-core-api = { path = "core-api" }

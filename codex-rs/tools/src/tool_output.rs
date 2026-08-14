@@ -12,6 +12,13 @@ const TELEMETRY_PREVIEW_MAX_BYTES: usize = 2 * 1024;
 const TELEMETRY_PREVIEW_MAX_LINES: usize = 64;
 const TELEMETRY_PREVIEW_TRUNCATION_NOTICE: &str = "[... telemetry preview truncated ...]";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchivalToolOutput {
+    pub media_type: String,
+    pub payload: Vec<u8>,
+    pub model_facing_fallback: bool,
+}
+
 /// Model-facing output contract returned by executable tool runtimes.
 pub trait ToolOutput: Send {
     fn log_preview(&self) -> String;
@@ -25,6 +32,21 @@ pub trait ToolOutput: Send {
     }
 
     fn to_response_item(&self, call_id: &str, payload: &ToolPayload) -> ResponseInputItem;
+
+    fn archival_payload(&self, call_id: &str, payload: &ToolPayload) -> ArchivalToolOutput {
+        match serde_json::to_vec(&self.to_response_item(call_id, payload)) {
+            Ok(payload) => ArchivalToolOutput {
+                media_type: "application/json".to_string(),
+                payload,
+                model_facing_fallback: true,
+            },
+            Err(_) => ArchivalToolOutput {
+                media_type: "text/plain".to_string(),
+                payload: self.log_preview().into_bytes(),
+                model_facing_fallback: true,
+            },
+        }
+    }
 
     /// Returns the tool call id exposed to `PostToolUse` hooks for this output.
     fn post_tool_use_id(&self, call_id: &str) -> String {
@@ -70,6 +92,10 @@ where
 
     fn to_response_item(&self, call_id: &str, payload: &ToolPayload) -> ResponseInputItem {
         (**self).to_response_item(call_id, payload)
+    }
+
+    fn archival_payload(&self, call_id: &str, payload: &ToolPayload) -> ArchivalToolOutput {
+        (**self).archival_payload(call_id, payload)
     }
 
     fn post_tool_use_id(&self, call_id: &str) -> String {

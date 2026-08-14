@@ -3648,6 +3648,7 @@ mod tests {
             RolloutItem::Compacted(CompactedItem {
                 message: String::new(),
                 replacement_history: None,
+                checkpoint: None,
                 window_number: None,
                 first_window_id: None,
                 previous_window_id: None,

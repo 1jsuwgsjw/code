@@ -40,6 +40,7 @@ use codex_otel::SessionTelemetry;
 use codex_protocol::capabilities::SelectedCapabilityRoot;
 use codex_research_state::ResearchContextCacheKey;
 use codex_research_state::ResearchContextProjection;
+use codex_context_checkpoint::CheckpointRuntime;
 use codex_rollout::state_db::StateDbHandle;
 use codex_rollout_trace::ThreadTraceContext;
 use codex_thread_store::LiveThread;
@@ -51,6 +52,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct SessionServices {
+    pub(crate) context_checkpoint: Arc<CheckpointRuntime>,
     /// Mirror of the latest manager for extension resource clients that predate runtime snapshots.
     pub(crate) mcp_connection_manager: Arc<ArcSwap<McpConnectionManager>>,
     /// The latest atomically published MCP config and manager pair.

@@ -689,7 +689,48 @@ async fn handle_any_tool(
 ) -> Result<AnyToolResult, FunctionCallError> {
     let call_id = invocation.call_id.clone();
     let payload = invocation.payload.clone();
-    let output = tool.handle(invocation.clone()).await?;
+    let output = match tool.handle(invocation.clone()).await {
+        Ok(output) => {
+            let archival = output.archival_payload(&call_id, &payload);
+            let outcome = if output.success_for_logging() {
+                codex_context_checkpoint::ToolCallOutcome::Success
+            } else {
+                codex_context_checkpoint::ToolCallOutcome::ToolError {
+                    message: output.log_preview(),
+                }
+            };
+            capture_checkpoint_tool_result(
+                &invocation,
+                codex_context_checkpoint::ToolResultRecord {
+                    media_type: archival.media_type,
+                    payload: archival.payload,
+                    outcome,
+                    truncation: if archival.model_facing_fallback {
+                        codex_context_checkpoint::TruncationProvenance::ModelFacingFallback
+                    } else {
+                        codex_context_checkpoint::TruncationProvenance::Complete
+                    },
+                },
+            )
+            .await;
+            output
+        }
+        Err(error) => {
+            capture_checkpoint_tool_result(
+                &invocation,
+                codex_context_checkpoint::ToolResultRecord {
+                    media_type: "text/plain".to_string(),
+                    payload: error.to_string().into_bytes(),
+                    outcome: codex_context_checkpoint::ToolCallOutcome::ToolError {
+                        message: error.to_string(),
+                    },
+                    truncation: codex_context_checkpoint::TruncationProvenance::Complete,
+                },
+            )
+            .await;
+            return Err(error);
+        }
+    };
     if output.contains_external_context()
         && invocation.turn.config.memories.disable_on_external_context
     {
@@ -708,6 +749,33 @@ async fn handle_any_tool(
         result: output,
         post_tool_use_payload,
     })
+}
+
+async fn capture_checkpoint_tool_result(
+    invocation: &ToolInvocation,
+    result: codex_context_checkpoint::ToolResultRecord,
+) {
+    let outcome = invocation
+        .session
+        .services
+        .context_checkpoint
+        .record_tool_result(
+            codex_context_checkpoint::ToolInvocationRecord {
+                call_id: invocation.call_id.clone(),
+                tool_name: flat_tool_name(&invocation.tool_name).into_owned(),
+                media_type: "application/json".to_string(),
+                payload: invocation.payload.log_payload().as_bytes().to_vec(),
+            },
+            result,
+        )
+        .await;
+    if let codex_context_checkpoint::ArtifactCaptureOutcome::Degraded(failure) = outcome {
+        tracing::warn!(
+            call_id = %failure.call_id,
+            error = %failure.message,
+            "checkpoint artifact capture degraded; tool result remains available"
+        );
+    }
 }
 
 fn function_hook_tool_name(invocation: &ToolInvocation) -> HookToolName {

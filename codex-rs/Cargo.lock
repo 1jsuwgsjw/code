@@ -2622,6 +2622,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-context-checkpoint"
+version = "0.0.0"
+dependencies = [
+ "codex-utils-absolute-path",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "codex-context-fragments"
 version = "0.0.0"
 dependencies = [
@@ -2651,6 +2665,7 @@ dependencies = [
  "codex-code-mode",
  "codex-config",
  "codex-connectors",
+ "codex-context-checkpoint",
  "codex-context-fragments",
  "codex-core-plugins",
  "codex-core-skills",

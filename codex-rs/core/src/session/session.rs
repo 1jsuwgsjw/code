@@ -1176,7 +1176,19 @@ impl Session {
                 }).await;
             }
 
+            let context_checkpoint_root = session_configuration
+                .codex_home()
+                .join("context-checkpoints")
+                .join(thread_id.to_string());
+            let context_checkpoint = Arc::new(
+                codex_context_checkpoint::CheckpointRuntime::load(
+                    codex_context_checkpoint::CheckpointStore::new(context_checkpoint_root),
+                    codex_context_checkpoint::CheckpointBudget::default(),
+                )
+                .await,
+            );
             let services = SessionServices {
+                context_checkpoint,
                 // Initialize the MCP connection manager with an uninitialized
                 // instance. It will be replaced with one created via
                 // McpConnectionManager::new() once all its constructor args are

@@ -345,6 +345,25 @@ pub(crate) async fn run_turn(
                 )
                 .await;
 
+                if needs_follow_up {
+                    match crate::context_checkpoint::install_pending_checkpoint(
+                        sess.as_ref(),
+                        turn_context.as_ref(),
+                    )
+                    .await
+                    {
+                        Ok(true) => {
+                            sess.take_new_context_window_request().await;
+                            continue;
+                        }
+                        Ok(false) => {}
+                        Err(error) => tracing::warn!(
+                            error = %error,
+                            "pending checkpoint installation failed; retaining legacy fallback"
+                        ),
+                    }
+                }
+
                 // as long as compaction works well in getting us way below the token limit, we shouldn't worry about being in an infinite loop.
                 if needs_follow_up
                     && (sess.take_new_context_window_request().await || token_limit_reached)
@@ -803,12 +822,36 @@ async fn run_pre_sampling_compact(
     turn_context: &Arc<TurnContext>,
     client_session: &mut ModelClientSession,
 ) -> CodexResult<()> {
+    match crate::context_checkpoint::install_pending_checkpoint(
+        sess.as_ref(),
+        turn_context.as_ref(),
+    )
+    .await
+    {
+        Ok(true) => return Ok(()),
+        Ok(false) => {}
+        Err(error) => tracing::warn!(
+            error = %error,
+            "pre-sampling checkpoint installation failed; evaluating fallback"
+        ),
+    }
     maybe_run_previous_model_inline_compact(sess, turn_context, client_session).await?;
     let token_status =
         super::context_window::context_window_token_status(sess.as_ref(), turn_context.as_ref())
             .await;
     // Compact if the configured auto-compaction budget or usable context window is exhausted.
-    if token_status.token_limit_reached {
+    let checkpoint_pressure = sess.services.context_checkpoint.pressure(
+        codex_context_checkpoint::ContextUsageSnapshot {
+            active_tokens: token_status.active_context_tokens.max(0) as u64,
+            context_window: turn_context
+                .model_context_window()
+                .and_then(|tokens| u64::try_from(tokens).ok()),
+            usage_source: codex_context_checkpoint::UsageSource::TokenizerEstimate,
+        },
+    );
+    if token_status.token_limit_reached
+        && checkpoint_pressure == codex_context_checkpoint::CheckpointPressure::FallbackRequired
+    {
         // Pre-turn compaction runs before run_turn creates the normal sampling step.
         let step_context = sess.capture_step_context(Arc::clone(turn_context)).await;
         run_auto_compact(
@@ -1123,6 +1166,37 @@ async fn run_sampling_request(
     cancellation_token: CancellationToken,
 ) -> CodexResult<(SamplingRequestResult, Vec<ResponseItem>)> {
     let turn_context = Arc::clone(&step_context.turn);
+    let token_status =
+        super::context_window::context_window_token_status(sess.as_ref(), turn_context.as_ref())
+            .await;
+    let tool_result_share_basis_points =
+        crate::context::CheckpointStatusFragment::tool_result_share_basis_points(&input);
+    let checkpoint_status = match sess
+        .services
+        .context_checkpoint
+        .prepare_request(
+            step_context.turn.sub_id.to_string(),
+            input.len(),
+            codex_context_checkpoint::ContextUsageSnapshot {
+                active_tokens: token_status.active_context_tokens.max(0) as u64,
+                context_window: turn_context
+                    .model_context_window()
+                    .and_then(|tokens| u64::try_from(tokens).ok()),
+                usage_source: codex_context_checkpoint::UsageSource::TokenizerEstimate,
+            },
+            tool_result_share_basis_points,
+        )
+        .await
+    {
+        Ok(prepared) => Some(prepared.status),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "checkpoint request preparation failed; continuing without ephemeral status"
+            );
+            None
+        }
+    };
     let router = built_tools(sess.as_ref(), step_context.as_ref(), &cancellation_token).await?;
 
     let base_instructions = sess.get_base_instructions().await;
@@ -1144,13 +1218,18 @@ async fn run_sampling_request(
     let mut initial_input = Some(input);
     let mut original_input = None;
     loop {
-        let prompt_input = if let Some(input) = initial_input.take() {
+        let mut prompt_input = if let Some(input) = initial_input.take() {
             input
         } else {
             sess.clone_history()
                 .await
                 .for_prompt(&turn_context.model_info.input_modalities)
         };
+        if let Some(status) = checkpoint_status.clone() {
+            prompt_input.push(
+                crate::context::CheckpointStatusFragment::new(status).into_response_input_item(),
+            );
+        }
         let prompt = build_prompt(
             prompt_input,
             router.as_ref(),
@@ -1339,6 +1418,15 @@ pub(crate) async fn built_tools(
     );
     let mcp_tools = has_mcp_servers.then_some(mcp_tool_exposure.direct_tools);
     let deferred_mcp_tools = mcp_tool_exposure.deferred_tools;
+    let mut tool_visibility_policy = extension_tool_visibility_policy(sess);
+    if sess.services.context_checkpoint.tool_policy().await
+        == codex_context_checkpoint::CheckpointToolPolicy::CheckpointOnly
+    {
+        tool_visibility_policy.intersect(codex_extension_api::ToolVisibilityPolicy::allow_only([
+            ToolName::plain("update_summary"),
+            ToolName::plain("recall_checkpoint_artifact"),
+        ]));
+    }
     Ok(Arc::new(ToolRouter::from_context(
         step_context,
         ToolRouterParams {
@@ -1346,7 +1434,7 @@ pub(crate) async fn built_tools(
             deferred_mcp_tools,
             tool_suggest_candidates,
             extension_tool_executors: extension_tool_executors(sess),
-            tool_visibility_policy: extension_tool_visibility_policy(sess),
+            tool_visibility_policy,
             dynamic_tools: turn_context.dynamic_tools.as_slice(),
         },
         &sess.services.tool_search_handler_cache,

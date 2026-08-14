@@ -1,0 +1,6 @@
+load("//bazel:rust.bzl", "codex_rust_crate")
+
+codex_rust_crate(
+    name = "context-checkpoint",
+    crate_name = "codex_context_checkpoint",
+)
