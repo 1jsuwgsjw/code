@@ -2,9 +2,10 @@
 
 ## Status
 
-Recorded for implementation after the current Project AGENT build is deployed and validated.
-This document is the fixed task definition. Implementation must not silently narrow or replace
-its objective.
+Source ownership and integration points were verified against the current tree on 2026-08-15.
+Implementation is now the active follow-up to the Project AGENT return-path build. This document is
+the fixed task definition and source map; implementation must not silently narrow or replace its
+objective.
 
 ## Problem
 
@@ -160,6 +161,49 @@ memory/artifacts/S001/T018/TG01/call-31.log
 The current `core/src/compact.rs` and `core/src/compact_remote.rs` implementations are fallback
 adapters, not the owner of the new primary checkpoint model.
 
+## Verified Source Map
+
+This section records observed code ownership so resumed work starts from exact files and symbols
+instead of repeating repository-wide discovery. Recheck an entry only when compilation or observed
+behavior contradicts it.
+
+| Concern | Verified owner and symbol | Observed behavior and required change |
+| --- | --- | --- |
+| Turn loop | `core/src/session/turn.rs` (`run_turn`) | The follow-up branch currently evaluates automatic compaction before the next sampling request. Consume and install a pending checkpoint before that legacy decision. |
+| Request construction | `core/src/session/turn.rs` (`run_sampling_request`, `build_prompt`, `built_tools`) | Prompt input is selected from the supplied initial input or `ContextManager::for_prompt`, then tools and the prompt are built. Append one ephemeral status fragment here and keep it out of returned/persisted history. |
+| Tool completion boundary | `core/src/tools/registry.rs` (`handle_any_tool`) | `tool.handle` currently returns before post-tool processing. Capture both the invocation and the success/error result at this boundary before ContextManager truncation, without changing the tool outcome on capture failure. |
+| Generic tool output | `tools/src/tool_output.rs` (`ToolOutput`) | `to_response_item` is the shared model-facing conversion. Add a default archival payload method here; override it only where a handler owns a less lossy result. |
+| History storage | `core/src/context_manager/history.rs` (`record_items`, `process_item`, `raw_items`, `for_prompt`, `replace`) | `record_items` applies truncation, while `raw_items` exposes the installed history and `for_prompt` normalizes a request copy. Projection must be calculated against installed history and must preserve every open-tail item. |
+| Replacement installation | `core/src/session/mod.rs` (`replace_compacted_history`, `recompute_token_usage`, `reference_context_item`) | This is the existing atomic ordering boundary for live history plus rollout replacement records. Reuse it rather than adding a second reconstruction path. |
+| Resume reconstruction | `core/src/session/rollout_reconstruction.rs` (`reconstruct_history_from_rollout`, `finalize_active_segment`) | The newest `CompactedItem.replacement_history` is used verbatim and later rollout items are replayed as a suffix. Optional checkpoint metadata can extend this without changing old rollout behavior. |
+| Rollout protocol | `protocol/src/protocol.rs` (`CompactedItem`) | The item already stores `message`, optional `replacement_history`, and context-window chain IDs. Add optional checkpoint metadata with serde defaults so old rollouts remain readable. |
+| Legacy local fallback | `core/src/compact.rs` (`run_compact_task_inner_impl`) | It builds a summary and replaces the whole active history. Retain it only as an explicitly reasoned fallback or manual `/compact` path. |
+| Legacy remote fallback | `core/src/compact_remote.rs` (`run_remote_compact_task_inner_impl`) | It installs provider-produced replacement history through the same Session method. Retain it only as an observable provider fallback. |
+| Pressure calculation | `core/src/session/context_window.rs` (`context_window_token_status`) | This is the authoritative source for active usage, scoped limits, full-window limits, and tokens remaining. Derive usable-budget pressure here rather than estimating it in the model. |
+| Runtime ownership | `core/src/state/service.rs` (`SessionServices`) and `core/src/session/session.rs` (`Session::new`) | Store one per-thread `CheckpointRuntime` in services and construct it from a deterministic host-local root. Startup failure must produce a degraded runtime, not fail Session creation. |
+| Tool registration | `core/src/tools/spec_plan.rs` (`add_core_utility_tools`, `build_tool_specs_and_registry`) | Register `update_summary` and recall handlers here. Pressure-based visibility belongs in the tool-plan policy, not in individual handlers. |
+| Context fragment contract | `context-fragments/src/fragment.rs` (`ContextualUserFragment`) | `into_response_input_item` creates a bounded role-bearing item. The status implementation belongs under `core/src/context/` and is appended only to the mutable request tail. |
+| Existing tests | `core/src/session/rollout_reconstruction_tests.rs` and `core/src/session/tests.rs` | Existing coverage proves replacement history is restored verbatim. Extend these tests for optional metadata and checkpoint generation recovery rather than introducing a parallel test harness. |
+
+### Verified Control Flow
+
+1. `run_turn` clones normalized history and calls `run_sampling_request`.
+2. `run_sampling_request` builds the tool router and prompt, then retries the same request internally.
+3. Tool outputs pass through `handle_any_tool` before their response items are recorded into history.
+4. The follow-up branch in `run_turn` is the first safe point after tool output rollout persistence.
+5. `replace_compacted_history` persists `RolloutItem::Compacted` and replaces live history.
+6. Resume reconstructs from the persisted replacement history and replays the remaining rollout suffix.
+
+### Resume Checklist
+
+- Read this document and `AGENTS_NAVIGATION.md` first.
+- Inspect only the exact owner or symbol above when its recorded relation no longer holds.
+- Do not begin with a whole-repository search for compaction, context, or tool handling.
+- Treat Project AGENT workflow `31819232055` as a separate TUI delivery; it does not validate the
+  checkpoint runtime.
+- The checkpoint implementation workflow must run the focused matrix under **CI Execution** and must
+  not add unrelated workspace-wide gates.
+
 ## Acceptance Criteria
 
 1. A long tool-heavy task crosses multiple context generations without losing recorded user
@@ -187,3 +231,573 @@ adapters, not the owner of the new primary checkpoint model.
 - Treating the existing cross-thread memory consolidation pipeline as a substitute for active
   in-session checkpointing.
 - Inferring ToolGroup purpose solely from adjacent calls without a model-authored semantic record.
+
+## Implementation Architecture
+
+### Ownership Boundaries
+
+The implementation must not grow `codex-core` into the owner of another storage and memory domain.
+Use three layers:
+
+1. `codex-context-checkpoint` owns IDs, records, validation, deterministic paths, artifact manifests,
+   projection planning, recall, and file persistence. It depends on protocol and utility crates, but
+   never on `codex-core`.
+2. `codex-core` owns live Session integration: request-tail status injection, tool registration,
+   grouping live tool calls, pending checkpoint installation, and fallback selection.
+3. `codex-memories-*` consumes completed immutable SessionSummary records for quarter and long-term
+   consolidation. It does not own active-turn settlement.
+
+The file-backed checkpoint store is authoritative. State DB rows may index records and jobs, but a
+missing or stale DB index cannot invalidate an otherwise valid hashed file record.
+
+### Naming Boundary
+
+The design document's `S001` is a checkpoint generation, not the existing Codex process Session.
+Use `CheckpointGenerationId` in Rust and render it as `S001` on disk. This avoids mixing thread,
+agent session, rollout session, and context-generation identities.
+
+### Compatibility Strategy
+
+Do not introduce a second rollout reconstruction algorithm. Extend `CompactedItem` with an optional
+checkpoint metadata field while continuing to persist `replacement_history`:
+
+```rust
+// Preserve the existing derives and compatibility deserializer.
+pub struct CompactedItem {
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement_history: Option<Vec<ResponseItem>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<ContextCheckpointRolloutMetadata>,
+    // Existing window identity fields remain unchanged.
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextCheckpointRolloutMetadata {
+    pub checkpoint_id: String,
+    pub generation_id: String,
+    pub turn_record_id: String,
+    pub manifest_sha256: String,
+    pub fallback_kind: Option<ContextFallbackKind>,
+}
+```
+
+Older binaries ignore the additional field and still resume from `replacement_history`. New
+binaries use the metadata to restore checkpoint state and verify the external manifest. Existing
+compaction items with no metadata are treated as legacy compaction records.
+
+## Code Layout
+
+### New Crate
+
+```text
+codex-rs/context-checkpoint/
+  Cargo.toml
+  BUILD.bazel
+  src/lib.rs                 narrow public API and crate documentation
+  src/ids.rs                 typed deterministic IDs and parsing
+  src/model.rs               ToolCall, ToolGroup, TurnRecord, summaries
+  src/budget.rs              usable-budget and pressure calculations
+  src/artifact.rs            artifact payload, manifest, hashing
+  src/store.rs               atomic file store using AbsolutePathBuf
+  src/validation.rs          evidence and settlement validation
+  src/projection.rs          stable-prefix plus active-tail projection plan
+  src/recall.rs              bounded staged recall
+  src/metrics.rs             checkpoint outcome measurements
+  src/store_tests.rs
+  src/validation_tests.rs
+  src/projection_tests.rs
+```
+
+Each implementation module should remain below 500 lines. Public exports stay in `lib.rs`; storage
+helpers and wire conversion details remain private.
+
+### Core Integration
+
+```text
+codex-rs/core/src/context_checkpoint/
+  mod.rs                     thin Session-facing facade
+  runtime.rs                 per-thread live checkpoint state
+  request.rs                 MEMORY_STATUS snapshot and tool policy
+  settlement.rs              pending checkpoint lifecycle
+  projection.rs              ResponseItem projection adapter
+
+codex-rs/core/src/context/checkpoint_status.rs
+codex-rs/core/src/tools/handlers/update_summary.rs
+codex-rs/core/src/tools/handlers/update_summary_spec.rs
+codex-rs/core/src/tools/handlers/recall_checkpoint.rs
+codex-rs/core/src/tools/handlers/recall_checkpoint_spec.rs
+codex-rs/core/src/session/context_checkpoint.rs
+```
+
+The new `session/context_checkpoint.rs` contains `impl Session` methods for checkpoint operations.
+Only module declarations and existing construction calls are added to large orchestration files.
+
+### Existing Files With Targeted Changes
+
+| File | Required change |
+| --- | --- |
+| `codex-rs/tools/src/tool_output.rs` | Add a loss-aware archival payload method with a model-output default. |
+| `codex-rs/core/src/tools/registry.rs` | Persist invocation/result before returning `AnyToolResult`, including failures. |
+| `codex-rs/core/src/tools/spec_plan.rs` | Register checkpoint and recall tools; apply checkpoint-only visibility. |
+| `codex-rs/core/src/session/session.rs` | Construct and retain one `CheckpointRuntime` in `SessionServices`. |
+| `codex-rs/core/src/session/turn.rs` | Append ephemeral status before `build_prompt`; install pending checkpoints after tool recording. |
+| `codex-rs/core/src/session/context_window.rs` | Calculate usable-budget pressure and fallback threshold. |
+| `codex-rs/core/src/compact_token_budget.rs` | Route normal window changes through controlled checkpointing. |
+| `codex-rs/core/src/compact.rs` | Mark local whole-history replacement as an observable fallback. |
+| `codex-rs/core/src/compact_remote.rs` | Mark provider compaction as an observable fallback. |
+| `codex-rs/protocol/src/protocol.rs` | Add optional checkpoint metadata to `CompactedItem`. |
+| `codex-rs/memories/write/src/phase1.rs` | Prefer verified SessionSummary records over re-summarizing raw rollout content. |
+| `codex-rs/memories/write/src/phase2.rs` | Add fixed five-generation quarter consolidation. |
+| `codex-rs/memories/read/src/citations.rs` | Resolve checkpoint, group, call, and artifact citations. |
+| `codex-rs/config/src/types.rs` | Add reserve, retention, and fallback settings without opaque bool call sites. |
+| `codex-rs/features/src/lib.rs` | Add the controlled checkpoint feature and make it the normal path once complete. |
+| `AGENTS_NAVIGATION.md` | Record the new feature owner, entry points, persistence boundary, and focused CI command. |
+
+Workspace manifests, Bazel targets, `Cargo.lock`, and `MODULE.bazel.lock` must be updated in the same
+change where required.
+
+## Core Rust Types
+
+The following is the intended API shape, not placeholder pseudocode to be left unimplemented.
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct CheckpointGenerationId(u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct TurnRecordId(u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ToolGroupId(u64);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ArtifactId(String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtifactRef {
+    pub artifact_id: ArtifactId,
+    pub sha256: String,
+    pub byte_len: u64,
+    pub media_type: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolCallRecord {
+    pub call_id: String,
+    pub tool_name: String,
+    pub group_id: ToolGroupId,
+    pub input: ArtifactRef,
+    pub output: ArtifactRef,
+    pub outcome: ToolCallOutcome,
+    pub truncation: TruncationProvenance,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ToolCallOutcome {
+    Success,
+    ToolError { message: String },
+    Interrupted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolGroupRecord {
+    pub group_id: ToolGroupId,
+    pub calls: Vec<ToolCallRecord>,
+    pub state: ToolGroupState,
+    pub requires_recall: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ToolGroupState {
+    Open,
+    Settled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TurnRecord {
+    pub record_id: TurnRecordId,
+    pub generation_id: CheckpointGenerationId,
+    pub completed_groups: Vec<ToolGroupId>,
+    pub summary: String,
+    pub evidence: Vec<EvidenceRef>,
+    pub changes: Vec<String>,
+    pub validation: Vec<String>,
+    pub decisions: Vec<String>,
+    pub open_items: Vec<String>,
+    pub next_action: String,
+    pub correction_of: Option<TurnRecordId>,
+}
+```
+
+Use enums for pressure and tool visibility rather than positional boolean arguments:
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckpointPressure {
+    Normal,
+    Advisory,
+    Required,
+    FallbackRequired,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckpointToolPolicy {
+    Normal,
+    CheckpointOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryStatusSnapshot {
+    pub generation_id: CheckpointGenerationId,
+    pub turn_id: String,
+    pub context_usage_basis_points: u16,
+    pub usage_source: UsageSource,
+    pub tool_result_share_basis_points: u16,
+    pub open_groups: usize,
+    pub settled_groups: usize,
+    pub last_checkpoint: Option<TurnRecordId>,
+    pub pressure: CheckpointPressure,
+}
+```
+
+Provider token usage is authoritative for total usage when present. Per-item tool-result share is
+necessarily tokenizer-derived because providers expose aggregate cached/input usage, not token
+counts for each history item. `usage_source` makes that distinction explicit.
+
+## Runtime API
+
+Keep filesystem I/O outside the main Session mutex. The runtime owns a short-lived internal lock and
+an immutable store handle:
+
+```rust
+pub struct CheckpointRuntime {
+    store: CheckpointStore,
+    state: tokio::sync::Mutex<CheckpointState>,
+}
+
+impl CheckpointRuntime {
+    pub async fn prepare_request(
+        &self,
+        input: &[ResponseItem],
+        usage: ContextUsageSnapshot,
+    ) -> Result<PreparedCheckpointRequest, CheckpointError>;
+
+    pub async fn record_tool_result(
+        &self,
+        invocation: ToolInvocationRecord,
+        result: ToolResultRecord,
+    ) -> ArtifactCaptureOutcome;
+
+    pub async fn prepare_summary(
+        &self,
+        request: UpdateSummaryRequest,
+    ) -> Result<PendingCheckpoint, CheckpointError>;
+
+    pub async fn take_pending_checkpoint(&self) -> Option<PendingCheckpoint>;
+
+    pub async fn mark_installed(
+        &self,
+        installed: InstalledCheckpoint,
+    ) -> Result<(), CheckpointError>;
+
+    pub async fn recall(
+        &self,
+        request: RecallRequest,
+    ) -> Result<RecallResult, CheckpointError>;
+}
+
+#[derive(Debug)]
+pub enum ArtifactCaptureOutcome {
+    Recorded(ToolCallRecord),
+    Degraded(ArtifactCaptureFailure),
+}
+```
+
+`CheckpointStore` is a concrete type until a second real storage implementation exists. Host-local
+roots use `AbsolutePathBuf`. Atomic writes use a same-directory temporary file, flush, and rename;
+the manifest is written last so a manifest always refers only to complete artifacts.
+
+## Tool Output Archival
+
+Extend the generic tool-output contract without depending on the checkpoint crate:
+
+```rust
+#[derive(Debug, Clone, Serialize)]
+pub enum ToolOutputArtifact {
+    ResponseItem(ResponseInputItem),
+    Json(serde_json::Value),
+    Bytes {
+        media_type: String,
+        data: Vec<u8>,
+    },
+}
+
+pub trait ToolOutput: Send {
+    fn log_preview(&self) -> String;
+    fn to_response_item(&self, call_id: &str, payload: &ToolPayload) -> ResponseInputItem;
+
+    fn artifact_payload(
+        &self,
+        call_id: &str,
+        payload: &ToolPayload,
+    ) -> ToolOutputArtifact {
+        ToolOutputArtifact::ResponseItem(self.to_response_item(call_id, payload))
+    }
+}
+```
+
+The default archives exactly what core receives before ContextManager truncation. Shell, exec, MCP,
+image, and other handlers that possess a more complete result override `artifact_payload` and mark
+whether model-facing formatting omitted content.
+
+`handle_any_tool` attempts to persist both success and failure before returning to the model. A
+checkpoint-storage failure must not change the unrelated tool's outcome:
+
+```rust
+let result = tool.handle(invocation.clone()).await;
+let capture = invocation
+    .session
+    .record_checkpoint_tool_result(&invocation, result.as_deref())
+    .await;
+invocation.session.note_checkpoint_capture(capture).await;
+let output = result?;
+```
+
+The example expresses ordering. The production call handles the success and error references
+exhaustively rather than assuming a conversion between their types.
+
+## Baseline Activity Guarantee
+
+The checkpoint subsystem is an optimization and integrity layer around existing activity. It must
+not become a new availability dependency for ordinary Codex work.
+
+- A shell, MCP, file, image, or other unrelated tool keeps its original success/error result if
+  checkpoint artifact capture fails.
+- Capture failure moves the runtime to `Degraded`, emits one bounded event, and records the reason in
+  rollout when persistence remains available.
+- `update_summary` is rejected while required evidence is degraded; it never freezes an incomplete
+  record as trusted.
+- At normal pressure the conversation continues with the original history intact.
+- At fallback pressure the existing local/remote compaction path runs with the degradation reason.
+- Checkpoint file I/O never occurs while holding the main Session state lock.
+- Startup failure of the checkpoint store leaves normal conversation, manual `/compact`, resume,
+  fork, rollback, and tool execution usable.
+- Panics, repeated warnings, and retry loops in checkpoint code are not allowed to take down or stall
+  the active turn.
+
+## ToolGroup Formation
+
+- Runtime creates one ToolGroup for each assistant sampling step that emits one or more tool calls.
+- Parallel calls emitted by the same response share the group.
+- A later sampling step receives a new group ID.
+- Runtime does not infer the semantic purpose. `update_summary` supplies the meaning and may settle
+  one or more contiguous completed groups.
+- Groups with in-flight calls, unresolved unique evidence, or `requiresRecall=true` cannot be
+  removed from the active tail.
+
+This gives Runtime mechanical boundaries while preserving the model's responsibility for semantic
+stage completion.
+
+## Request Construction
+
+`run_sampling_request` currently selects either initial input or `history.for_prompt(...)`, then calls
+`build_prompt`. Insert one bounded preparation call between those operations:
+
+```rust
+let prompt_input = if let Some(input) = initial_input.take() {
+    input
+} else {
+    sess.clone_history()
+        .await
+        .for_prompt(&turn_context.model_info.input_modalities)
+};
+let prepared = sess
+    .prepare_checkpoint_request(turn_context.as_ref(), prompt_input)
+    .await?;
+let router = built_tools_with_policy(
+    sess.as_ref(),
+    step_context.as_ref(),
+    &cancellation_token,
+    prepared.tool_policy,
+).await?;
+let prompt = build_prompt(prepared.input, router.as_ref(), turn_context, base_instructions);
+```
+
+`checkpoint_status.rs` implements `ContextualUserFragment` and renders the final ephemeral developer
+item. It has a hard byte/token cap and is never written into ContextManager or rollout history.
+Retries rebuild only the mutable request tail; frozen history items remain byte-for-byte stable.
+
+## Summary Tool Lifecycle
+
+The handler validates JSON and prepares a checkpoint, but does not replace history inside tool
+dispatch:
+
+```rust
+let pending = invocation
+    .session
+    .checkpoint_runtime()
+    .prepare_summary(request)
+    .await
+    .map_err(checkpoint_error_for_model)?;
+invocation.session.set_pending_checkpoint(pending).await;
+```
+
+After the update-summary tool call and output have been recorded in rollout, `run_turn` consumes the
+pending checkpoint before the next follow-up sampling request:
+
+```rust
+if needs_follow_up
+    && let Some(pending) = sess.take_pending_checkpoint().await
+{
+    sess.install_checkpoint_generation(turn_context.as_ref(), pending)
+        .await?;
+    continue;
+}
+```
+
+Installation performs these operations in order:
+
+1. Revalidate referenced groups and artifact hashes.
+2. Write the immutable TurnRecord and updated draft.
+3. Build a projection preserving the exact frozen prefix and all open tail items.
+4. Append the new bounded checkpoint fragment at the former settled-tail boundary.
+5. Persist `CompactedItem` with replacement history and checkpoint metadata.
+6. Replace live ContextManager history.
+7. Recompute token usage and mark the manifest installed.
+
+Failure before step 5 leaves live history unchanged. Failure after rollout persistence is repaired on
+resume by the persisted replacement history and manifest state.
+
+## Projection Invariants
+
+```text
+immutable initial prefix
+immutable long-term / quarter / session records
+immutable frozen TurnRecords
+current world-state update
+open active tail
+ephemeral MEMORY_STATUS
+```
+
+- A checkpoint may replace only a contiguous settled portion at the beginning of the active tail.
+- It may not remove an item from the middle while preserving later raw items as if the prefix were
+  unchanged.
+- Initial developer/tool definitions are not regenerated during ordinary settlement.
+- World-state changes are appended as the newest bounded state item rather than inserted into an
+  earlier frozen prefix.
+- Corrections append a new record; they never edit a cached frozen record.
+
+## Budget And Fallback Flow
+
+```rust
+match pressure {
+    CheckpointPressure::Normal => continue_normally(),
+    CheckpointPressure::Advisory => expose_checkpoint_tool_and_status(),
+    CheckpointPressure::Required => restrict_to_checkpoint_recall_or_final_answer(),
+    CheckpointPressure::FallbackRequired => run_legacy_compaction_with_event(),
+}
+```
+
+The fallback transition requires a recorded reason such as no settleable groups, repeated validation
+failure, artifact-store failure, incompatible model history, or provider hard rejection. A generic
+error cannot silently select legacy compaction.
+
+Manual `/compact` remains an explicit legacy operation for compatibility. Automatic compaction and
+`new_context` use the controlled checkpoint path when the feature is enabled. Model/comp-hash
+transitions checkpoint using the previous compatible model before switching; provider compaction is
+used only if that controlled transition fails.
+
+## Memory Consolidation
+
+1. The active generation maintains `Sxxx.draft` outside model context.
+2. A completed generation freezes one SessionSummary without reading earlier frozen summaries back
+   into the summarization prompt.
+3. Every five newly completed generation summaries produce one immutable QuarterSummary.
+4. Phase 2 receives only the new quarter plus the existing bounded LongTermMemory and emits an
+   additive update/correction set.
+5. LongTermMemory accepts stable user decisions, architecture constraints, and durable project
+   facts; transient tool output and one-off failures remain in lower levels.
+
+Existing memory citations are extended instead of replaced. Citation resolution verifies files and
+hashes before returning content to the model.
+
+## Configuration Shape
+
+```rust
+pub struct ContextCheckpointConfig {
+    pub final_answer_reserve_tokens: i64,
+    pub checkpoint_reserve_tokens: i64,
+    pub provider_overhead_reserve_tokens: i64,
+    pub advisory_usage_percent: u8,
+    pub required_usage_percent: u8,
+    pub fallback_usage_percent: u8,
+    pub max_status_tokens: usize,
+    pub max_turn_record_tokens: usize,
+    pub artifact_retention: ArtifactRetention,
+}
+
+pub enum ArtifactRetention {
+    KeepAll,
+    KeepRecentGenerations { generations: usize },
+}
+```
+
+Defaults enforce `advisory < required < fallback`, and `fallback` represents 95% of the reserved
+usable budget. Invalid combinations fail config loading instead of being silently reordered.
+
+## Focused Verification Matrix
+
+### New Crate
+
+- Deterministic IDs and cross-platform paths.
+- Atomic artifact/manifest writes and interrupted-write recovery.
+- Hash mismatch and missing-evidence rejection.
+- Contiguous-settlement enforcement.
+- Stable-prefix projection equality.
+- Bounded recall escalation.
+
+### Core Integration
+
+- A tool-heavy turn calls `update_summary`; the next request contains the frozen TurnRecord and omits
+  only the settled raw groups.
+- Open groups remain byte-for-byte in the next request.
+- Invalid references return a tool error and leave history unchanged.
+- Tool success and tool failure artifacts exist before their output is sent back to the model.
+- `MEMORY_STATUS` appears once at the request tail and is absent from persisted rollout history.
+- Restart/resume reconstructs the same replacement history and checkpoint generation.
+- Fork and rollback select the correct checkpoint ancestor.
+- Model switch uses controlled settlement before legacy fallback.
+- Provider rejection records fallback reason and preserves artifacts.
+
+### Memory Integration
+
+- Five generation summaries create exactly one QuarterSummary.
+- A second quarter does not re-summarize the first quarter's source sessions.
+- Corrections append and supersede without mutating cited source lines.
+- Missing or changed artifacts make dependent recall untrusted.
+
+### CI Execution
+
+Use GitHub workflows, not local compilation, for this workspace. The implementation workflow should
+run formatting, the new crate tests, focused `codex-core` integration tests, protocol serialization
+compatibility, and the Windows `codex.exe` build. Do not add unrelated workspace-wide gates to the
+deployment path.
+
+## Implementation Order
+
+This order is for code dependency management, not for shipping incomplete user-visible behavior:
+
+1. Add the domain/store crate and compatibility metadata.
+2. Add artifact capture and per-thread runtime construction.
+3. Add status fragment, tool specs, handlers, and grouping.
+4. Add pending settlement and stable projection installation.
+5. Route automatic pressure and `new_context` through the new path; retain explicit fallback.
+6. Extend resume, fork, rollback, memory consolidation, and recall.
+7. Enable the new path by default only when the complete verification matrix passes.
+
+The deployable result must contain all seven steps. Intermediate commits may compile for review, but
+must not be presented as the completed replacement runtime.
