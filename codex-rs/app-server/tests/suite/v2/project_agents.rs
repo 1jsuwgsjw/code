@@ -36,6 +36,7 @@ use wiremock::matchers::path_regex;
 
 const ROOT_ONLY_MESSAGE: &str = "Delegate this root-only request.";
 const WORKER_TASK: &str = "Inspect the target";
+const WORKER_EXECUTION_TASK: &str = "Task: Inspect the target\n\nObjective:\nInspect the target";
 
 #[cfg(any(target_os = "macos", windows))]
 pub(super) const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(60);
@@ -333,7 +334,7 @@ async fn project_agent_delegate_isolated_worker_and_persists_valid_result() -> R
     let api_task = json!({
         "agentId": "query",
         "taskId": task_id,
-        "task": WORKER_TASK,
+        "task": WORKER_EXECUTION_TASK,
         "phase": "completed",
         "sessionThreadId": current_task["session_thread_id"],
         "parentThreadId": thread.id,

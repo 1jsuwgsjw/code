@@ -53,6 +53,8 @@ use super::project_agents::has_function_call_output;
 use super::project_agents::request_body_json;
 
 const CONTROL_TASK: &str = "Inspect the control target";
+const CONTROL_EXECUTION_TASK: &str =
+    "Task: Inspect the control target\n\nObjective:\nInspect the control target";
 const FOLLOW_UP_MESSAGE: &str = "Also verify the follow-up marker";
 const AGENT_CALL_ID: &str = "agent-control-call";
 
@@ -451,7 +453,7 @@ async fn project_agent_terminate_retry_and_explicit_rebuild_are_durable() -> Res
     )
     .await?;
     assert_eq!(latest_retry.task.attempt, 2);
-    assert_eq!(latest_retry.task.task, CONTROL_TASK);
+    assert_eq!(latest_retry.task.task, CONTROL_EXECUTION_TASK);
     let latest_completed =
         wait_for_task_phase(&mut mcp, &thread_id, ProjectAgentTaskPhase::Completed).await?;
     assert_eq!(

@@ -30,6 +30,10 @@ jobs:
 
       - uses: ./.github/actions/setup-ci
 
+      - name: Use a fresh Cargo target for this validation job
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=${RUNNER_TEMP}/codex-target" >> "${GITHUB_ENV}"
+
       - name: Install Linux sandbox dependencies
         run: |
           sudo apt-get update -y

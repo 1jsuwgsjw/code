@@ -51,14 +51,14 @@ open_questions:
 - The first app-server slice should remain under the reviewable change limit and may
   stage read/create/append/start before manual result/evaluation RPCs if the actual
   diff requires it.
-next_action: Precisely stage only the corrected workflow and task state, commit and push them,
-  then start one long-running 60-second watcher for the replacement GitHub Actions run.
+next_action: Review the four-file scoped diff, precisely stage the workflow, two app-server
+  integration test files, and task state, then commit, push, and resume one 60-second watcher.
 last_result: >-
-  The workflow now mirrors the canonical Linux sandbox prerequisites, builds current app-server,
-  CLI, code-mode, rmcp, and Linux sandbox binaries, pins every spawned binary through CARGO_BIN_EXE,
-  and runs the full codex-app-server suite under the default CI nextest profile instead of the local
-  profile. This addresses all three observed classes together: stale protocol/runtime behavior,
-  missing test_stdio_server, and bubblewrap user-namespace denial.
+  Run 31769856467 reduced app-server failures from 30 to 11 and eliminated bubblewrap/helper errors.
+  Seven remaining failures still showed stale protocol or generic multi-agent runtime behavior,
+  two assertions expected the pre-semantic-task prompt, and two unrelated cases timed out. The
+  validation job now uses a fresh runner-temporary Cargo target, both prompt assertions match the
+  current semantic task contract, and just fmt completed successfully. No local tests were run.
 scripts: []
 artifacts:
 - D:\codex\task\artifacts\T-003-agent-system-task-sheet.md
@@ -74,13 +74,12 @@ artifacts:
 - D:\codex\task\runs\stage4c5a\run-31598702245-failed.log
 - D:\codex\task\runs\stage4c5a\run-31599851875-failed.log
 context_checkpoint:
-  estimated_usage: 0.12
-  reason: remote run 31701124023 failed on stale visibility expectation; beginning
-    minimal test-contract repair
-  updated_at: '2026-08-13T13:08:11+00:00'
+  estimated_usage: 74.12
+  reason: context_threshold
+  updated_at: '2026-08-14T05:11:35+00:00'
 lessons: []
 created_at: '2026-08-10T11:33:25+00:00'
-updated_at: '2026-08-13T13:08:11+00:00'
+updated_at: '2026-08-14T05:11:35+00:00'
 required_information:
 - Static compatibility of every TurnContext/make_turn_context construction after adding
   collaboration_surface_policy.
