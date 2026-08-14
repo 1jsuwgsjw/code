@@ -166,7 +166,7 @@ impl App {
                     }
                 };
                 if let Err(error) = self
-                    .resume_project_agent_thread(tui, app_server, session_thread_id)
+                    .open_project_agent_thread(tui, app_server, session_thread_id)
                     .await
                 {
                     self.sync_active_agent_label();
@@ -205,12 +205,18 @@ impl App {
             return false;
         }
         if let Err(error) = self
-            .resume_project_agent_thread(tui, app_server, origin.root_thread_id)
+            .select_agent_thread(tui, app_server, origin.root_thread_id)
             .await
         {
             self.sync_active_agent_label();
             self.chat_widget
                 .add_error_message(format!("返回项目任务树失败：{error}"));
+            return true;
+        }
+        if self.current_displayed_thread_id() != Some(origin.root_thread_id) {
+            self.sync_active_agent_label();
+            self.chat_widget
+                .add_error_message("返回项目任务树失败：主会话不可用".to_string());
             return true;
         }
         self.project_agent_conversation_origin = None;
@@ -220,23 +226,16 @@ impl App {
         true
     }
 
-    async fn resume_project_agent_thread(
+    async fn open_project_agent_thread(
         &mut self,
         tui: &mut crate::tui::Tui,
         app_server: &mut AppServerSession,
         thread_id: ThreadId,
     ) -> Result<(), String> {
-        let resumed = app_server
-            .resume_thread(self.config.clone(), thread_id)
+        self.attach_live_thread_for_selection(app_server, thread_id)
             .await
             .map_err(|error| error.to_string())?;
-        self.shutdown_current_thread(app_server).await;
-        self.replace_chat_widget_with_app_server_thread(
-            tui,
-            app_server,
-            resumed,
-            /*initial_user_message*/ None,
-        )
+        self.select_agent_thread(tui, app_server, thread_id)
             .await
             .map_err(|error| error.to_string())
     }
