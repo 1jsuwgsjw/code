@@ -172,6 +172,8 @@ pub struct ContextUsageSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryStatusSnapshot {
     pub generation_id: CheckpointGenerationId,
+    pub completed_sessions: u64,
+    pub quarter_consolidation_due: bool,
     pub turn_id: String,
     pub context_usage_basis_points: u16,
     pub usage_source: UsageSource,

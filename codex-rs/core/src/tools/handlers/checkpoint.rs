@@ -27,6 +27,7 @@ impl ToolExecutor<ToolInvocation> for UpdateContextStateHandler {
         update_context_state_spec()
     }
 
+    #[allow(deprecated)]
     fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
         Box::pin(async move {
             let ToolPayload::Function { arguments } = invocation.payload else {
@@ -44,7 +45,7 @@ impl ToolExecutor<ToolInvocation> for UpdateContextStateHandler {
                 .session
                 .services
                 .context_checkpoint
-                .prepare_context_state(request)
+                .prepare_context_state(request, invocation.turn.cwd.as_path())
                 .await
                 .map_err(|error| FunctionCallError::RespondToModel(error.to_string()))?;
             let output = json!({
@@ -191,12 +192,6 @@ fn update_context_state_spec() -> ToolSpec {
                     Some("Evidence needed to verify or recall this state.".to_string()),
                 ),
             ),
-            (
-                "sourceRevision".to_string(),
-                JsonSchema::string(Some(
-                    "Optional source revision or content hash used for invalidation.".to_string(),
-                )),
-            ),
         ]),
         Some(vec![
             "key".to_string(),
@@ -252,7 +247,9 @@ fn update_context_state_spec() -> ToolSpec {
             ),
             (
                 "quarterPromotions".to_string(),
-                string_array("Existing session keys stable enough to promote to quarter memory."),
+                string_array(
+                    "Existing session keys stable enough to promote when MEMORY_STATUS reports quarter_consolidation_due=true.",
+                ),
             ),
         ]),
         Some(vec!["active".to_string()]),

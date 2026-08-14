@@ -28,11 +28,15 @@ use crate::TruncationProvenance;
 use crate::TurnRecord;
 use crate::TurnRecordId;
 use crate::UpdateContextStateRequest;
+use crate::source_revision::invalidate_stale_source_facts;
+use crate::source_revision::stamp_source_facts;
+use crate::state::SESSIONS_PER_QUARTER;
 use crate::state::apply_context_state_update;
 use crate::state::update_evidence;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
+use std::path::Path;
 use tokio::sync::Mutex;
 
 pub(crate) const MANIFEST_SCHEMA_VERSION: u32 = 1;
@@ -176,6 +180,7 @@ impl CheckpointRuntime {
         history_len: usize,
         usage: ContextUsageSnapshot,
         tool_result_share_basis_points: u16,
+        workspace_root: &Path,
     ) -> Result<PreparedCheckpointRequest, CheckpointError> {
         let turn_id = turn_id.into();
         {
@@ -205,9 +210,13 @@ impl CheckpointRuntime {
         if let Err(error) = self.persist().await {
             self.degrade(error.to_string()).await;
         }
-        Ok(self
+        let mut prepared = self
             .prepared_status(usage, tool_result_share_basis_points)
-            .await)
+            .await;
+        if let Some(record) = prepared.record.as_mut() {
+            invalidate_stale_source_facts(&mut record.state, workspace_root).await;
+        }
+        Ok(prepared)
     }
 
     pub async fn record_tool_result(
@@ -319,6 +328,7 @@ impl CheckpointRuntime {
     pub async fn prepare_context_state(
         &self,
         request: UpdateContextStateRequest,
+        workspace_root: &Path,
     ) -> Result<PendingCheckpoint, CheckpointError> {
         let snapshot = {
             let state = self.state.lock().await;
@@ -332,13 +342,16 @@ impl CheckpointRuntime {
             }
             state.manifest.clone()
         };
-        let selected = validate_group_selection(&snapshot, &request)?;
-        let current_state = snapshot
+        let mut current_state = snapshot
             .turn_records
             .last()
             .map(|record| record.state.clone())
             .unwrap_or_default();
-        let context_state = apply_context_state_update(&current_state, &request.state)?;
+        invalidate_stale_source_facts(&mut current_state, workspace_root).await;
+        let mut context_state =
+            apply_context_state_update(&current_state, &request.state, snapshot.generation_id)?;
+        stamp_source_facts(&mut context_state, workspace_root).await?;
+        let selected = validate_group_selection(&snapshot, &request)?;
         let mut evidence = update_evidence(&request.state);
         append_required_recall_evidence(&selected, &mut evidence);
         let artifacts = referenced_artifacts(&snapshot, &evidence)?;
@@ -560,6 +573,12 @@ impl CheckpointRuntime {
             record: state.manifest.turn_records.last().cloned(),
             status: MemoryStatusSnapshot {
                 generation_id: state.manifest.generation_id,
+                completed_sessions: state.manifest.generation_id.get().saturating_sub(1),
+                quarter_consolidation_due: state
+                    .manifest
+                    .generation_id
+                    .get()
+                    .is_multiple_of(SESSIONS_PER_QUARTER),
                 turn_id: state
                     .manifest
                     .active_sampling

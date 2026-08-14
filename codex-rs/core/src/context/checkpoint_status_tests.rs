@@ -9,6 +9,8 @@ use pretty_assertions::assert_eq;
 fn renders_bounded_ephemeral_memory_status() {
     let fragment = CheckpointStatusFragment::new(MemoryStatusSnapshot {
         generation_id: CheckpointGenerationId::new(2),
+        completed_sessions: 1,
+        quarter_consolidation_due: false,
         turn_id: "turn-7".to_string(),
         context_usage_basis_points: 8_512,
         usage_source: UsageSource::Provider,
@@ -25,6 +27,7 @@ fn renders_bounded_ephemeral_memory_status() {
         fragment.render(),
         "<MEMORY_STATUS>\n\
 generation=G000002 turn=turn-7\n\
+completed_sessions=1 quarter_consolidation_due=false\n\
 context_usage=85.12% usage_source=Provider tool_result_share=20.50%\n\
 tool_groups=3 open=1 settled=2 settleable=[TG000003,TG000004]\n\
 last_checkpoint=none\n\

@@ -10,6 +10,7 @@ mod model;
 mod projection;
 mod reconcile;
 mod runtime;
+mod source_revision;
 mod state;
 mod store;
 

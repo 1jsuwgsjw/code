@@ -70,14 +70,18 @@ Implemented in the current working stage:
 - deterministic key merge, cross-layer uniqueness, evidence requirements, and delayed promotion;
 - current-state checkpoint persistence through the existing immutable record and manifest chain;
 - latest-only request projection with historical checkpoint fallback;
+- runtime-owned content revisions for workspace-backed source facts, with stale facts removed before
+  projection and before the next state merge;
+- explicit checkpoint-generation Session boundaries and Quarter promotion only at each fifth
+  Session boundary;
+- core integration coverage that drives two consecutive checkpoints and asserts that the final
+  model request contains exactly one latest state projection;
 - legacy TurnRecord payload fields retained only for reading earlier manifests.
 
 Still required before this correction is complete:
 
-- automatic invalidation when a referenced source revision changes;
-- explicit session-boundary accounting for scheduled Quarter consolidation;
-- core integration coverage proving exactly one latest state projection reaches the model;
-- CI confirmation of the new tool schema and request projection.
+- CI confirmation of source invalidation, the revised tool schema, scheduled Quarter promotion,
+  and latest-only request projection.
 
 ## Problem
 
@@ -787,10 +791,13 @@ used only if that controlled transition fails.
 
 ## Memory Consolidation
 
-1. The active generation maintains `Sxxx.draft` outside model context.
-2. A completed generation freezes one SessionSummary without reading earlier frozen summaries back
-   into the summarization prompt.
-3. Every five newly completed generation summaries produce one immutable QuarterSummary.
+1. Each installed checkpoint closes one numbered Session generation; the next model request starts
+   the next generation from the frozen state projection.
+2. Session entries remain mutable by stable-key upsert within those generations, while every fifth
+   generation exposes `quarter_consolidation_due=true` and permits promotion of pre-existing Session
+   keys.
+3. A Quarter promotion moves only already-established Session entries; entries created in the same
+   update cannot be promoted.
 4. Phase 2 receives only the new quarter plus the existing bounded LongTermMemory and emits an
    additive update/correction set.
 5. LongTermMemory accepts stable user decisions, architecture constraints, and durable project

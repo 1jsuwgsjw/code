@@ -42,6 +42,7 @@ fn state_update_replaces_active_and_promotes_existing_session_memory() {
             forget_keys: Vec::new(),
             quarter_promotions: vec!["compression.model".to_string()],
         },
+        CheckpointGenerationId::new(SESSIONS_PER_QUARTER),
     )
     .expect("apply state update");
 
@@ -58,6 +59,7 @@ fn state_update_rejects_immediate_quarter_promotion() {
             forget_keys: Vec::new(),
             quarter_promotions: vec!["compression.model".to_string()],
         },
+        CheckpointGenerationId::new(SESSIONS_PER_QUARTER),
     )
     .expect_err("new session memory cannot be promoted immediately");
 
@@ -80,8 +82,32 @@ fn source_facts_require_recallable_evidence() {
             forget_keys: Vec::new(),
             quarter_promotions: Vec::new(),
         },
+        CheckpointGenerationId::new(1),
     )
     .expect_err("source facts need evidence");
+
+    assert!(matches!(error, CheckpointError::InvalidRequest(_)));
+}
+
+#[test]
+fn state_update_rejects_quarter_promotion_before_scheduled_boundary() {
+    let current = ContextStateSnapshot {
+        quarter: Vec::new(),
+        session: vec![decision("compression.model", "preserve effective state")],
+        active: active(Vec::new()),
+    };
+
+    let error = apply_context_state_update(
+        &current,
+        &ContextStateUpdate {
+            active: active(Vec::new()),
+            session_upserts: Vec::new(),
+            forget_keys: Vec::new(),
+            quarter_promotions: vec!["compression.model".to_string()],
+        },
+        CheckpointGenerationId::new(SESSIONS_PER_QUARTER - 1),
+    )
+    .expect_err("quarter promotion before the fifth boundary must fail");
 
     assert!(matches!(error, CheckpointError::InvalidRequest(_)));
 }

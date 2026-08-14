@@ -1198,6 +1198,7 @@ async fn run_sampling_request(
                 usage_source: codex_context_checkpoint::UsageSource::TokenizerEstimate,
             },
             tool_result_share_basis_points,
+            step_context.turn.cwd.as_path(),
         )
         .await
     {

@@ -1,3 +1,4 @@
+use crate::CheckpointGenerationId;
 use crate::model::CheckpointError;
 use crate::model::EvidenceRef;
 use serde::Deserialize;
@@ -11,6 +12,7 @@ const MAX_LIST_ITEMS: usize = 24;
 const MAX_KEY_BYTES: usize = 128;
 const MAX_CONTENT_BYTES: usize = 4 * 1024;
 const MAX_ACTIVE_TEXT_BYTES: usize = 2 * 1024;
+pub(crate) const SESSIONS_PER_QUARTER: u64 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,11 +81,19 @@ pub struct ContextStateUpdate {
 pub(crate) fn apply_context_state_update(
     current: &ContextStateSnapshot,
     update: &ContextStateUpdate,
+    generation_id: CheckpointGenerationId,
 ) -> Result<ContextStateSnapshot, CheckpointError> {
     validate_active_state(&update.active)?;
     validate_entries("sessionUpserts", &update.session_upserts, MAX_LAYER_ENTRIES)?;
     validate_keys("forgetKeys", &update.forget_keys)?;
     validate_keys("quarterPromotions", &update.quarter_promotions)?;
+    if !update.quarter_promotions.is_empty()
+        && !generation_id.get().is_multiple_of(SESSIONS_PER_QUARTER)
+    {
+        return Err(CheckpointError::InvalidRequest(format!(
+            "quarterPromotions are only accepted at every {SESSIONS_PER_QUARTER}th session boundary"
+        )));
+    }
 
     let mut quarter = entries_by_key("quarter", &current.quarter)?;
     let mut session = entries_by_key("session", &current.session)?;
