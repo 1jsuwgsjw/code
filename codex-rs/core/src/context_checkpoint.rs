@@ -51,8 +51,11 @@ pub(crate) async fn install_pending_checkpoint(
     let history = session.clone_history().await;
     let checkpoint_item =
         CheckpointRecordFragment::new(&pending.record)?.into_response_input_item();
-    let replacement_history =
-        codex_context_checkpoint::project_history(history.raw_items(), &pending, checkpoint_item)?;
+    let replacement_history = codex_context_checkpoint::project_history(
+        history.raw_items(),
+        &pending,
+        checkpoint_item.into(),
+    )?;
     let replacement_bytes = serde_json::to_vec(&replacement_history)
         .map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?;
     let replacement_history_sha256 = codex_context_checkpoint::content_sha256(&replacement_bytes);

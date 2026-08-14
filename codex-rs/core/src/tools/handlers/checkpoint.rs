@@ -136,8 +136,8 @@ fn update_summary_spec() -> ToolSpec {
                 JsonSchema::string_enum(
                     vec![
                         serde_json::Value::String("artifact".to_string()),
-                        "workspacePath".to_string(),
-                        "symbol".to_string(),
+                        serde_json::Value::String("workspacePath".to_string()),
+                        serde_json::Value::String("symbol".to_string()),
                     ],
                     Some("Evidence reference kind.".to_string()),
                 ),
