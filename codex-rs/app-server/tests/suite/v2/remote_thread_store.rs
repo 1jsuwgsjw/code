@@ -298,31 +298,34 @@ async fn start_in_process_client(
     config: Arc<Config>,
     loader_overrides: LoaderOverrides,
 ) -> std::io::Result<InProcessClientHandle> {
-    in_process::start(InProcessStartArgs {
-        arg0_paths: Arg0DispatchPaths::default(),
-        config,
-        cli_overrides: Vec::new(),
-        loader_overrides,
-        strict_config: false,
-        cloud_config_bundle: CloudConfigBundleLoader::default(),
-        thread_config_loader: Arc::new(NoopThreadConfigLoader),
-        feedback: CodexFeedback::new(),
-        log_db: None,
-        state_db: None,
-        environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
-        config_warnings: Vec::new(),
-        session_source: SessionSource::Cli,
-        enable_codex_api_key_env: false,
-        initialize: InitializeParams {
-            client_info: ClientInfo {
-                name: "codex-app-server-tests".to_string(),
-                title: None,
-                version: "0.1.0".to_string(),
+    in_process::start_with_project_agent_extension(
+        InProcessStartArgs {
+            arg0_paths: Arg0DispatchPaths::default(),
+            config,
+            cli_overrides: Vec::new(),
+            loader_overrides,
+            strict_config: false,
+            cloud_config_bundle: CloudConfigBundleLoader::default(),
+            thread_config_loader: Arc::new(NoopThreadConfigLoader),
+            feedback: CodexFeedback::new(),
+            log_db: None,
+            state_db: None,
+            environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
+            config_warnings: Vec::new(),
+            session_source: SessionSource::Cli,
+            enable_codex_api_key_env: false,
+            initialize: InitializeParams {
+                client_info: ClientInfo {
+                    name: "codex-app-server-tests".to_string(),
+                    title: None,
+                    version: "0.1.0".to_string(),
+                },
+                capabilities: None,
             },
-            capabilities: None,
+            channel_capacity: in_process::DEFAULT_IN_PROCESS_CHANNEL_CAPACITY,
         },
-        channel_capacity: in_process::DEFAULT_IN_PROCESS_CHANNEL_CAPACITY,
-    })
+        codex_app_server::ProjectAgentExtensionStartup::Skip,
+    )
     .await
 }
 

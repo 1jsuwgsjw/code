@@ -3,7 +3,8 @@ use codex_app_server::AppServerRuntimeOptions;
 use codex_app_server::AppServerTransport;
 use codex_app_server::AppServerWebsocketAuthArgs;
 use codex_app_server::PluginStartupTasks;
-use codex_app_server::run_main_with_transport_options;
+use codex_app_server::ProjectAgentExtensionStartup;
+use codex_app_server::run_main_with_transport_options_and_project_agent_extension;
 use codex_arg0::Arg0DispatchPaths;
 use codex_arg0::arg0_dispatch_or_else;
 use codex_config::LoaderOverrides;
@@ -53,6 +54,11 @@ struct AppServerArgs {
     #[arg(long = "disable-plugin-startup-tasks-for-tests", hide = true)]
     disable_plugin_startup_tasks_for_tests: bool,
 
+    /// Hidden debug-only test hook used to isolate non-project-AGENT integration tests.
+    #[cfg(debug_assertions)]
+    #[arg(long = "disable-project-agent-extension-for-tests", hide = true)]
+    disable_project_agent_extension_for_tests: bool,
+
     /// Enable remote control for this app-server process without changing persistence.
     #[arg(long = "remote-control", hide = true)]
     remote_control: bool,
@@ -69,6 +75,8 @@ fn main() -> anyhow::Result<()> {
             strict_config,
             #[cfg(debug_assertions)]
             disable_plugin_startup_tasks_for_tests,
+            #[cfg(debug_assertions)]
+            disable_project_agent_extension_for_tests,
             remote_control,
         } = AppServerArgs::parse();
         let loader_overrides = if disable_managed_config_from_debug_env() {
@@ -85,6 +93,14 @@ fn main() -> anyhow::Result<()> {
         if disable_plugin_startup_tasks_for_tests {
             runtime_options.plugin_startup_tasks = PluginStartupTasks::Skip;
         }
+        #[cfg(debug_assertions)]
+        let project_agent_extension_startup = if disable_project_agent_extension_for_tests {
+            ProjectAgentExtensionStartup::Skip
+        } else {
+            ProjectAgentExtensionStartup::Install
+        };
+        #[cfg(not(debug_assertions))]
+        let project_agent_extension_startup = ProjectAgentExtensionStartup::Install;
         runtime_options.remote_control_startup_mode =
             match (remote_control, remote_control_disabled) {
                 (true, _) => codex_app_server::RemoteControlStartupMode::EnabledEphemeral,
@@ -92,7 +108,7 @@ fn main() -> anyhow::Result<()> {
                 (false, false) => codex_app_server::RemoteControlStartupMode::ResolvePersisted,
             };
 
-        run_main_with_transport_options(
+        run_main_with_transport_options_and_project_agent_extension(
             arg0_paths,
             config_overrides,
             loader_overrides,
@@ -102,6 +118,7 @@ fn main() -> anyhow::Result<()> {
             session_source,
             auth,
             runtime_options,
+            project_agent_extension_startup,
         )
         .await?;
         Ok(())

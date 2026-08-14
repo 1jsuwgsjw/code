@@ -153,6 +153,7 @@ pub struct TestAppServer {
 
 pub const DEFAULT_CLIENT_NAME: &str = "codex-app-server-tests";
 pub const DISABLE_PLUGIN_STARTUP_TASKS_ARG: &str = "--disable-plugin-startup-tasks-for-tests";
+const DISABLE_PROJECT_AGENT_EXTENSION_ARG: &str = "--disable-project-agent-extension-for-tests";
 const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CODEX_APP_SERVER_DISABLE_MANAGED_CONFIG";
 const CODE_MODE_HOST_PATH_ENV_VAR: &str = "CODEX_CODE_MODE_HOST_PATH";
 
@@ -1739,6 +1740,13 @@ impl TestAppServerBuilder {
     pub fn with_plugin_startup_tasks(mut self) -> Self {
         self.args
             .retain(|argument| argument != DISABLE_PLUGIN_STARTUP_TASKS_ARG);
+        self
+    }
+
+    /// Starts app-server without the project AGENT extension for isolated integration tests.
+    pub fn without_project_agent_extension(mut self) -> Self {
+        self.args
+            .push(DISABLE_PROJECT_AGENT_EXTENSION_ARG.to_string());
         self
     }
 

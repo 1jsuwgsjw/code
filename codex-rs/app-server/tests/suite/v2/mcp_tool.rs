@@ -350,6 +350,7 @@ url = "{mcp_server_url}/mcp"
         .with_codex_home(codex_home.path())
         // This test adds and refreshes an explicitly selected runtime environment.
         .without_auto_env()
+        .without_project_agent_extension()
         .build()
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;

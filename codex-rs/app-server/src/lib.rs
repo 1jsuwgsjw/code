@@ -428,6 +428,13 @@ pub enum PluginStartupTasks {
     Skip,
 }
 
+/// Controls whether the project AGENT extension is installed for an app-server runtime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectAgentExtensionStartup {
+    Install,
+    Skip,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AppServerRuntimeOptions {
     pub plugin_startup_tasks: PluginStartupTasks,
@@ -456,6 +463,35 @@ pub async fn run_main_with_transport_options(
     session_source: SessionSource,
     auth: AppServerWebsocketAuthSettings,
     runtime_options: AppServerRuntimeOptions,
+) -> IoResult<()> {
+    run_main_with_transport_options_and_project_agent_extension(
+        arg0_paths,
+        cli_config_overrides,
+        loader_overrides,
+        strict_config,
+        default_analytics_enabled,
+        transport,
+        session_source,
+        auth,
+        runtime_options,
+        ProjectAgentExtensionStartup::Install,
+    )
+    .await
+}
+
+#[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
+pub async fn run_main_with_transport_options_and_project_agent_extension(
+    arg0_paths: Arg0DispatchPaths,
+    cli_config_overrides: CliConfigOverrides,
+    loader_overrides: LoaderOverrides,
+    strict_config: bool,
+    default_analytics_enabled: bool,
+    transport: AppServerTransport,
+    session_source: SessionSource,
+    auth: AppServerWebsocketAuthSettings,
+    runtime_options: AppServerRuntimeOptions,
+    project_agent_extension_startup: ProjectAgentExtensionStartup,
 ) -> IoResult<()> {
     let loader_overrides = loader_overrides_with_test_user_config_file(
         loader_overrides,
@@ -863,6 +899,7 @@ pub async fn run_main_with_transport_options(
             rpc_transport: analytics_rpc_transport(&transport),
             remote_control_handle: Some(remote_control_handle.clone()),
             plugin_startup_tasks: runtime_options.plugin_startup_tasks,
+            project_agent_extension_startup,
         }));
         let mut thread_created_rx = processor.thread_created_receiver();
         let mut running_turn_count_rx = processor.subscribe_running_assistant_turn_count();

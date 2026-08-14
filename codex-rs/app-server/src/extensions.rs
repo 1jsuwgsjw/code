@@ -40,6 +40,7 @@ pub(crate) struct ThreadExtensionDependencies {
     pub(crate) executor_skill_provider: Arc<dyn codex_skills_extension::SkillProvider>,
     /// Process-scoped persistence backend for extensions that need stored thread history.
     pub(crate) thread_store: Arc<dyn ThreadStore>,
+    pub(crate) project_agent_extension_startup: crate::ProjectAgentExtensionStartup,
 }
 
 pub(crate) fn thread_extensions<S>(
@@ -59,13 +60,19 @@ where
         environment_manager,
         executor_skill_provider,
         thread_store: _thread_store,
+        project_agent_extension_startup,
     } = dependencies;
     let mut builder = ExtensionRegistryBuilder::<Config>::with_event_sink(event_sink);
-    codex_project_agents_extension::install(
-        &mut builder,
-        thread_manager.clone(),
-        environment_manager.clone(),
-    );
+    if matches!(
+        project_agent_extension_startup,
+        crate::ProjectAgentExtensionStartup::Install
+    ) {
+        codex_project_agents_extension::install(
+            &mut builder,
+            thread_manager.clone(),
+            environment_manager.clone(),
+        );
+    }
     if let Some(state_db) = state_db {
         codex_goal_extension::install_with_backend(
             &mut builder,

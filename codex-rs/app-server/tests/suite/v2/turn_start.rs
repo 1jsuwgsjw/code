@@ -1826,6 +1826,7 @@ async fn turn_start_ignores_deprecated_multi_agent_mode() -> Result<()> {
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .without_project_agent_extension()
         .build()
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
@@ -1906,6 +1907,7 @@ async fn thread_start_ignores_deprecated_multi_agent_mode() -> Result<()> {
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .without_project_agent_extension()
         .build()
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
@@ -3431,6 +3433,7 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .without_project_agent_extension()
         .build()
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
@@ -3652,6 +3655,7 @@ async fn direct_input_to_multi_agent_v2_subagent_is_rejected() -> Result<()> {
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .without_project_agent_extension()
         .build()
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
@@ -3833,6 +3837,7 @@ config_file = "./custom-role.toml"
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .without_project_agent_extension()
         .build()
         .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;

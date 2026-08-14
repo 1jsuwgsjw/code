@@ -240,6 +240,8 @@ mod tests {
                         environment_manager: Arc::clone(&environment_manager),
                         executor_skill_provider: Arc::clone(&executor_skill_provider),
                         thread_store: Arc::clone(&thread_store),
+                        project_agent_extension_startup:
+                            crate::ProjectAgentExtensionStartup::Install,
                     },
                 ),
                 Arc::new(CodexHomeUserInstructionsProvider::new(

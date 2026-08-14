@@ -221,6 +221,7 @@ pub(crate) struct MessageProcessorArgs {
     pub(crate) rpc_transport: AppServerRpcTransport,
     pub(crate) remote_control_handle: Option<RemoteControlHandle>,
     pub(crate) plugin_startup_tasks: crate::PluginStartupTasks,
+    pub(crate) project_agent_extension_startup: crate::ProjectAgentExtensionStartup,
 }
 
 impl MessageProcessor {
@@ -244,6 +245,7 @@ impl MessageProcessor {
             rpc_transport,
             remote_control_handle,
             plugin_startup_tasks,
+            project_agent_extension_startup,
         } = args;
         let thread_state_manager = ThreadStateManager::new();
         // The thread store is intentionally process-scoped. Config reloads can
@@ -281,6 +283,7 @@ impl MessageProcessor {
                         environment_manager: Arc::clone(&environment_manager_for_extensions),
                         executor_skill_provider: Arc::clone(&executor_skill_provider),
                         thread_store: Arc::clone(&thread_store),
+                        project_agent_extension_startup,
                     },
                 ),
                 Arc::new(CodexHomeUserInstructionsProvider::new(

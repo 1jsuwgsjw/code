@@ -350,7 +350,19 @@ impl InProcessClientHandle {
 /// This function sends `initialize` followed by `initialized` before returning
 /// the handle, so callers receive a ready-to-use runtime. If initialize fails,
 /// the runtime is shut down and an `InvalidData` error is returned.
-pub async fn start(mut args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
+pub async fn start(args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
+    start_with_project_agent_extension(args, crate::ProjectAgentExtensionStartup::Install).await
+}
+
+/// Starts an in-process runtime with explicit project AGENT extension installation policy.
+///
+/// This is exposed for integration tests that need an app-server runtime without
+/// project-local extension contributions; production callers should use [`start`].
+#[doc(hidden)]
+pub async fn start_with_project_agent_extension(
+    mut args: InProcessStartArgs,
+    project_agent_extension_startup: crate::ProjectAgentExtensionStartup,
+) -> IoResult<InProcessClientHandle> {
     if let Ok(Some(err)) = check_execpolicy_for_warnings(&args.config.config_layer_stack).await {
         let (path, range) = crate::exec_policy_warning_location(&err);
         args.config_warnings.push(ConfigWarningNotification {
@@ -361,7 +373,7 @@ pub async fn start(mut args: InProcessStartArgs) -> IoResult<InProcessClientHand
         });
     }
     let initialize = args.initialize.clone();
-    let client = start_uninitialized(args).await?;
+    let client = start_uninitialized(args, project_agent_extension_startup).await?;
 
     let initialize_response = client
         .request(ClientRequest::Initialize {
@@ -381,7 +393,10 @@ pub async fn start(mut args: InProcessStartArgs) -> IoResult<InProcessClientHand
     Ok(client)
 }
 
-async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
+async fn start_uninitialized(
+    args: InProcessStartArgs,
+    project_agent_extension_startup: crate::ProjectAgentExtensionStartup,
+) -> IoResult<InProcessClientHandle> {
     let channel_capacity = args.channel_capacity.max(1);
     let installation_id = resolve_installation_id(&args.config.codex_home).await?;
     let (client_tx, mut client_rx) = mpsc::channel::<InProcessClientMessage>(channel_capacity);
@@ -450,6 +465,7 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
                 rpc_transport: AppServerRpcTransport::InProcess,
                 remote_control_handle: None,
                 plugin_startup_tasks: crate::PluginStartupTasks::Start,
+                project_agent_extension_startup,
             }));
             let mut thread_created_rx = processor.thread_created_receiver();
             let session = Arc::new(ConnectionSessionState::new());

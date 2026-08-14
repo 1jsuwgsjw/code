@@ -154,7 +154,7 @@
         },
         {
           "properties": {
-            "agent_id": {
+            "agentId": {
               "type": "string"
             },
             "type": {
@@ -166,7 +166,7 @@
             }
           },
           "required": [
-            "agent_id",
+            "agentId",
             "type"
           ],
           "title": "ProjectAgentProjectTaskExecutor",

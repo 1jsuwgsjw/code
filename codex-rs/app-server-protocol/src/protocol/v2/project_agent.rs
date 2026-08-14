@@ -281,7 +281,11 @@ pub enum ProjectTaskStatus {
 pub enum ProjectTaskExecutor {
     Unassigned,
     MainAgent,
-    ProjectAgent { agent_id: String },
+    ProjectAgent {
+        #[serde(rename = "agentId")]
+        #[ts(rename = "agentId")]
+        agent_id: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
