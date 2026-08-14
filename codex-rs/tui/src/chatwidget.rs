@@ -1829,6 +1829,7 @@ impl ChatWidget {
     fn on_list_skills(&mut self, ev: SkillsListResponse) {
         self.set_skills_from_response(&ev);
         self.refresh_plugin_mentions();
+        self.refresh_project_agent_mentions();
     }
 
     pub(crate) fn refresh_plugin_mentions(&mut self) {
@@ -1838,6 +1839,18 @@ impl ChatWidget {
         }
 
         self.app_event_tx.send(AppEvent::RefreshPluginMentions);
+    }
+
+    pub(crate) fn refresh_project_agent_mentions(&mut self) {
+        self.app_event_tx
+            .send(AppEvent::RefreshProjectAgentMentions);
+    }
+
+    pub(crate) fn on_project_agent_mentions_loaded(
+        &mut self,
+        project_agents: Option<Vec<codex_app_server_protocol::ProjectAgentRosterEntry>>,
+    ) {
+        self.bottom_pane.set_project_agent_mentions(project_agents);
     }
 
     pub(crate) fn on_plugin_mentions_loaded(

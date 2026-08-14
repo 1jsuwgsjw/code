@@ -323,6 +323,14 @@ impl BottomPane {
         self.request_redraw();
     }
 
+    pub fn set_project_agent_mentions(
+        &mut self,
+        project_agents: Option<Vec<codex_app_server_protocol::ProjectAgentRosterEntry>>,
+    ) {
+        self.composer.set_project_agent_mentions(project_agents);
+        self.request_redraw();
+    }
+
     pub fn set_plugins_command_enabled(&mut self, enabled: bool) {
         self.composer.set_plugins_command_enabled(enabled);
         self.request_redraw();
@@ -472,6 +480,12 @@ impl BottomPane {
 
     pub fn plugins(&self) -> Option<&Vec<PluginCapabilitySummary>> {
         self.composer.plugins()
+    }
+
+    pub fn project_agents(
+        &self,
+    ) -> Option<&Vec<codex_app_server_protocol::ProjectAgentRosterEntry>> {
+        self.composer.project_agents()
     }
 
     #[cfg(test)]

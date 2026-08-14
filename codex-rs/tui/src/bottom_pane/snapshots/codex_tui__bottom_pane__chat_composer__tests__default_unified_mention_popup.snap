@@ -3,9 +3,9 @@ source: tui/src/bottom_pane/chat_composer.rs
 expression: terminal.backend()
 ---
 "                                                                                                    "
-"› @sa                                                                                               "
+"› @qu                                                                                               "
 "                                                                                                    "
-"> Sample Plugin  Plugin with skills and an MCP server                                         Plugin"
+"> @query  Project query specialist                                                            AGENT "
 "                                                                                                    "
 "                                                                                                    "
 "                                                                                                    "

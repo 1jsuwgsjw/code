@@ -90,6 +90,36 @@ async fn task_workspace_empty_state_snapshot() {
 }
 
 #[tokio::test]
+async fn selecting_bound_task_opens_worker_conversation() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let thread_id = ThreadId::new();
+    chat.show_project_task_workspace(
+        thread_id,
+        test_workspace(),
+        test_agents(),
+        Some("task-child".to_string()),
+    );
+
+    chat.bottom_pane
+        .handle_key_event(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Enter,
+        ));
+
+    assert_eq!(
+        next_workbench_action(&mut rx),
+        (
+            thread_id,
+            ProjectAgentWorkbenchAction::OpenConversation {
+                task_id: "task-child".to_string(),
+                task_title: "Verify visible result".to_string(),
+                agent_id: "query".to_string(),
+                session_thread_id: "01900000-0000-7000-8000-000000000020".to_string(),
+            }
+        )
+    );
+}
+
+#[tokio::test]
 async fn create_and_requirement_prompts_emit_semantic_task_actions() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     let thread_id = ThreadId::new();

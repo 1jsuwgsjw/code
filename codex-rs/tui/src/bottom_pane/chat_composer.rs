@@ -388,6 +388,7 @@ pub(crate) struct ChatComposer {
     pending_slash_command_history: Option<HistoryEntry>,
     skills: Option<Vec<SkillMetadata>>,
     plugins: Option<Vec<PluginCapabilitySummary>>,
+    project_agents: Option<Vec<codex_app_server_protocol::ProjectAgentRosterEntry>>,
     connectors_snapshot: Option<ConnectorsSnapshot>,
     collaboration_modes_enabled: bool,
     config: ChatComposerConfig,
@@ -552,6 +553,7 @@ impl ChatComposer {
             pending_slash_command_history: None,
             skills: None,
             plugins: None,
+            project_agents: None,
             connectors_snapshot: None,
             collaboration_modes_enabled: false,
             config,
@@ -593,6 +595,14 @@ impl ChatComposer {
 
     pub fn set_plugin_mentions(&mut self, plugins: Option<Vec<PluginCapabilitySummary>>) {
         self.plugins = plugins;
+        self.sync_popups();
+    }
+
+    pub fn set_project_agent_mentions(
+        &mut self,
+        project_agents: Option<Vec<codex_app_server_protocol::ProjectAgentRosterEntry>>,
+    ) {
+        self.project_agents = project_agents;
         self.sync_popups();
     }
 
@@ -2288,6 +2298,12 @@ impl ChatComposer {
         self.plugins.as_ref()
     }
 
+    pub fn project_agents(
+        &self,
+    ) -> Option<&Vec<codex_app_server_protocol::ProjectAgentRosterEntry>> {
+        self.project_agents.as_ref()
+    }
+
     fn mentions_enabled(&self) -> bool {
         let skills_ready = self
             .skills
@@ -3701,6 +3717,7 @@ impl ChatComposer {
         let candidates = super::mentions_v2::build_search_catalog(
             self.skills.as_deref(),
             self.plugins.as_deref(),
+            self.project_agents.as_deref(),
         );
 
         match &mut self.popups.active {
@@ -6796,7 +6813,17 @@ mod tests {
                 let features = codex_features::Features::with_defaults();
                 composer
                     .set_mentions_v2_enabled(features.enabled(codex_features::Feature::MentionsV2));
-                composer.set_text_content("@sa".to_string(), Vec::new(), Vec::new());
+                composer.set_text_content("@qu".to_string(), Vec::new(), Vec::new());
+                composer.set_project_agent_mentions(Some(vec![
+                    codex_app_server_protocol::ProjectAgentRosterEntry {
+                        id: "query".to_string(),
+                        description: "Project query specialist".to_string(),
+                        enabled: true,
+                        active_session_thread_id: None,
+                        session: None,
+                        current_task: None,
+                    },
+                ]));
                 composer.set_plugin_mentions(Some(vec![PluginCapabilitySummary {
                     config_name: "sample@test".to_string(),
                     display_name: "Sample Plugin".to_string(),

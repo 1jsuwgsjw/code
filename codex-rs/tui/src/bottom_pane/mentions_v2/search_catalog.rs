@@ -11,8 +11,17 @@ use super::candidate::Selection;
 pub(crate) fn build_search_catalog(
     skills: Option<&[SkillMetadata]>,
     plugins: Option<&[PluginCapabilitySummary]>,
+    project_agents: Option<&[codex_app_server_protocol::ProjectAgentRosterEntry]>,
 ) -> Vec<Candidate> {
     let mut candidates = Vec::new();
+    if let Some(project_agents) = project_agents {
+        candidates.extend(
+            project_agents
+                .iter()
+                .filter(|agent| agent.enabled)
+                .map(project_agent_candidate),
+        );
+    }
     if let Some(skills) = skills {
         candidates.extend(skills.iter().map(skill_candidate));
     }
@@ -22,6 +31,21 @@ pub(crate) fn build_search_catalog(
     }
 
     candidates
+}
+
+fn project_agent_candidate(
+    agent: &codex_app_server_protocol::ProjectAgentRosterEntry,
+) -> Candidate {
+    Candidate {
+        display_name: format!("@{}", agent.id),
+        description: Some(agent.description.clone()),
+        search_terms: vec![agent.id.clone(), agent.description.clone()],
+        mention_type: MentionType::ProjectAgent,
+        selection: Selection::Tool {
+            insert_text: format!("@{}", agent.id),
+            path: None,
+        },
+    }
 }
 
 fn skill_candidate(skill: &SkillMetadata) -> Candidate {
@@ -210,6 +234,42 @@ mod tests {
         assert_eq!(
             plugin_mention_name("browser-use", "Browser Use"),
             "Browser-Use"
+        );
+    }
+
+    #[test]
+    fn project_agent_candidates_are_enabled_mentions() {
+        let agents = vec![
+            codex_app_server_protocol::ProjectAgentRosterEntry {
+                id: "query".to_string(),
+                description: "Project query specialist".to_string(),
+                enabled: true,
+                active_session_thread_id: None,
+                session: None,
+                current_task: None,
+            },
+            codex_app_server_protocol::ProjectAgentRosterEntry {
+                id: "disabled".to_string(),
+                description: "Disabled specialist".to_string(),
+                enabled: false,
+                active_session_thread_id: None,
+                session: None,
+                current_task: None,
+            },
+        ];
+
+        assert_eq!(
+            build_search_catalog(None, None, Some(&agents)),
+            vec![Candidate {
+                display_name: "@query".to_string(),
+                description: Some("Project query specialist".to_string()),
+                search_terms: vec!["query".to_string(), "Project query specialist".to_string(),],
+                mention_type: MentionType::ProjectAgent,
+                selection: Selection::Tool {
+                    insert_text: "@query".to_string(),
+                    path: None,
+                },
+            }]
         );
     }
 }

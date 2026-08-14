@@ -1611,6 +1611,9 @@ impl App {
             AppEvent::RefreshPluginMentions => {
                 self.refresh_plugin_mentions(app_server);
             }
+            AppEvent::RefreshProjectAgentMentions => {
+                self.refresh_project_agent_mentions(app_server).await;
+            }
             AppEvent::PluginMentionsLoaded { mut plugins } => {
                 if !self.config.features.enabled(Feature::Plugins) {
                     plugins = None;

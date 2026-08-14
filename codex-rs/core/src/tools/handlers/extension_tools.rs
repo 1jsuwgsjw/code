@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::Weak;
 
+use codex_protocol::items::DynamicToolCallItem;
 use codex_protocol::items::TurnItem;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
@@ -109,6 +110,34 @@ impl TurnItemEmitter for CoreTurnItemEmitter {
             emit_legacy_events(session.as_ref(), turn.as_ref(), legacy_events).await;
         })
     }
+
+    fn emit_dynamic_tool_call_started<'a>(
+        &'a self,
+        item: DynamicToolCallItem,
+    ) -> TurnItemEmissionFuture<'a> {
+        Box::pin(async move {
+            let (Some(session), Some(turn)) = (self.session.upgrade(), self.turn.upgrade()) else {
+                return;
+            };
+            session
+                .emit_turn_item_started(turn.as_ref(), &TurnItem::DynamicToolCall(item))
+                .await;
+        })
+    }
+
+    fn emit_dynamic_tool_call_completed<'a>(
+        &'a self,
+        item: DynamicToolCallItem,
+    ) -> TurnItemEmissionFuture<'a> {
+        Box::pin(async move {
+            let (Some(session), Some(turn)) = (self.session.upgrade(), self.turn.upgrade()) else {
+                return;
+            };
+            session
+                .emit_turn_item_completed(turn.as_ref(), TurnItem::DynamicToolCall(item))
+                .await;
+        })
+    }
 }
 
 async fn to_extension_call(invocation: &ToolInvocation) -> ExtensionToolCall {
@@ -160,10 +189,14 @@ async fn to_extension_call(invocation: &ToolInvocation) -> ExtensionToolCall {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::time::Duration;
 
     use codex_extension_items::ExtensionItem;
     use codex_extension_items::image_generation::ImageGenerationItem;
     use codex_extension_items::web_search::WebSearchItem;
+    use codex_protocol::dynamic_tools::DynamicToolCallOutputContentItem;
+    use codex_protocol::items::DynamicToolCallItem;
+    use codex_protocol::items::DynamicToolCallStatus;
     use codex_protocol::items::TurnItem;
     use codex_protocol::models::ContentItem;
     use codex_protocol::models::ResponseItem;
@@ -488,5 +521,56 @@ mod tests {
         assert_eq!(started_item, expected_started_item);
         assert_eq!(completed_item, expected_completed_item);
         assert!(!default_path.exists());
+    }
+
+    #[tokio::test]
+    async fn dynamic_tool_publication_uses_normal_turn_item_lifecycle() {
+        let (session, turn, rx) = crate::session::tests::make_session_and_context_with_rx().await;
+        let emitter = CoreTurnItemEmitter {
+            session: Arc::downgrade(&session),
+            turn: Arc::downgrade(&turn),
+        };
+        let started_item = DynamicToolCallItem {
+            id: "call-agent-query".to_string(),
+            namespace: Some("agent".to_string()),
+            tool: "query".to_string(),
+            arguments: json!({"task": "say hello"}),
+            status: DynamicToolCallStatus::InProgress,
+            content_items: None,
+            success: None,
+            error: None,
+            duration: None,
+        };
+        let completed_item = DynamicToolCallItem {
+            status: DynamicToolCallStatus::Completed,
+            content_items: Some(vec![DynamicToolCallOutputContentItem::InputText {
+                text: "你好".to_string(),
+            }]),
+            success: Some(true),
+            duration: Some(Duration::from_millis(25)),
+            ..started_item.clone()
+        };
+
+        codex_tools::TurnItemEmitter::emit_dynamic_tool_call_started(
+            &emitter,
+            started_item.clone(),
+        )
+        .await;
+        codex_tools::TurnItemEmitter::emit_dynamic_tool_call_completed(
+            &emitter,
+            completed_item.clone(),
+        )
+        .await;
+
+        let started = rx.recv().await.expect("item started event");
+        let EventMsg::ItemStarted(started) = started.msg else {
+            panic!("expected item started event");
+        };
+        let completed = rx.recv().await.expect("item completed event");
+        let EventMsg::ItemCompleted(completed) = completed.msg else {
+            panic!("expected item completed event");
+        };
+        assert_eq!(started.item, TurnItem::DynamicToolCall(started_item));
+        assert_eq!(completed.item, TurnItem::DynamicToolCall(completed_item));
     }
 }

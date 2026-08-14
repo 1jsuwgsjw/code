@@ -16,6 +16,23 @@ const PROJECT_TASK_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const PROJECT_TASK_WAIT_TIMEOUT: Duration = Duration::from_secs(31 * 60);
 
 impl App {
+    pub(super) async fn refresh_project_agent_mentions(
+        &mut self,
+        app_server: &mut AppServerSession,
+    ) {
+        let Some(thread_id) = self.current_displayed_thread_id() else {
+            self.chat_widget.on_project_agent_mentions_loaded(None);
+            return;
+        };
+        let project_agents = app_server
+            .thread_project_agent_list(thread_id)
+            .await
+            .ok()
+            .map(|response| response.data);
+        self.chat_widget
+            .on_project_agent_mentions_loaded(project_agents);
+    }
+
     pub(super) async fn handle_project_agent_workbench_action(
         &mut self,
         tui: &mut crate::tui::Tui,
@@ -193,6 +210,8 @@ impl App {
                     .map(|response| response.data)
                     .unwrap_or_default();
                 if self.current_displayed_thread_id() == Some(thread_id) {
+                    self.chat_widget
+                        .on_project_agent_mentions_loaded(Some(agents.clone()));
                     self.chat_widget.show_project_task_workspace(
                         thread_id,
                         response.workspace,
@@ -217,12 +236,44 @@ impl App {
             return;
         }
         match result {
-            Ok(response) => self.chat_widget.show_project_task_workspace(
-                thread_id,
-                response.workspace,
-                Vec::new(),
-                Some(task_id),
-            ),
+            Ok(response) => {
+                let conversation = response
+                    .workspace
+                    .tasks
+                    .iter()
+                    .find(|task| task.task_id == task_id)
+                    .and_then(|task| {
+                        let codex_app_server_protocol::ProjectTaskExecutor::ProjectAgent {
+                            agent_id,
+                        } = &task.executor
+                        else {
+                            return None;
+                        };
+                        Some((
+                            task.title.clone(),
+                            agent_id.clone(),
+                            task.session_thread_id.clone()?,
+                        ))
+                    });
+                if let Some((task_title, agent_id, session_thread_id)) = conversation {
+                    self.app_event_tx.send(AppEvent::ProjectAgentWorkbench {
+                        thread_id,
+                        action: ProjectAgentWorkbenchAction::OpenConversation {
+                            task_id,
+                            task_title,
+                            agent_id,
+                            session_thread_id,
+                        },
+                    });
+                } else {
+                    self.chat_widget.show_project_task_workspace(
+                        thread_id,
+                        response.workspace,
+                        Vec::new(),
+                        Some(task_id),
+                    );
+                }
+            }
             Err(err) => self
                 .chat_widget
                 .add_error_message(format!("项目任务状态读取失败：{err}")),

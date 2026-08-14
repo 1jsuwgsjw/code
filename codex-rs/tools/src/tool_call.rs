@@ -4,6 +4,7 @@ use crate::ToolPayload;
 use codex_extension_items::ExtensionItem;
 use codex_file_system::ExecutorFileSystem;
 use codex_file_system::FileSystemSandboxContext;
+use codex_protocol::items::DynamicToolCallItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::EventMsg;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -57,6 +58,22 @@ pub trait TurnItemEmitter: Send + Sync {
 
     /// Emits one completed visible turn item.
     fn emit_completed<'a>(&'a self, item: ExtensionTurnItem) -> TurnItemEmissionFuture<'a>;
+
+    /// Emits the beginning of one visible dynamic tool call.
+    fn emit_dynamic_tool_call_started<'a>(
+        &'a self,
+        _item: DynamicToolCallItem,
+    ) -> TurnItemEmissionFuture<'a> {
+        Box::pin(std::future::ready(()))
+    }
+
+    /// Emits one completed visible dynamic tool call.
+    fn emit_dynamic_tool_call_completed<'a>(
+        &'a self,
+        _item: DynamicToolCallItem,
+    ) -> TurnItemEmissionFuture<'a> {
+        Box::pin(std::future::ready(()))
+    }
 }
 
 /// Host-owned turn environment summary visible to extension tools.

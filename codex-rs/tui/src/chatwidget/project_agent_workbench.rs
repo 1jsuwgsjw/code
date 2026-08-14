@@ -319,13 +319,15 @@ fn append_children<'a>(
 fn task_item(thread_id: ThreadId, task: &ProjectTask, tree_prefix: &str) -> SelectionItem {
     let status = task_status_label(task.status);
     let action = project_task_open_conversation_action(thread_id, task);
+    let dismiss_on_select = action.is_some();
     SelectionItem {
         name: format!("{tree_prefix}{}", task.title),
         name_prefix_spans: vec![task_status_symbol(task.status)],
         description: Some(format!("{status} · {}", executor_label(&task.executor))),
         search_value: Some(format!("{} {}", task.task_id, task.title)),
         actions: action.into_iter().collect(),
-        dismiss_on_select: true,
+        disabled_reason: project_task_conversation_unavailable_reason(task),
+        dismiss_on_select,
         ..Default::default()
     }
 }

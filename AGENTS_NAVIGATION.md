@@ -299,6 +299,9 @@ Important variations:
     persistence: `codex-rs/ext/project-agents/src/worker.rs`;
   - semantic task-workspace mutation, execution binding, and result writeback:
     `codex-rs/ext/project-agents/src/task_workspace.rs`;
+  - model-issued `agent.<id>` calls publish started/completed/failed `DynamicToolCall` items through
+    the host `TurnItemEmitter` in `codex-rs/ext/project-agents/src/delegate.rs`; the completed item
+    carries the semantic task ID, worker session ID, status, and bounded result text;
   - generic collaboration suppression is thread-scoped rather than inferred from
     `SessionSource`: the extension contributor lives in
     `codex-rs/ext/project-agents/src/state.rs`, the shared contract and registry owner live in
@@ -314,7 +317,11 @@ Important variations:
   selectable; Enter opens its bound worker thread when `sessionThreadId` exists, and otherwise
   reports that the task has not started or has no bound worker session. The task tree is navigation;
   normal thread routing owns the independent worker conversation and its composer continues on the
-  same thread. Generic sub-agent picker aliases are not the project-AGENT interface.
+  same thread. Completing an execution started from the workbench selects the newly bound worker
+  thread directly. Generic sub-agent picker aliases are not the project-AGENT interface.
+- Unified `@` mentions load enabled project AGENTs through `thread/projectAgent/list` and insert the
+  registered `@<id>` name; ownership runs from `tui/src/app/project_agent_workbench.rs` through
+  `ChatWidget`/`BottomPane` into `tui/src/bottom_pane/mentions_v2/search_catalog.rs`.
 - Dynamic project-tool history is represented by app-server
   `ThreadItem::DynamicToolCall` (`codex-rs/app-server-protocol/src/protocol/v2/item.rs` and
   `codex-rs/app-server-protocol/src/protocol/thread_history.rs`) and rendered consistently for live,

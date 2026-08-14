@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Weak;
+use std::time::Instant;
 
 use codex_core::ThreadManager;
 use codex_core::config::Config;
@@ -20,6 +21,10 @@ use codex_project_agents::ProjectAgentTaskResult;
 use codex_project_agents::ProjectAgentTaskStatus;
 use codex_project_agents::ProjectAgentToolTarget;
 use codex_project_agents::ProjectTaskExecutor;
+use codex_project_agents::ProjectTaskId;
+use codex_protocol::dynamic_tools::DynamicToolCallOutputContentItem;
+use codex_protocol::items::DynamicToolCallItem;
+use codex_protocol::items::DynamicToolCallStatus;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiNamespace;
@@ -115,6 +120,23 @@ impl ToolExecutor<ToolCall> for ProjectAgentDelegateTool {
                 )));
             }
 
+            let arguments = json!({"task": task.clone()});
+            let started_at = Instant::now();
+            invocation
+                .turn_item_emitter
+                .emit_dynamic_tool_call_started(DynamicToolCallItem {
+                    id: invocation.call_id.clone(),
+                    namespace: Some(AGENT_NAMESPACE.to_string()),
+                    tool: agent_id.to_string(),
+                    arguments: arguments.clone(),
+                    status: DynamicToolCallStatus::InProgress,
+                    content_items: None,
+                    success: None,
+                    error: None,
+                    duration: None,
+                })
+                .await;
+
             let selected_environment = invocation
                 .environments
                 .iter()
@@ -138,12 +160,61 @@ impl ToolExecutor<ToolCall> for ProjectAgentDelegateTool {
                 ProjectTaskExecutor::ProjectAgent {
                     agent_id: agent_id.clone(),
                 },
-                agent_id,
+                agent_id.clone(),
                 task,
                 file_system.as_ref(),
                 scope,
             )
             .await;
+            let session_thread_id = match ProjectTaskId::new(result.task_id.clone()) {
+                Ok(task_id) => context
+                    .store
+                    .task_workspace(
+                        file_system.as_ref(),
+                        ProjectAgentFileSystemScope::Unrestricted,
+                    )
+                    .await
+                    .ok()
+                    .and_then(|workspace| {
+                        workspace
+                            .task(&task_id)
+                            .and_then(|task| task.session_thread_id.clone())
+                    }),
+                Err(_) => None,
+            };
+            let failed = matches!(&result.status, ProjectAgentTaskStatus::Failed);
+            let status = match &result.status {
+                ProjectAgentTaskStatus::Completed => "completed",
+                ProjectAgentTaskStatus::RejectedOutOfScope => "rejected_out_of_scope",
+                ProjectAgentTaskStatus::BlockedMissingTool => "blocked_missing_tool",
+                ProjectAgentTaskStatus::Failed => "failed",
+            };
+            let visible_result = format!(
+                "taskId: {}\nsessionId: {}\nstatus: {status}\n\n{}",
+                result.task_id,
+                session_thread_id.as_deref().unwrap_or("unavailable"),
+                take_bytes_at_char_boundary(&result.result, MAX_ERROR_BYTES)
+            );
+            invocation
+                .turn_item_emitter
+                .emit_dynamic_tool_call_completed(DynamicToolCallItem {
+                    id: invocation.call_id.clone(),
+                    namespace: Some(AGENT_NAMESPACE.to_string()),
+                    tool: agent_id.to_string(),
+                    arguments,
+                    status: if failed {
+                        DynamicToolCallStatus::Failed
+                    } else {
+                        DynamicToolCallStatus::Completed
+                    },
+                    content_items: Some(vec![DynamicToolCallOutputContentItem::InputText {
+                        text: visible_result,
+                    }]),
+                    success: Some(!failed),
+                    error: result.error.clone(),
+                    duration: Some(started_at.elapsed()),
+                })
+                .await;
             let value = serde_json::to_value(result).map_err(|error| {
                 FunctionCallError::Fatal(format!(
                     "failed to serialize project AGENT result: {error}"

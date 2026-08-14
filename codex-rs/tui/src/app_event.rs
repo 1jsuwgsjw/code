@@ -642,6 +642,9 @@ pub(crate) enum AppEvent {
         plugins: Option<Vec<PluginCapabilitySummary>>,
     },
 
+    /// Refresh project AGENT mention bindings for the displayed thread.
+    RefreshProjectAgentMentions,
+
     /// Advance the post-install plugin app-auth flow.
     PluginInstallAuthAdvance {
         refresh_connectors: bool,
