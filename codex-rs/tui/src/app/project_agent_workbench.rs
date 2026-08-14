@@ -150,19 +150,29 @@ impl App {
                     Some(super::ProjectAgentConversationOrigin {
                         root_thread_id: thread_id,
                         task_id,
+                        worker_thread_id: session_thread_id,
+                        active_agent_label: format!(
+                            "@{agent_id} · {task_title} · Esc 返回任务树"
+                        ),
                     });
                 if let Err(error) = self
                     .select_agent_thread(tui, app_server, session_thread_id)
                     .await
                 {
                     self.project_agent_conversation_origin = None;
+                    self.sync_active_agent_label();
                     self.chat_widget
                         .add_error_message(format!("打开项目 AGENT 会话失败：{error}"));
                     return;
                 }
-                self.chat_widget.set_active_agent_label(Some(format!(
-                    "@{agent_id} · {task_title} · Esc 返回任务树"
-                )));
+                if self.current_displayed_thread_id() != Some(session_thread_id) {
+                    self.project_agent_conversation_origin = None;
+                    self.sync_active_agent_label();
+                    self.chat_widget
+                        .add_error_message("打开项目 AGENT 会话失败：worker 会话未激活".to_string());
+                    return;
+                }
+                self.sync_active_agent_label();
             }
             ProjectAgentWorkbenchAction::Refresh(task_id) => {
                 self.open_project_task_workspace(app_server, thread_id, Some(task_id))
@@ -179,15 +189,28 @@ impl App {
         let Some(origin) = self.project_agent_conversation_origin.take() else {
             return false;
         };
+        if self.current_displayed_thread_id() != Some(origin.worker_thread_id) {
+            self.sync_active_agent_label();
+            return false;
+        }
         if let Err(error) = self
             .select_agent_thread(tui, app_server, origin.root_thread_id)
             .await
         {
             self.project_agent_conversation_origin = Some(origin);
+            self.sync_active_agent_label();
             self.chat_widget
                 .add_error_message(format!("返回项目任务树失败：{error}"));
             return true;
         }
+        if self.current_displayed_thread_id() != Some(origin.root_thread_id) {
+            self.project_agent_conversation_origin = Some(origin);
+            self.sync_active_agent_label();
+            self.chat_widget
+                .add_error_message("返回项目任务树失败：主会话未激活".to_string());
+            return true;
+        }
+        self.sync_active_agent_label();
         self.open_project_task_workspace(app_server, origin.root_thread_id, Some(origin.task_id))
             .await;
         true

@@ -13,6 +13,15 @@ pub(super) enum ThreadRollbackOrigin {
     SafetyBufferingRetry,
 }
 
+fn project_agent_conversation_label(
+    origin: Option<&ProjectAgentConversationOrigin>,
+    current_displayed_thread_id: Option<ThreadId>,
+) -> Option<String> {
+    origin
+        .filter(|origin| Some(origin.worker_thread_id) == current_displayed_thread_id)
+        .map(|origin| origin.active_agent_label.clone())
+}
+
 impl App {
     pub(super) async fn shutdown_current_thread(&mut self, app_server: &mut AppServerSession) {
         if let Some(thread_id) = self.chat_widget.thread_id() {
@@ -183,14 +192,20 @@ impl App {
 
     /// Mirrors the visible thread into the contextual footer row.
     ///
-    /// The footer sometimes shows ambient context instead of an instructional hint. In multi-agent
-    /// sessions, that contextual row includes the currently viewed agent label. The label is
-    /// intentionally hidden until there is more than one known thread so single-thread sessions do
-    /// not spend footer space restating that the user is already on the main conversation.
+    /// The footer sometimes shows ambient context instead of an instructional hint. A project AGENT
+    /// label only belongs to its bound worker thread; other labels come from canonical agent
+    /// navigation metadata. Those other labels remain hidden until there is more than one known
+    /// thread so single-thread sessions do not restate the main conversation.
     pub(super) fn sync_active_agent_label(&mut self) {
-        let label = self
-            .agent_navigation
-            .active_agent_label(self.current_displayed_thread_id(), self.primary_thread_id);
+        let current_displayed_thread_id = self.current_displayed_thread_id();
+        let label = project_agent_conversation_label(
+            self.project_agent_conversation_origin.as_ref(),
+            current_displayed_thread_id,
+        )
+        .or_else(|| {
+            self.agent_navigation
+                .active_agent_label(current_displayed_thread_id, self.primary_thread_id)
+        });
         self.chat_widget.set_active_agent_label(label);
         self.sync_side_thread_ui();
     }
@@ -1581,6 +1596,32 @@ mod tests {
     use super::*;
     use codex_protocol::models::ActivePermissionProfile;
     use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
+    use insta::assert_snapshot;
+
+    #[test]
+    fn project_agent_conversation_label_only_follows_worker_thread() {
+        let root_thread_id = ThreadId::new();
+        let worker_thread_id = ThreadId::new();
+        let origin = ProjectAgentConversationOrigin {
+            root_thread_id,
+            task_id: "task-greeting".to_string(),
+            worker_thread_id,
+            active_agent_label: "@query · Greeting · Esc 返回任务树".to_string(),
+        };
+        let labels = [
+            project_agent_conversation_label(Some(&origin), Some(worker_thread_id)),
+            project_agent_conversation_label(Some(&origin), Some(root_thread_id)),
+            project_agent_conversation_label(None, Some(worker_thread_id)),
+        ]
+        .map(|label| label.unwrap_or_else(|| "<none>".to_string()))
+        .join("\n");
+
+        assert_snapshot!(labels, @r"
+@query · Greeting · Esc 返回任务树
+<none>
+<none>
+");
+    }
 
     async fn config_with_workspace_profile() -> Config {
         let temp_dir = tempfile::tempdir().expect("tempdir");

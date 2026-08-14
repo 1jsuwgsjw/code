@@ -501,6 +501,8 @@ struct InitialHistoryReplayBuffer {
 struct ProjectAgentConversationOrigin {
     root_thread_id: ThreadId,
     task_id: String,
+    worker_thread_id: ThreadId,
+    active_agent_label: String,
 }
 
 pub(crate) struct App {
