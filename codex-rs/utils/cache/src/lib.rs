@@ -113,7 +113,7 @@ where
         }
     }
 
-    /// Provides direct access to the cache guard when a Tokio runtime is available.
+    /// Provides direct access to the cache guard when it can be acquired safely.
     pub fn blocking_lock(&self) -> Option<MutexGuard<'_, LruCache<K, V>>> {
         lock_if_runtime(&self.inner)
     }
@@ -123,7 +123,13 @@ fn lock_if_runtime<K, V>(m: &Mutex<LruCache<K, V>>) -> Option<MutexGuard<'_, Lru
 where
     K: Eq + Hash,
 {
-    tokio::runtime::Handle::try_current().ok()?;
+    let handle = tokio::runtime::Handle::try_current().ok()?;
+    if let Ok(guard) = m.try_lock() {
+        return Some(guard);
+    }
+    if handle.runtime_flavor() != tokio::runtime::RuntimeFlavor::MultiThread {
+        return None;
+    }
     Some(tokio::task::block_in_place(|| m.blocking_lock()))
 }
 
@@ -148,6 +154,15 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn stores_and_retrieves_values() {
+        let cache = BlockingLruCache::new(NonZeroUsize::new(2).expect("capacity"));
+
+        assert!(cache.get(&"first").is_none());
+        cache.insert("first", /*value*/ 1);
+        assert_eq!(cache.get(&"first"), Some(1));
+    }
+
+    #[tokio::test]
+    async fn stores_and_retrieves_values_on_current_thread_runtime() {
         let cache = BlockingLruCache::new(NonZeroUsize::new(2).expect("capacity"));
 
         assert!(cache.get(&"first").is_none());
