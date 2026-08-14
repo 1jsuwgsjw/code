@@ -84,12 +84,13 @@ Implemented in the current working stage:
 - structured checkpoint lifecycle metadata through core protocol and app-server history, including
   labels, state-entry count, and the context-window chain;
 - an adaptive TUI checkpoint history tree with narrow-window folding, raw transcript recovery, and
-  Unicode Windows Terminal / ASCII legacy-console rendering.
+  Unicode Windows Terminal / ASCII legacy-console rendering;
+- regenerated app-server JSON and TypeScript schema fixtures, with an opt-in Windows workflow export
+  path that does not add work to normal push builds.
 
 Still required before this correction is complete:
 
-- GitHub Windows workflow confirmation for the semantic recall, protocol, app-server, and TUI
-  changes, followed by a real resumed-thread smoke of projection, recall, and history replay.
+- a real resumed-thread smoke of projection, semantic artifact recall, and checkpoint history replay.
 
 ## Problem
 
