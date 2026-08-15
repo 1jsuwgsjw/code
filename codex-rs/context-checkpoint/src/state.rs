@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 const MAX_ACTIVE_ENTRIES: usize = 24;
 const MAX_LAYER_ENTRIES: usize = 64;

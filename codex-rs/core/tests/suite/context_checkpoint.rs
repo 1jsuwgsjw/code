@@ -90,8 +90,10 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
         .body_json()
         .to_string();
     assert_eq!(final_request.matches("<CONTEXT_CHECKPOINT>").count(), 1);
+    assert!(final_request.contains("\\nActive\\n"));
     assert!(final_request.contains("second objective"));
     assert!(final_request.contains("ctx:G000002/TR000002"));
+    assert!(!final_request.contains("\"objective\":"));
     assert!(!final_request.contains("manifestSha256"));
 
     Ok(())

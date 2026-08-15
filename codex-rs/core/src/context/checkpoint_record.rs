@@ -12,7 +12,7 @@ pub(crate) struct CheckpointRecordFragment {
 
 impl CheckpointRecordFragment {
     pub(crate) fn new(record: &TurnRecord) -> Result<Self, CheckpointError> {
-        let record = codex_context_checkpoint::model_checkpoint_json(record)?;
+        let record = codex_context_checkpoint::model_checkpoint_view(record)?;
         Ok(Self {
             body: format!("{SUMMARY_PREFIX}\n{record}"),
         })

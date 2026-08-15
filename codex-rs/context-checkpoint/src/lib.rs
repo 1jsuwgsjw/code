@@ -58,6 +58,7 @@ pub use model_projection::checkpoint_labels;
 pub use model_projection::checkpoint_reference;
 pub use model_projection::checkpoint_state_entry_count;
 pub use model_projection::model_checkpoint_json;
+pub use model_projection::model_checkpoint_view;
 pub use projection::project_history;
 pub use runtime::CheckpointRuntime;
 pub use state::ActiveContextState;

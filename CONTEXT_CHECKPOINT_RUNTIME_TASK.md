@@ -56,8 +56,9 @@ State ownership rules:
   file contents or modification logs.
 - Stale keys are explicitly forgotten before replacement. Historical versions remain immutable on
   disk but are absent from the current model projection.
-- Normal requests filter all historical checkpoint fragments and append exactly one latest state
-  projection at the request tail. If state projection fails, historical fragments remain visible as
+- Normal requests filter all historical checkpoint fragments and append exactly one latest
+  hierarchical Quarter/Session/Active projection at the request tail. This is one materialized view,
+  not one summary: immutable earlier TurnRecords and Artifacts remain externally addressable. If state projection fails, historical fragments remain visible as
   the conservative recovery path.
 
 The model tool is `update_context_state`. ToolGroups only delimit raw history that may be removed;
@@ -79,8 +80,8 @@ Implemented in the current working stage:
 - legacy TurnRecord payload fields retained only for reading earlier manifests.
 - semantic `ctx:Gxxxxxx/TRxxxxxx` checkpoint identities and deterministic
   `artifact:TRxxxxxx/Axxx` recall references, while SHA-256 remains integrity metadata only;
-- a bounded model projection that preserves both three-layer state and legacy summary semantics
-  without injecting manifest, artifact, or source-revision hashes;
+- a bounded sparse outline for the model that preserves both three-layer state and legacy summary
+  semantics without injecting JSON syntax, manifest hashes, artifact hashes, or source-revision hashes;
 - structured checkpoint lifecycle metadata through core protocol and app-server history, including
   labels, state-entry count, and the context-window chain;
 - an adaptive TUI checkpoint history tree with narrow-window folding, raw transcript recovery, and
@@ -364,13 +365,26 @@ projection changes model-visible recovery cost, not evidence retention.
 - Hash verification remains mandatory before outline, line, or search results are produced. These
   views reduce model-context cost; they do not weaken immutable Artifact evidence.
 
+### Sparse Model View And Long-Running Hierarchy
+
+- Runtime persists strongly typed JSON, but the model receives a sparse, line-oriented semantic view;
+  storage syntax is never used as prompt presentation.
+- Exactly one latest checkpoint fragment is visible for cache stability, but that fragment materializes
+  three different time scales: Quarter knowledge, Session knowledge, and precise Active state.
+- Earlier TurnRecords, earlier Quarter states, and raw Artifacts remain immutable outside the active
+  context. The latest view references them rather than replaying every historical summary.
+- Empty sections are omitted. Repeated JSON keys, braces, hashes, and empty arrays never consume model
+  context. Each retained fact stays adjacent to its evidence and source status.
+- Long-running continuity comes from merging still-valid knowledge forward through the layers, not from
+  stacking summaries of summaries in the prompt.
+
 ### Compression Philosophy: Three Checks And One Immutable History
 
 Compression is a projection operation, not a rewrite of history and not a narrative of actions the
 model performed. Before settling an item, the model and Runtime apply three checks:
 
-1. **Validity:** whether the fact, constraint, decision, question, or next action is still effective,
-   completed, invalidated, or superseded.
+1. **Validity:** whether the fact, constraint, decision, or question is still effective, invalidated,
+   resolved, or superseded.
 2. **Provenance:** which user instruction, source revision, tool evidence, or earlier state entry owns
    it, and which later record explicitly supersedes it.
 3. **Dependency:** whether future reasoning can safely proceed without the item. Important unresolved

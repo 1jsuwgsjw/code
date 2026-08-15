@@ -261,7 +261,7 @@ Important variations:
     `codex-rs/tui/src/history_cell/context_checkpoint.rs`,
     `codex-rs/tui/src/chatwidget/replay.rs`, `codex-rs/tui/src/thread_transcript.rs`;
   - representative symbols: `CheckpointRuntime`, `CheckpointStore`, `ContextStateSnapshot`,
-    `ToolGroupSettlement`, `StateRemoval`, `ArtifactRecallSelection`, `model_checkpoint_json`, `ContextCheckpointDetails`,
+    `ToolGroupSettlement`, `StateRemoval`, `ArtifactRecallSelection`, `model_checkpoint_view`, `ContextCheckpointDetails`,
     `update_context_state`, `recall_checkpoint_artifact`, `reconcile_reconstructed_checkpoint`;
   - focused validation: `cd codex-rs && just test -p codex-context-checkpoint`, then
     `cd codex-rs && just test -p codex-core` for integration changes.
