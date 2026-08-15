@@ -11,6 +11,8 @@ use crate::ContextUsageSnapshot;
 use crate::InstalledCheckpoint;
 use crate::RecallRequest;
 use crate::ToolCallOutcome;
+use crate::ToolGroupDisposition;
+use crate::ToolGroupSettlement;
 use crate::ToolInvocationRecord;
 use crate::ToolResultRecord;
 use crate::TruncationProvenance;
@@ -61,16 +63,22 @@ async fn fork_reconciliation_copies_checkpoint_dependencies() {
     let pending = source
         .prepare_context_state(UpdateContextStateRequest {
             completed_tool_groups: vec![call.group_id],
+            tool_group_settlements: vec![ToolGroupSettlement {
+                group_id: call.group_id,
+                disposition: ToolGroupDisposition::ArchiveOnly,
+                state_keys: Vec::new(),
+                open_questions: Vec::new(),
+            }],
             state: ContextStateUpdate {
                 active: ActiveContextState {
                     objective: "preserve source state in the fork".to_string(),
                     entries: Vec::new(),
                     constraints: Vec::new(),
                     open_questions: Vec::new(),
-                    next_action: "continue in fork".to_string(),
+                    continuity_hints: vec!["Fork state may be relevant later.".to_string()],
                 },
                 session_upserts: Vec::new(),
-                forget_keys: Vec::new(),
+                removals: Vec::new(),
                 quarter_promotions: Vec::new(),
             },
         })

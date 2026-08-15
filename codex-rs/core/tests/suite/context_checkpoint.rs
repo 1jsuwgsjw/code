@@ -11,18 +11,30 @@ use pretty_assertions::assert_eq;
 use serde_json::json;
 
 fn update_context_state_arguments(completed_groups: &[&str], objective: &str) -> String {
+    let tool_group_settlements = completed_groups
+        .iter()
+        .map(|group_id| {
+            json!({
+                "groupId": group_id,
+                "disposition": "archiveOnly",
+                "stateKeys": [],
+                "openQuestions": []
+            })
+        })
+        .collect::<Vec<_>>();
     serde_json::to_string(&json!({
         "completedToolGroups": completed_groups,
+        "toolGroupSettlements": tool_group_settlements,
         "state": {
             "active": {
                 "objective": objective,
                 "entries": [],
                 "constraints": [],
                 "openQuestions": [],
-                "nextAction": "continue from the projected state"
+                "continuityHints": ["The projected state may be relevant later."]
             },
             "sessionUpserts": [],
-            "forgetKeys": [],
+            "removals": [],
             "quarterPromotions": []
         }
     }))

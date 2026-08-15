@@ -12,6 +12,7 @@ fn projection_uses_semantic_references_and_hides_content_hashes() {
         record_id: TurnRecordId::new(1),
         generation_id: CheckpointGenerationId::new(1),
         completed_groups: vec![ToolGroupId::new(1)],
+        tool_group_settlements: Vec::new(),
         state: ContextStateSnapshot {
             quarter: Vec::new(),
             session: Vec::new(),
@@ -33,9 +34,13 @@ fn projection_uses_semantic_references_and_hides_content_hashes() {
                 }],
                 constraints: Vec::new(),
                 open_questions: Vec::new(),
-                next_action: "Resume without rereading source.txt.".to_string(),
+                continuity_hints: vec![
+                    "The verified source fact may be reused without rereading source.txt."
+                        .to_string(),
+                ],
             },
         },
+        state_removals: Vec::new(),
         summary: String::new(),
         evidence: vec![EvidenceRef::Artifact {
             artifact_id: artifact_id.clone(),
@@ -44,7 +49,6 @@ fn projection_uses_semantic_references_and_hides_content_hashes() {
         validation: Vec::new(),
         decisions: Vec::new(),
         open_items: Vec::new(),
-        next_action: String::new(),
         correction_of: None,
     };
 
@@ -64,7 +68,9 @@ fn projection_uses_semantic_references_and_hides_content_hashes() {
                     "evidenceRefs": ["workspace:source.txt", "artifact:TR000001/A001"],
                     "sourceStatus": "verified"
                 }],
-                "nextAction": "Resume without rereading source.txt."
+                "continuityHints": [
+                    "The verified source fact may be reused without rereading source.txt."
+                ]
             },
             "recallRefs": ["artifact:TR000001/A001"]
         })
@@ -81,6 +87,7 @@ fn legacy_summary_projection_preserves_semantics_without_hashes() {
         record_id: TurnRecordId::new(2),
         generation_id: CheckpointGenerationId::new(2),
         completed_groups: Vec::new(),
+        tool_group_settlements: Vec::new(),
         state: ContextStateSnapshot {
             quarter: Vec::new(),
             session: Vec::new(),
@@ -89,9 +96,10 @@ fn legacy_summary_projection_preserves_semantics_without_hashes() {
                 entries: Vec::new(),
                 constraints: Vec::new(),
                 open_questions: Vec::new(),
-                next_action: String::new(),
+                continuity_hints: vec!["Parser knowledge may be relevant later.".to_string()],
             },
         },
+        state_removals: Vec::new(),
         summary: "The parser accepts semantic references.".to_string(),
         evidence: vec![EvidenceRef::Artifact {
             artifact_id: ArtifactId::from_sha256("c".repeat(64)),
@@ -100,14 +108,13 @@ fn legacy_summary_projection_preserves_semantics_without_hashes() {
         validation: vec!["workflow passed".to_string()],
         decisions: Vec::new(),
         open_items: Vec::new(),
-        next_action: "resume parser work".to_string(),
         correction_of: None,
     };
 
     let projected = model_checkpoint_json(&record).expect("projection should serialize");
 
     assert!(projected.contains("The parser accepts semantic references."));
-    assert!(projected.contains("resume parser work"));
+    assert!(projected.contains("Parser knowledge may be relevant later."));
     assert!(projected.contains("artifact:TR000002/A001"));
     assert!(!projected.contains(&"c".repeat(64)));
 }

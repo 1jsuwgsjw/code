@@ -1,6 +1,8 @@
 use super::*;
 use crate::ActiveContextState;
 use crate::ContextStateUpdate;
+use crate::ToolGroupDisposition;
+use crate::ToolGroupSettlement;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::tempdir;
@@ -8,20 +10,31 @@ use tempfile::tempdir;
 fn state_request(
     completed_tool_groups: Vec<ToolGroupId>,
     objective: &str,
-    next_action: &str,
+    continuity_hint: &str,
 ) -> UpdateContextStateRequest {
+    let tool_group_settlements = completed_tool_groups
+        .iter()
+        .copied()
+        .map(|group_id| ToolGroupSettlement {
+            group_id,
+            disposition: ToolGroupDisposition::ArchiveOnly,
+            state_keys: Vec::new(),
+            open_questions: Vec::new(),
+        })
+        .collect();
     UpdateContextStateRequest {
         completed_tool_groups,
+        tool_group_settlements,
         state: ContextStateUpdate {
             active: ActiveContextState {
                 objective: objective.to_string(),
                 entries: Vec::new(),
                 constraints: Vec::new(),
                 open_questions: Vec::new(),
-                next_action: next_action.to_string(),
+                continuity_hints: vec![continuity_hint.to_string()],
             },
             session_upserts: Vec::new(),
-            forget_keys: Vec::new(),
+            removals: Vec::new(),
             quarter_promotions: Vec::new(),
         },
     }

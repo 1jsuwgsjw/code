@@ -301,6 +301,7 @@ fn update_context_state_spec() -> ToolSpec {
                 JsonSchema::string_enum(
                     vec![
                         serde_json::Value::String("sourceFact".to_string()),
+                        serde_json::Value::String("sourceCoverage".to_string()),
                         serde_json::Value::String("userDecision".to_string()),
                         serde_json::Value::String("constraint".to_string()),
                         serde_json::Value::String("validation".to_string()),
@@ -311,7 +312,8 @@ fn update_context_state_spec() -> ToolSpec {
             (
                 "content".to_string(),
                 JsonSchema::string(Some(
-                    "Current effective fact, never a description of tool activity.".to_string(),
+                    "Current effective knowledge. For sourceCoverage, name inspected symbols or ranges and explicit gaps; never merely say that a file was read or describe tool activity."
+                        .to_string(),
                 )),
             ),
             (
@@ -348,14 +350,46 @@ fn update_context_state_spec() -> ToolSpec {
             ),
             (
                 "openQuestions".to_string(),
-                string_array("Only unresolved questions that can change the next action."),
+                string_array("Unresolved questions whose answers can change future reasoning."),
             ),
             (
-                "nextAction".to_string(),
-                JsonSchema::string(Some("The next direct action.".to_string())),
+                "continuityHints".to_string(),
+                string_array(
+                    "Non-authoritative knowledge or evidence that may matter later. Never put actions, commitments, or a next step here.",
+                ),
             ),
         ]),
-        Some(vec!["objective".to_string(), "nextAction".to_string()]),
+        Some(vec!["objective".to_string()]),
+        Some(false.into()),
+    );
+    let state_removal = JsonSchema::object(
+        BTreeMap::from([
+            (
+                "key".to_string(),
+                JsonSchema::string(Some("Existing session or quarter key to retire.".to_string())),
+            ),
+            (
+                "reason".to_string(),
+                JsonSchema::string_enum(
+                    vec![
+                        serde_json::Value::String("userRevoked".to_string()),
+                        serde_json::Value::String("superseded".to_string()),
+                    ],
+                    Some(
+                        "Removal authority. Source revision invalidation is automatic and must not be requested here."
+                            .to_string(),
+                    ),
+                ),
+            ),
+            (
+                "supersededBy".to_string(),
+                JsonSchema::string(Some(
+                    "Retained replacement state key; required only when reason=superseded."
+                        .to_string(),
+                )),
+            ),
+        ]),
+        Some(vec!["key".to_string(), "reason".to_string()]),
         Some(false.into()),
     );
     let state = JsonSchema::object(
@@ -365,13 +399,17 @@ fn update_context_state_spec() -> ToolSpec {
                 "sessionUpserts".to_string(),
                 JsonSchema::array(
                     state_entry,
-                    Some("Reusable session facts to insert or replace by key.".to_string()),
+                    Some("Reusable session knowledge to insert or replace by key.".to_string()),
                 ),
             ),
             (
-                "forgetKeys".to_string(),
-                string_array(
-                    "Stale session or quarter keys to remove from the current projection.",
+                "removals".to_string(),
+                JsonSchema::array(
+                    state_removal,
+                    Some(
+                        "Explicitly justified retirements. Bare forgetting is not permitted."
+                            .to_string(),
+                    ),
                 ),
             ),
             (
@@ -384,23 +422,73 @@ fn update_context_state_spec() -> ToolSpec {
         Some(vec!["active".to_string()]),
         Some(false.into()),
     );
+    let tool_group_settlement = JsonSchema::object(
+        BTreeMap::from([
+            (
+                "groupId".to_string(),
+                JsonSchema::string(Some("Completed ToolGroup id.".to_string())),
+            ),
+            (
+                "disposition".to_string(),
+                JsonSchema::string_enum(
+                    vec![
+                        serde_json::Value::String("promote".to_string()),
+                        serde_json::Value::String("keepOpen".to_string()),
+                        serde_json::Value::String("archiveOnly".to_string()),
+                    ],
+                    Some(
+                        "promote retains effective knowledge, keepOpen retains unresolved information, and archiveOnly confirms the group was process noise."
+                            .to_string(),
+                    ),
+                ),
+            ),
+            (
+                "stateKeys".to_string(),
+                string_array(
+                    "Retained state keys produced or confirmed by this group. Required for promote.",
+                ),
+            ),
+            (
+                "openQuestions".to_string(),
+                string_array(
+                    "Exact active openQuestions preserved by this group. Required for keepOpen.",
+                ),
+            ),
+        ]),
+        Some(vec!["groupId".to_string(), "disposition".to_string()]),
+        Some(false.into()),
+    );
     let properties = BTreeMap::from([
         (
             "completedToolGroups".to_string(),
             string_array("Contiguous settled ToolGroup ids whose raw history can be replaced."),
         ),
+        (
+            "toolGroupSettlements".to_string(),
+            JsonSchema::array(
+                tool_group_settlement,
+                Some(
+                    "Exactly one ordered semantic settlement for each completed ToolGroup."
+                        .to_string(),
+                ),
+            ),
+        ),
         ("state".to_string(), state),
     ]);
     ToolSpec::Function(ResponsesApiTool {
         name: "update_context_state".to_string(),
-        description: "Replace completed tool history with current effective Active, Session, and Quarter state. Do not describe tool activity or duplicate current source files."
+        description: "Replace completed tool history with current effective knowledge, unresolved information, source coverage, and direct evidence bridges. Compression is not task planning: never choose a next action. Settle every completed ToolGroup as promote, keepOpen, or archiveOnly; preserve reusable facts in state and archive only process noise."
             .to_string(),
         output_schema: None,
         strict: false,
         defer_loading: None,
         parameters: JsonSchema::object(
             properties,
-            Some(vec!["completedToolGroups".to_string(), "state".to_string()]),
+            Some(vec![
+                "completedToolGroups".to_string(),
+                "toolGroupSettlements".to_string(),
+                "state".to_string(),
+            ]),
             Some(false.into()),
         ),
     })

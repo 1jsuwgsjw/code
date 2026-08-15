@@ -166,27 +166,42 @@ session=S001 turn=T018
 context_usage=73.4% tool_result_share=28.6%
 tool_groups=3 open=1 settled=2
 turn_record=pending last_checkpoint=T014
-checkpoint_required=false tool=update_summary
+checkpoint_required=false tool=update_context_state
+policy=retain_knowledge+retain_uncertainty+archive_process;no_next_action;settle_each_group
 </MEMORY_STATUS>
 ```
 
 Old status values are not rewritten into persisted history. A request receives only the current
 ephemeral value, and the completed turn is reconciled once.
 
-## Summary Tool Contract
+## Context State Tool Contract
 
 ```json
 {
-  "name": "update_summary",
-  "scope": "turn | stage | session",
-  "completedToolGroups": ["TG-018-01"],
-  "summary": "purpose, essential process, and actual result",
-  "evidence": ["existing file, symbol, record, or artifact references"],
-  "changes": ["changes actually produced"],
-  "validation": ["validation performed and its real result"],
-  "decisions": ["user and engineering decisions"],
-  "openItems": ["unfinished work and why it remains open"],
-  "nextAction": "one directly executable next action"
+  "name": "update_context_state",
+  "completedToolGroups": ["TG000018"],
+  "toolGroupSettlements": [
+    {
+      "groupId": "TG000018",
+      "disposition": "promote | keepOpen | archiveOnly",
+      "stateKeys": ["source:checkpoint/runtime"],
+      "openQuestions": []
+    }
+  ],
+  "state": {
+    "active": {
+      "objective": "the current user-owned objective",
+      "entries": [],
+      "constraints": [],
+      "openQuestions": [],
+      "continuityHints": [
+        "non-authoritative knowledge or evidence that may matter later; never an action"
+      ]
+    },
+    "sessionUpserts": [],
+    "removals": [],
+    "quarterPromotions": []
+  }
 }
 ```
 
@@ -231,7 +246,8 @@ memory/artifacts/S001/T018/TG01/call-31.log
 - Recall order is TurnRecord, then ToolGroup excerpt, then full Artifact.
 - Unresolved errors, unique evidence, and content still requiring line-by-line analysis are marked
   `requiresRecall` and cannot be discarded from the active reasoning set.
-- User decisions, failure causes, validation conclusions, and `nextAction` are mandatory fields.
+- User decisions, failure causes, validation conclusions, effective source knowledge, and explicit
+  source coverage are mandatory when they exist. Compression never creates or selects a next action.
 - A missing artifact or hash mismatch marks dependent summaries untrusted; Runtime never fills the
   gap by inference.
 - Track original tokens, summary tokens, provider-reported cached tokens, recall count, rejected
@@ -272,7 +288,7 @@ behavior contradicts it.
 | Legacy remote fallback | `core/src/compact_remote.rs` (`run_remote_compact_task_inner_impl`) | It installs provider-produced replacement history through the same Session method. Retain it only as an observable provider fallback. |
 | Pressure calculation | `core/src/session/context_window.rs` (`context_window_token_status`) | This is the authoritative source for active usage, scoped limits, full-window limits, and tokens remaining. Derive usable-budget pressure here rather than estimating it in the model. |
 | Runtime ownership | `core/src/state/service.rs` (`SessionServices`) and `core/src/session/session.rs` (`Session::new`) | Store one per-thread `CheckpointRuntime` in services and construct it from a deterministic host-local root. Startup failure must produce a degraded runtime, not fail Session creation. |
-| Tool registration | `core/src/tools/spec_plan.rs` (`add_core_utility_tools`, `build_tool_specs_and_registry`) | Register `update_summary` and recall handlers here. Pressure-based visibility belongs in the tool-plan policy, not in individual handlers. |
+| Tool registration | `core/src/tools/spec_plan.rs` (`add_core_utility_tools`, `build_tool_specs_and_registry`) | Register `update_context_state` and recall handlers here. Pressure-based visibility belongs in the tool-plan policy, not in individual handlers. |
 | Context fragment contract | `context-fragments/src/fragment.rs` (`ContextualUserFragment`) | `into_response_input_item` creates a bounded role-bearing item. The status implementation belongs under `core/src/context/` and is appended only to the mutable request tail. |
 | Existing tests | `core/src/session/rollout_reconstruction_tests.rs` and `core/src/session/tests.rs` | Existing coverage proves replacement history is restored verbatim. Extend these tests for optional metadata and checkpoint generation recovery rather than introducing a parallel test harness. |
 
@@ -368,10 +384,11 @@ the earlier node.
 
 Policy consequences:
 
-- Bare `forgetKeys` is insufficient for protected rules and decisions. Forgetting requires an
-  explicit user revocation, a `supersededBy` reference, or verified source invalidation.
-- Active objectives and next actions require lifecycle state so completed actions do not remain as
-  stale instructions in the next checkpoint.
+- Bare forgetting is forbidden for protected rules, decisions, and source knowledge. A removal
+  requires explicit user revocation or a `supersededBy` reference; source invalidation is performed
+  automatically from the verified source revision.
+- `continuityHints` is the model's bounded, non-authoritative place to preserve knowledge or evidence
+  that may matter later. It must never contain an action, commitment, or selected plan.
 - Artifact entries require a semantic title, source/tool identity, size, and recall hint in addition
   to their stable reference and integrity hash.
 - Before freezing a checkpoint, the Runtime should expose a bounded diff: retained, archived,
@@ -406,8 +423,8 @@ Policy consequences:
   duration, and context cost. Load individual calls and raw output only when that node is opened.
 - Manual expand/collapse choices override automatic folding and are persisted by semantic reference.
   Incoming events must not steal focus, collapse the selected branch, or reset scroll position.
-- Adapt folding to viewport pressure without hiding failures, user decisions, active constraints, or
-  `nextAction`. A bounded visible-row model virtualizes large trees and avoids rendering off-screen
+- Adapt folding to viewport pressure without hiding failures, user decisions, active constraints,
+  retained knowledge, or continuity hints. A bounded visible-row model virtualizes large trees and avoids rendering off-screen
   history.
 - Keep thread identity separate from live worker/process state. A resumed or completed thread remains
   navigable from its persisted checkpoint index even when no worker is active.
@@ -560,8 +577,7 @@ codex-rs/core/src/context_checkpoint/
   projection.rs              ResponseItem projection adapter
 
 codex-rs/core/src/context/checkpoint_status.rs
-codex-rs/core/src/tools/handlers/update_summary.rs
-codex-rs/core/src/tools/handlers/update_summary_spec.rs
+codex-rs/core/src/tools/handlers/checkpoint.rs
 codex-rs/core/src/tools/handlers/recall_checkpoint.rs
 codex-rs/core/src/tools/handlers/recall_checkpoint_spec.rs
 codex-rs/core/src/session/context_checkpoint.rs
@@ -815,7 +831,7 @@ not become a new availability dependency for ordinary Codex work.
   checkpoint artifact capture fails.
 - Capture failure moves the runtime to `Degraded`, emits one bounded event, and records the reason in
   rollout when persistence remains available.
-- `update_summary` is rejected while required evidence is degraded; it never freezes an incomplete
+- `update_context_state` is rejected while required evidence is degraded; it never freezes an incomplete
   record as trusted.
 - At normal pressure the conversation continues with the original history intact.
 - At fallback pressure the existing local/remote compaction path runs with the degradation reason.
@@ -830,7 +846,7 @@ not become a new availability dependency for ordinary Codex work.
 - Runtime creates one ToolGroup for each assistant sampling step that emits one or more tool calls.
 - Parallel calls emitted by the same response share the group.
 - A later sampling step receives a new group ID.
-- Runtime does not infer the semantic purpose. `update_summary` supplies the meaning and may settle
+- Runtime does not infer the semantic purpose. `update_context_state` supplies the meaning and may settle
   one or more contiguous completed groups.
 - Groups with in-flight calls, unresolved unique evidence, or `requiresRecall=true` cannot be
   removed from the active tail.
@@ -867,7 +883,7 @@ let prompt = build_prompt(prepared.input, router.as_ref(), turn_context, base_in
 item. It has a hard byte/token cap and is never written into ContextManager or rollout history.
 Retries rebuild only the mutable request tail; frozen history items remain byte-for-byte stable.
 
-## Summary Tool Lifecycle
+## Context State Tool Lifecycle
 
 The handler validates JSON and prepares a checkpoint, but does not replace history inside tool
 dispatch:
@@ -1001,7 +1017,7 @@ usable budget. Invalid combinations fail config loading instead of being silentl
 
 ### Core Integration
 
-- A tool-heavy turn calls `update_summary`; the next request contains the frozen TurnRecord and omits
+- A tool-heavy turn calls `update_context_state`; the next request contains the frozen TurnRecord and omits
   only the settled raw groups.
 - Open groups remain byte-for-byte in the next request.
 - Invalid references return a tool error and leave history unchanged.

@@ -4,6 +4,7 @@ use crate::ToolGroupId;
 use crate::TurnRecordId;
 use crate::state::ContextStateSnapshot;
 use crate::state::ContextStateUpdate;
+use crate::state::StateRemoval;
 use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
@@ -78,6 +79,25 @@ pub struct ToolGroupRecord {
     pub requires_recall: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ToolGroupDisposition {
+    Promote,
+    KeepOpen,
+    ArchiveOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolGroupSettlement {
+    pub group_id: ToolGroupId,
+    pub disposition: ToolGroupDisposition,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub state_keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_questions: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum EvidenceRef {
@@ -92,8 +112,12 @@ pub struct TurnRecord {
     pub record_id: TurnRecordId,
     pub generation_id: CheckpointGenerationId,
     pub completed_groups: Vec<ToolGroupId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_group_settlements: Vec<ToolGroupSettlement>,
     #[serde(default, skip_serializing_if = "ContextStateSnapshot::is_empty")]
     pub state: ContextStateSnapshot,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub state_removals: Vec<StateRemoval>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub summary: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -106,8 +130,6 @@ pub struct TurnRecord {
     pub decisions: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_items: Vec<String>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub next_action: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub correction_of: Option<TurnRecordId>,
 }
@@ -117,6 +139,8 @@ pub struct TurnRecord {
 pub struct UpdateContextStateRequest {
     #[serde(default)]
     pub completed_tool_groups: Vec<ToolGroupId>,
+    #[serde(default)]
+    pub tool_group_settlements: Vec<ToolGroupSettlement>,
     pub state: ContextStateUpdate,
 }
 

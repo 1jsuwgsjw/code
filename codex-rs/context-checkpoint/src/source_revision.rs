@@ -48,7 +48,10 @@ async fn retain_current_source_facts(
 ) {
     let mut retained = Vec::with_capacity(entries.len());
     for mut entry in entries.drain(..) {
-        if entry.kind != StateEntryKind::SourceFact {
+        if !matches!(
+            entry.kind,
+            StateEntryKind::SourceFact | StateEntryKind::SourceCoverage
+        ) {
             retained.push(entry);
             continue;
         }
@@ -79,7 +82,10 @@ async fn stamp_entries(
     inspected_bytes: &mut u64,
 ) -> Result<(), CheckpointError> {
     for entry in entries {
-        if entry.kind != StateEntryKind::SourceFact {
+        if !matches!(
+            entry.kind,
+            StateEntryKind::SourceFact | StateEntryKind::SourceCoverage
+        ) {
             continue;
         }
         entry.source_revision = source_revision(entry, workspace_root, inspected_bytes)
