@@ -4,6 +4,7 @@
 //! does not depend on Codex protocol or session types; hosts project their own conversation items
 //! into the history ranges recorded here.
 
+mod artifact_recall;
 mod budget;
 mod ids;
 mod model;
@@ -15,6 +16,12 @@ mod source_revision;
 mod state;
 mod store;
 
+pub use artifact_recall::ArtifactOutlineSection;
+pub use artifact_recall::ArtifactRecallSelection;
+pub use artifact_recall::ArtifactRecallView;
+pub use artifact_recall::ArtifactSearchMatch;
+pub use artifact_recall::RecallRequest;
+pub use artifact_recall::RecallResult;
 pub use budget::CheckpointBudget;
 pub use ids::ArtifactId;
 pub use ids::CheckpointGenerationId;
@@ -34,8 +41,6 @@ pub use model::InstalledCheckpoint;
 pub use model::MemoryStatusSnapshot;
 pub use model::PendingCheckpoint;
 pub use model::PreparedCheckpointRequest;
-pub use model::RecallRequest;
-pub use model::RecallResult;
 pub use model::ToolCallOutcome;
 pub use model::ToolCallRecord;
 pub use model::ToolGroupRecord;

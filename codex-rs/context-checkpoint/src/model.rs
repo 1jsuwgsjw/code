@@ -218,19 +218,6 @@ pub enum ArtifactLocator {
     Reference(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecallRequest {
-    pub locator: ArtifactLocator,
-    pub max_bytes: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecallResult {
-    pub artifact: ArtifactRef,
-    pub data: Vec<u8>,
-    pub truncated: bool,
-}
-
 #[derive(Debug, Error)]
 pub enum CheckpointError {
     #[error("checkpoint storage failed: {0}")]

@@ -528,15 +528,13 @@ impl CheckpointRuntime {
                 ))
             })?
         };
-        let (data, truncated) = self
-            .store
-            .recall_artifact(&artifact, request.max_bytes.min(MAX_RECALL_BYTES))
-            .await?;
-        Ok(RecallResult {
+        let data = self.store.read_verified_artifact(&artifact).await?;
+        crate::artifact_recall::build_recall_result(
             artifact,
             data,
-            truncated,
-        })
+            request.selection,
+            request.max_bytes.min(MAX_RECALL_BYTES),
+        )
     }
 
     pub async fn is_fallback_required(&self) -> bool {

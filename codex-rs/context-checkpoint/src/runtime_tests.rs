@@ -145,11 +145,19 @@ async fn pending_checkpoint_survives_reload_and_installation() {
     let recalled = restored
         .recall(RecallRequest {
             locator: ArtifactLocator::Reference("artifact:TR000001/A001".to_string()),
+            selection: crate::ArtifactRecallSelection::Prefix,
             max_bytes: 1024,
         })
         .await
         .expect("recall artifact after its tool group was settled");
-    assert_eq!(recalled.data, b"call-1".to_vec());
+    assert_eq!(
+        recalled.view,
+        crate::ArtifactRecallView::Prefix {
+            line_count: 1,
+            content: "call-1".to_string(),
+            truncated: false,
+        }
+    );
 }
 
 #[tokio::test]
@@ -169,11 +177,18 @@ async fn recall_is_bounded_and_hash_verified() {
     let recalled = runtime
         .recall(RecallRequest {
             locator: ArtifactLocator::ArtifactId(call.output.artifact_id.clone()),
+            selection: crate::ArtifactRecallSelection::Prefix,
             max_bytes: 4,
         })
         .await
         .expect("recall output artifact");
 
-    assert_eq!(recalled.data, b"full".to_vec());
-    assert!(recalled.truncated);
+    assert_eq!(
+        recalled.view,
+        crate::ArtifactRecallView::Prefix {
+            line_count: 1,
+            content: "full".to_string(),
+            truncated: true,
+        }
+    );
 }
