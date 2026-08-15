@@ -101,6 +101,14 @@ impl ToolOutput for McpToolOutput {
     }
 
     fn archival_payload(&self, _call_id: &str, _payload: &ToolPayload) -> ArchivalToolOutput {
+        if let Some(payload) = plain_text_mcp_archive(&self.result) {
+            return ArchivalToolOutput {
+                media_type: "text/plain".to_string(),
+                payload,
+                model_facing_fallback: false,
+            };
+        }
+
         match serde_json::to_vec(&self.result) {
             Ok(payload) => ArchivalToolOutput {
                 media_type: "application/json".to_string(),
@@ -128,6 +136,23 @@ impl ToolOutput for McpToolOutput {
     fn post_tool_use_response(&self, _call_id: &str, _payload: &ToolPayload) -> Option<JsonValue> {
         serde_json::to_value(&self.result).ok()
     }
+}
+
+fn plain_text_mcp_archive(result: &CallToolResult) -> Option<Vec<u8>> {
+    if result.content.is_empty() || result.structured_content.is_some() || result.meta.is_some() {
+        return None;
+    }
+
+    let mut blocks = Vec::with_capacity(result.content.len());
+    for content in &result.content {
+        let object = content.as_object()?;
+        if object.len() != 2 || object.get("type").and_then(JsonValue::as_str) != Some("text") {
+            return None;
+        }
+        blocks.push(object.get("text")?.as_str()?);
+    }
+
+    Some(blocks.join("\n").into_bytes())
 }
 
 impl McpToolOutput {

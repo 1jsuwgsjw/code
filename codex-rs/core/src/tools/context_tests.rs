@@ -5,6 +5,38 @@ use core_test_support::assert_regex_match;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
+fn plain_call_tool_result(content: Vec<JsonValue>) -> CallToolResult {
+    CallToolResult {
+        content,
+        structured_content: None,
+        is_error: None,
+        meta: None,
+    }
+}
+
+#[test]
+fn plain_text_mcp_archive_preserves_searchable_lines() {
+    let result = plain_call_tool_result(vec![
+        json!({"type": "text", "text": "line one\nline two"}),
+        json!({"type": "text", "text": "line three"}),
+    ]);
+
+    assert_eq!(
+        plain_text_mcp_archive(&result),
+        Some(b"line one\nline two\nline three".to_vec())
+    );
+}
+
+#[test]
+fn plain_text_mcp_archive_keeps_mixed_results_structured() {
+    let result = plain_call_tool_result(vec![
+        json!({"type": "text", "text": "caption"}),
+        json!({"type": "image", "data": "aW1hZ2U=", "mimeType": "image/png"}),
+    ]);
+
+    assert_eq!(plain_text_mcp_archive(&result), None);
+}
+
 #[test]
 fn custom_tool_calls_should_roundtrip_as_custom_outputs() {
     let payload = ToolPayload::Custom {

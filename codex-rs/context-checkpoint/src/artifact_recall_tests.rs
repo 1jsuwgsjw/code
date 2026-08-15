@@ -1,5 +1,7 @@
 use super::*;
 use crate::ArtifactId;
+use pretty_assertions::assert_eq;
+use serde_json::json;
 
 fn artifact() -> ArtifactRef {
     ArtifactRef {
@@ -113,4 +115,56 @@ fn search_returns_bounded_matches_with_context() {
             truncated: true,
         }
     );
+}
+
+#[test]
+fn legacy_mcp_json_is_recalled_as_searchable_text_lines() {
+    let mut legacy_artifact = artifact();
+    legacy_artifact.media_type = "application/json".to_string();
+    let data = serde_json::to_vec(&json!({
+        "content": [
+            {"type": "text", "text": "zero\none"},
+            {"type": "text", "text": "two\nthree"}
+        ],
+        "isError": false
+    }))
+    .expect("serialize legacy MCP result");
+
+    let result = build_recall_result(
+        legacy_artifact,
+        data,
+        ArtifactRecallSelection::Lines {
+            start_line: 2,
+            end_line: 3,
+        },
+        1_024,
+    )
+    .expect("recall legacy MCP text");
+
+    assert_eq!(
+        result.view,
+        ArtifactRecallView::Lines {
+            line_count: 4,
+            start_line: 2,
+            end_line: 3,
+            content: "L2: one\nL3: two\n".to_string(),
+            truncated: false,
+            next_start_line: None,
+        }
+    );
+}
+
+#[test]
+fn legacy_mcp_json_keeps_mixed_content_structured() {
+    let mut legacy_artifact = artifact();
+    legacy_artifact.media_type = "application/json".to_string();
+    let data = serde_json::to_vec(&json!({
+        "content": [
+            {"type": "text", "text": "caption"},
+            {"type": "image", "data": "aW1hZ2U=", "mimeType": "image/png"}
+        ]
+    }))
+    .expect("serialize mixed MCP result");
+
+    assert_eq!(legacy_mcp_text_archive(&legacy_artifact, &data), None);
 }

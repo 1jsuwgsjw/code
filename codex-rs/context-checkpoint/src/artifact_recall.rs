@@ -96,7 +96,8 @@ pub(crate) fn build_recall_result(
     selection: ArtifactRecallSelection,
     max_bytes: usize,
 ) -> Result<RecallResult, CheckpointError> {
-    let text = String::from_utf8_lossy(&data);
+    let text = legacy_mcp_text_archive(&artifact, &data)
+        .unwrap_or_else(|| String::from_utf8_lossy(&data).into_owned());
     let lines = text.lines().collect::<Vec<_>>();
     let view = match selection {
         ArtifactRecallSelection::Outline => outline_view(&lines, max_bytes),
@@ -116,6 +117,45 @@ pub(crate) fn build_recall_result(
         },
     };
     Ok(RecallResult { artifact, view })
+}
+
+fn legacy_mcp_text_archive(artifact: &ArtifactRef, data: &[u8]) -> Option<String> {
+    if artifact.media_type != "application/json" {
+        return None;
+    }
+
+    let value = serde_json::from_slice::<serde_json::Value>(data).ok()?;
+    let result = value.as_object()?;
+    if result.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "content" | "structuredContent" | "isError" | "_meta"
+        )
+    }) || result
+        .get("structuredContent")
+        .is_some_and(|value| !value.is_null())
+        || result.get("_meta").is_some_and(|value| !value.is_null())
+    {
+        return None;
+    }
+
+    let content = result.get("content")?.as_array()?;
+    if content.is_empty() {
+        return None;
+    }
+
+    let mut blocks = Vec::with_capacity(content.len());
+    for item in content {
+        let object = item.as_object()?;
+        if object.len() != 2
+            || object.get("type").and_then(serde_json::Value::as_str) != Some("text")
+        {
+            return None;
+        }
+        blocks.push(object.get("text")?.as_str()?);
+    }
+
+    Some(blocks.join("\n"))
 }
 
 fn outline_view(lines: &[&str], max_bytes: usize) -> ArtifactRecallView {

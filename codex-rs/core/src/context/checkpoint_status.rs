@@ -95,7 +95,8 @@ impl ContextualUserFragment for CheckpointStatusFragment {
              context_usage={} usage_source={:?} tool_result_share={}\n\
              tool_groups={} open={} settled={} settleable=[{}]\nlast_checkpoint={}\n\
              pressure={:?} checkpoint_required={} tool=update_context_state recall=recall_checkpoint_artifact\n\
-             policy=checkpoint_at_semantic_closure_or_pressure;retain_effective_knowledge+uncertainty;archive_process_even_when_recallable;never_promote_tool_usage_or_bookkeeping;no_next_action;settle_each_selected_group{}",
+             policy=checkpoint_at_semantic_closure_or_pressure;retain_effective_knowledge+uncertainty;archive_process_even_when_recallable;never_promote_tool_usage_or_bookkeeping;no_next_action;settle_each_selected_group\n\
+             active_state=ephemeral;reconcile_with_latest_user_intent;clear_or_supersede_stale_active_on_goal_change_or_completion;do_not_narrate_stale_checkpoint_state{}",
             self.status.generation_id,
             self.status.turn_id,
             self.status.completed_sessions,

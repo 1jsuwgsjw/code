@@ -33,6 +33,7 @@ tool_groups=3 open=1 settled=2 settleable=[TG000003,TG000004]\n\
 last_checkpoint=none\n\
              pressure=Required checkpoint_required=true tool=update_context_state recall=recall_checkpoint_artifact\n\
              policy=checkpoint_at_semantic_closure_or_pressure;retain_effective_knowledge+uncertainty;archive_process_even_when_recallable;never_promote_tool_usage_or_bookkeeping;no_next_action;settle_each_selected_group\n\
+             active_state=ephemeral;reconcile_with_latest_user_intent;clear_or_supersede_stale_active_on_goal_change_or_completion;do_not_narrate_stale_checkpoint_state\n\
 </MEMORY_STATUS>"
     );
 }
