@@ -1101,3 +1101,29 @@ This order is for code dependency management, not for shipping incomplete user-v
 
 The deployable result must contain all seven steps. Intermediate commits may compile for review, but
 must not be presented as the completed replacement runtime.
+
+## Blind Compaction Validation Record
+
+Windows artifact `31874802017` was exercised without telling the model to compact, checkpoint, use a
+skill, or select a file-reading tool. The persisted test thread is
+`01a004ae-35c8-73b0-b38c-08c191868a33` in
+`D:\codex-blind-compaction-smoke-31874802017`.
+
+- The first ordinary inventory task naturally loaded `task-anchor`, ran bootstrap, used
+  `compact_view.py`, and created checkpoint `ctx:G000001/TR000001` after 20 ToolGroups. The projection
+  retained five effective source/validation entries and ten bounded Artifact references while
+  removing the settled process noise.
+- The replacement history itself retained the original developer skills catalog and the checkpoint
+  projection. Compaction therefore did not directly delete the skill rules.
+- On process resume, the World State skills extension incorrectly treated the retained host-skills
+  catalog as an unknown prior selected-environment catalog and injected `No selected-environment
+  skills are currently available.` The model consequently stopped using `task-anchor` and read
+  project files with `Get-Content`, despite receiving no instruction to change tools.
+- The root cause is an over-broad legacy matcher in
+  `codex-rs/ext/skills/src/world_state.rs`: it matched every `<skills_instructions>` block rather than
+  only selected-environment skill catalogs and explicit `Skills update` fragments. The matcher must
+  remain narrow so an unknown World State snapshot cannot revoke unrelated stable skill rules.
+- The second task still repaired `Inventory.release` correctly and passed all six unittest cases,
+  proving effective project knowledge survived; however, tool-policy continuity failed and is a
+  release-blocking resume regression until the narrowed matcher passes CI and the same blind smoke
+  test.

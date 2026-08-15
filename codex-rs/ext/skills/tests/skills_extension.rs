@@ -222,6 +222,13 @@ async fn selected_executor_catalog_follows_step_availability_and_reuses_its_cach
             .body()
             .contains("(environment resource: skill://executor/lint-fix/SKILL.md)")
     );
+    let (open_tag, close_tag) = available_fragment.markers();
+    let available_fragment_text = format!("{open_tag}{}{close_tag}", available_fragment.body());
+    assert!(available_sections[0].matches_legacy_fragment("developer", &available_fragment_text));
+    assert!(!available_sections[0].matches_legacy_fragment(
+        "developer",
+        "<skills_instructions>\n## Skills\n- task-anchor: local rules (file: C:/skills/task-anchor/SKILL.md)\n</skills_instructions>",
+    ));
 
     let fragments = registry.turn_input_contributors()[0]
         .contribute(

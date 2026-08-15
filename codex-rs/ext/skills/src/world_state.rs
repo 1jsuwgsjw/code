@@ -62,6 +62,8 @@ pub(crate) fn executor_skills_world_state_section(
             role == "developer"
                 && text.trim_start().starts_with(SKILLS_INSTRUCTIONS_OPEN_TAG)
                 && text.trim_end().ends_with(SKILLS_INSTRUCTIONS_CLOSE_TAG)
+                && (text.contains("\n## Skills update\n")
+                    || text.contains("(environment resource:"))
         });
     match retained_body {
         Some(body) => contribution.with_retained_fragment_matcher(move |role, text| {
