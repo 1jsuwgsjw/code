@@ -335,6 +335,19 @@ Before rendering `<CONTEXT_CHECKPOINT>`, Runtime deterministically reduces the d
 The full manifest, TurnRecord, tool calls, outputs, and integrity hashes remain recoverable. Compact
 projection changes model-visible recovery cost, not evidence retention.
 
+### Selective Artifact Recall
+
+- `recall_checkpoint_artifact` defaults to an outline that returns line counts, bounded section
+  previews, approximate section sizes, and selectable line ranges without returning artifact text.
+- `mode=lines` returns only an explicit 1-based line window, with a hard line cap, byte cap, and
+  `nextStartLine` when the requested window cannot fit.
+- `mode=search` scans the verified artifact but returns only bounded keyword matches, columns,
+  excerpts, and a small number of neighboring lines. It never injects the full matching artifact.
+- `mode=prefix` remains only as an explicit compatibility path. Normal model behavior must inspect
+  the outline first and then select a line range or keyword query.
+- Hash verification remains mandatory before outline, line, or search results are produced. These
+  views reduce model-context cost; they do not weaken immutable Artifact evidence.
+
 ### TUI Observability And History
 
 - Normal conversation shows concise lifecycle events for collecting, validating, preparing,

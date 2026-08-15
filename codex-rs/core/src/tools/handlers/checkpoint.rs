@@ -7,6 +7,8 @@ use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
 use codex_context_checkpoint::ArtifactId;
 use codex_context_checkpoint::ArtifactLocator;
+use codex_context_checkpoint::ArtifactRecallSelection;
+use codex_context_checkpoint::ArtifactRecallView;
 use codex_context_checkpoint::RecallRequest;
 use codex_context_checkpoint::UpdateContextStateRequest;
 use codex_tools::JsonSchema;
@@ -79,8 +81,59 @@ struct RecallArguments {
     reference: Option<String>,
     #[serde(default)]
     artifact_id: Option<String>,
+    #[serde(default)]
+    mode: RecallMode,
+    #[serde(default)]
+    start_line: Option<usize>,
+    #[serde(default)]
+    end_line: Option<usize>,
+    #[serde(default)]
+    query: Option<String>,
+    #[serde(default = "default_search_context_lines")]
+    context_lines: usize,
+    #[serde(default = "default_search_matches")]
+    max_matches: usize,
     #[serde(default = "default_recall_bytes")]
     max_bytes: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum RecallMode {
+    #[default]
+    Outline,
+    Lines,
+    Search,
+    Prefix,
+}
+
+impl RecallArguments {
+    fn selection(&self) -> Result<ArtifactRecallSelection, String> {
+        match self.mode {
+            RecallMode::Outline => Ok(ArtifactRecallSelection::Outline),
+            RecallMode::Lines => {
+                let start_line = self
+                    .start_line
+                    .ok_or_else(|| "lines mode requires startLine".to_string())?;
+                let end_line = self.end_line.unwrap_or_else(|| {
+                    start_line.saturating_add(default_line_window().saturating_sub(1))
+                });
+                Ok(ArtifactRecallSelection::Lines {
+                    start_line,
+                    end_line,
+                })
+            }
+            RecallMode::Search => Ok(ArtifactRecallSelection::Search {
+                query: self
+                    .query
+                    .clone()
+                    .ok_or_else(|| "search mode requires query".to_string())?,
+                context_lines: self.context_lines,
+                max_matches: self.max_matches,
+            }),
+            RecallMode::Prefix => Ok(ArtifactRecallSelection::Prefix),
+        }
+    }
 }
 
 impl ToolExecutor<ToolInvocation> for RecallCheckpointArtifactHandler {
@@ -116,24 +169,81 @@ impl ToolExecutor<ToolInvocation> for RecallCheckpointArtifactHandler {
                     ));
                 }
             };
+            let selection = arguments
+                .selection()
+                .map_err(FunctionCallError::RespondToModel)?;
             let recalled = invocation
                 .session
                 .services
                 .context_checkpoint
                 .recall(RecallRequest {
                     locator,
+                    selection,
                     max_bytes: arguments.max_bytes,
                 })
                 .await
                 .map_err(|error| FunctionCallError::RespondToModel(error.to_string()))?;
+            let view = match recalled.view {
+                ArtifactRecallView::Outline {
+                    line_count,
+                    sections,
+                    truncated,
+                    next_start_line,
+                } => json!({
+                    "mode": "outline",
+                    "lineCount": line_count,
+                    "sections": sections,
+                    "truncated": truncated,
+                    "nextStartLine": next_start_line,
+                }),
+                ArtifactRecallView::Lines {
+                    line_count,
+                    start_line,
+                    end_line,
+                    content,
+                    truncated,
+                    next_start_line,
+                } => json!({
+                    "mode": "lines",
+                    "lineCount": line_count,
+                    "startLine": start_line,
+                    "endLine": end_line,
+                    "content": content,
+                    "truncated": truncated,
+                    "nextStartLine": next_start_line,
+                }),
+                ArtifactRecallView::Search {
+                    line_count,
+                    query,
+                    matches,
+                    total_matches,
+                    truncated,
+                } => json!({
+                    "mode": "search",
+                    "lineCount": line_count,
+                    "query": query,
+                    "matches": matches,
+                    "totalMatches": total_matches,
+                    "truncated": truncated,
+                }),
+                ArtifactRecallView::Prefix {
+                    line_count,
+                    content,
+                    truncated,
+                } => json!({
+                    "mode": "prefix",
+                    "lineCount": line_count,
+                    "content": content,
+                    "truncated": truncated,
+                }),
+            };
             let output = json!({
                 "reference": arguments.reference,
                 "artifactId": recalled.artifact.artifact_id.as_str(),
                 "sha256": recalled.artifact.sha256,
                 "mediaType": recalled.artifact.media_type,
                 "byteLength": recalled.artifact.byte_len,
-                "truncated": recalled.truncated,
-                "content": String::from_utf8_lossy(&recalled.data),
+                "view": view,
             });
             Ok(boxed_tool_output(FunctionToolOutput::from_text(
                 output.to_string(),
@@ -299,7 +409,7 @@ fn update_context_state_spec() -> ToolSpec {
 fn recall_checkpoint_artifact_spec() -> ToolSpec {
     ToolSpec::Function(ResponsesApiTool {
         name: "recall_checkpoint_artifact".to_string(),
-        description: "Read a bounded, hash-verified artifact referenced by this session. Provide exactly one of reference or legacy artifactId."
+        description: "Inspect a hash-verified checkpoint artifact without reinjecting the whole tool result. Default mode=outline returns line ranges and previews; use mode=lines for a selected range or mode=search for bounded keyword matches. Provide exactly one of reference or legacy artifactId."
             .to_string(),
         output_schema: None,
         strict: false,
@@ -320,9 +430,58 @@ fn recall_checkpoint_artifact_spec() -> ToolSpec {
                     )),
                 ),
                 (
+                    "mode".to_string(),
+                    JsonSchema::string_enum(
+                        vec![
+                            json!("outline"),
+                            json!("lines"),
+                            json!("search"),
+                            json!("prefix"),
+                        ],
+                        Some(
+                            "Recall mode. Defaults to outline. Prefix is legacy and should be used only when exact leading bytes are required."
+                                .to_string(),
+                        ),
+                    ),
+                ),
+                (
+                    "startLine".to_string(),
+                    JsonSchema::integer(Some(
+                        "First 1-based line for mode=lines.".to_string(),
+                    )),
+                ),
+                (
+                    "endLine".to_string(),
+                    JsonSchema::integer(Some(
+                        "Last 1-based line for mode=lines; defaults to a 40-line window."
+                            .to_string(),
+                    )),
+                ),
+                (
+                    "query".to_string(),
+                    JsonSchema::string(Some(
+                        "Keyword or phrase for mode=search.".to_string(),
+                    )),
+                ),
+                (
+                    "contextLines".to_string(),
+                    JsonSchema::integer(Some(
+                        "Neighboring lines returned around each search match; defaults to 2 and is capped."
+                            .to_string(),
+                    )),
+                ),
+                (
+                    "maxMatches".to_string(),
+                    JsonSchema::integer(Some(
+                        "Maximum search matches to return; defaults to 8 and is capped."
+                            .to_string(),
+                    )),
+                ),
+                (
                     "maxBytes".to_string(),
                     JsonSchema::integer(Some(
-                        "Maximum bytes to return; capped by Runtime.".to_string(),
+                        "Maximum bytes for previews or selected content; defaults to 8192 and is capped by Runtime."
+                            .to_string(),
                     )),
                 ),
             ]),
@@ -333,7 +492,19 @@ fn recall_checkpoint_artifact_spec() -> ToolSpec {
 }
 
 fn default_recall_bytes() -> usize {
-    32 * 1024
+    8 * 1024
+}
+
+fn default_line_window() -> usize {
+    40
+}
+
+fn default_search_context_lines() -> usize {
+    2
+}
+
+fn default_search_matches() -> usize {
+    8
 }
 
 #[cfg(test)]

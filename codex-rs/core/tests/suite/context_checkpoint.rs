@@ -84,3 +84,57 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
 
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn checkpoint_artifact_recall_defaults_to_a_structured_outline() -> Result<()> {
+    let harness = TestCodexHarness::with_builder(test_codex().with_model("gpt-5.4")).await?;
+    let update = update_context_state_arguments(&["TG000001"], "inspect captured evidence");
+    let shell_arguments = serde_json::to_string(&json!({ "command": "echo checkpoint" }))?;
+    let recall_arguments = serde_json::to_string(&json!({
+        "reference": "artifact:TR000001/A001"
+    }))?;
+    let responses = vec![
+        sse(vec![
+            ev_response_created("resp-outline-1"),
+            ev_function_call("call-outline-shell", "shell_command", &shell_arguments),
+            ev_completed("resp-outline-1"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-outline-2"),
+            ev_function_call("call-outline-state", "update_context_state", &update),
+            ev_completed("resp-outline-2"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-outline-3"),
+            ev_function_call(
+                "call-outline-recall",
+                "recall_checkpoint_artifact",
+                &recall_arguments,
+            ),
+            ev_completed("resp-outline-3"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-outline-4"),
+            ev_assistant_message("msg-outline", "done"),
+            ev_completed("resp-outline-4"),
+        ]),
+    ];
+    let mock = mount_sse_sequence(harness.server(), responses).await;
+
+    harness.submit("inspect the saved artifact").await?;
+
+    let output: serde_json::Value = serde_json::from_str(
+        &mock
+            .function_call_output_text("call-outline-recall")
+            .expect("recall tool output"),
+    )?;
+    assert_eq!(output["view"]["mode"], "outline");
+    assert!(
+        !output["view"]["sections"]
+            .as_array()
+            .expect("outline sections")
+            .is_empty()
+    );
+    assert!(output["view"].get("content").is_none());
+    Ok(())
+}
