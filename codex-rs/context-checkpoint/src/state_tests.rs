@@ -113,6 +113,33 @@ fn state_update_rejects_quarter_promotion_before_scheduled_boundary() {
 }
 
 #[test]
+fn state_update_can_clear_active_after_semantic_closure() {
+    let current = ContextStateSnapshot {
+        session: vec![decision("session.fact", "retain this project fact")],
+        active: active(Vec::new()),
+        ..Default::default()
+    };
+    let expected = ContextStateSnapshot {
+        session: current.session.clone(),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        apply_context_state_update(
+            &current,
+            &ContextStateUpdate {
+                active: ActiveContextState::default(),
+                session_upserts: Vec::new(),
+                removals: Vec::new(),
+                quarter_promotions: Vec::new(),
+            },
+            CheckpointGenerationId::new(2),
+        ),
+        Ok(expected)
+    );
+}
+
+#[test]
 fn state_removal_requires_a_retained_superseding_entry() {
     let current = ContextStateSnapshot {
         session: vec![decision("compression.policy.v1", "retain task summaries")],

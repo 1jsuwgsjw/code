@@ -61,15 +61,6 @@ pub(crate) fn validate_tool_group_settlements(
             }
         }
 
-        if group.requires_recall
-            && matches!(settlement.disposition, ToolGroupDisposition::ArchiveOnly)
-        {
-            return Err(CheckpointError::InvalidRequest(format!(
-                "tool group {} requires recall and cannot be settled as archiveOnly",
-                group.group_id
-            )));
-        }
-
         match settlement.disposition {
             ToolGroupDisposition::Promote if settlement.state_keys.is_empty() => {
                 return Err(CheckpointError::InvalidRequest(format!(

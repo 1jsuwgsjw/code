@@ -220,6 +220,15 @@ fn append_active_state(lines: &mut Vec<String>, record: &TurnRecord, artifacts: 
 }
 
 fn append_legacy_state(lines: &mut Vec<String>, record: &TurnRecord, artifacts: &[&ArtifactId]) {
+    let has_legacy_payload = !record.summary.is_empty()
+        || !record.changes.is_empty()
+        || !record.validation.is_empty()
+        || !record.decisions.is_empty()
+        || !record.open_items.is_empty();
+    if !record.state.is_empty() && !has_legacy_payload {
+        return;
+    }
+
     if !record.summary.is_empty() {
         push_section(lines, "Summary");
         append_text(lines, &record.summary, 2);

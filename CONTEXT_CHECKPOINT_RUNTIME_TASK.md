@@ -246,7 +246,8 @@ memory/artifacts/S001/T018/TG01/call-31.log
 
 - Recall order is TurnRecord, then ToolGroup excerpt, then full Artifact.
 - Unresolved errors, unique evidence, and content still requiring line-by-line analysis are marked
-  `requiresRecall` and cannot be discarded from the active reasoning set.
+  `requiresRecall`. Their immutable Artifact and direct recall bridge must survive, but the raw result
+  may leave the active prompt once effective knowledge or the unresolved question is retained separately.
 - User decisions, failure causes, validation conclusions, effective source knowledge, and explicit
   source coverage are mandatory when they exist. Compression never creates or selects a next action.
 - A missing artifact or hash mismatch marks dependent summaries untrusted; Runtime never fills the
@@ -377,6 +378,29 @@ projection changes model-visible recovery cost, not evidence retention.
   context. Each retained fact stays adjacent to its evidence and source status.
 - Long-running continuity comes from merging still-valid knowledge forward through the layers, not from
   stacking summaries of summaries in the prompt.
+
+### Normal-Task Smoke Finding And Corrected Settlement Rules
+
+A normal pricing repair smoke task exposed a rule conflict rather than an evidence-retention failure.
+The task completed correctly, but four checkpoint generations promoted tool discovery, task-anchor
+bookkeeping, taskctl command shape, and lifecycle narration. The latest view contained 17 state items
+and roughly 70 raw Artifact references for a three-test repair.
+
+The causes and corrected rules are:
+
+- `requiresRecall` records that an immutable result must remain selectively recoverable. It does not
+  mean the result is durable project knowledge and no longer forbids `archiveOnly`.
+- `archiveOnly` removes process history from the model prompt while Runtime retains and verifies its
+  Artifact. A truncated result or tool error alone never justifies a fabricated state entry.
+- Checkpointing is not routine post-tool bookkeeping. The model calls `update_context_state` only when
+  a semantic work stage closes, context pressure requires settlement, or the user explicitly requests
+  it. Every selected ToolGroup is settled, but every ToolGroup is not settled immediately.
+- Active contains unfinished work only. Completed reusable facts move to Session; an empty Active state
+  clears a closed stage instead of preserving `task_completed`, task lifecycle, or a synthetic next step.
+- Modern structured records do not render the legacy top-level evidence catalog. Artifact evidence stays
+  immutable outside the prompt and appears model-side only when adjacent to retained semantic state.
+- Tool-schema `artifactId` is accepted while legacy persisted `artifact_id` remains readable, preventing
+  model-generated evidence from failing at the serde boundary.
 
 ### Compression Philosophy: Three Checks And One Immutable History
 
@@ -862,8 +886,9 @@ not become a new availability dependency for ordinary Codex work.
 - A later sampling step receives a new group ID.
 - Runtime does not infer the semantic purpose. `update_context_state` supplies the meaning and may settle
   one or more contiguous completed groups.
-- Groups with in-flight calls, unresolved unique evidence, or `requiresRecall=true` cannot be
-  removed from the active tail.
+- Groups with in-flight calls cannot be removed from the active tail. A settled `requiresRecall=true`
+  group may be archived after Runtime has persisted its Artifact and effective knowledge or unresolved
+  questions have been retained separately when they exist.
 
 This gives Runtime mechanical boundaries while preserving the model's responsibility for semantic
 stage completion.

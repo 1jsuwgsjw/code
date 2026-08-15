@@ -72,7 +72,7 @@ fn archive_only_rejects_hidden_durable_knowledge() {
 }
 
 #[test]
-fn archive_only_rejects_groups_that_require_recall() {
+fn archive_only_allows_groups_that_remain_externally_recallable() {
     let mut group = group();
     group.requires_recall = true;
     let settlement = ToolGroupSettlement {
@@ -84,8 +84,6 @@ fn archive_only_rejects_groups_that_require_recall() {
 
     assert_eq!(
         validate_tool_group_settlements(&[&group], &[settlement], &state()),
-        Err(CheckpointError::InvalidRequest(
-            "tool group TG000001 requires recall and cannot be settled as archiveOnly".to_string()
-        ))
+        Ok(())
     );
 }

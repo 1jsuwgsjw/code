@@ -215,6 +215,9 @@ pub(crate) fn update_evidence(update: &ContextStateUpdate) -> Vec<EvidenceRef> {
 }
 
 fn validate_active_state(active: &ActiveContextState) -> Result<(), CheckpointError> {
+    if active == &ActiveContextState::default() {
+        return Ok(());
+    }
     validate_required_text("active.objective", &active.objective, MAX_ACTIVE_TEXT_BYTES)?;
     validate_entries("active.entries", &active.entries, MAX_ACTIVE_ENTRIES)?;
     validate_text_list("active.constraints", &active.constraints)?;

@@ -335,7 +335,10 @@ fn update_context_state_spec() -> ToolSpec {
         BTreeMap::from([
             (
                 "objective".to_string(),
-                JsonSchema::string(Some("Current user-visible objective.".to_string())),
+                JsonSchema::string(Some(
+                    "Current unfinished user-visible objective. Use an empty string only with an otherwise empty Active object to clear Active after semantic closure."
+                        .to_string(),
+                )),
             ),
             (
                 "entries".to_string(),
@@ -399,7 +402,10 @@ fn update_context_state_spec() -> ToolSpec {
                 "sessionUpserts".to_string(),
                 JsonSchema::array(
                     state_entry,
-                    Some("Reusable session knowledge to insert or replace by key.".to_string()),
+                    Some(
+                        "Reusable project knowledge to insert or replace by key. Put completed, verified facts here instead of keeping them in Active. Never store tool usage, checkpoint bookkeeping, task lifecycle narration, or facts already supplied by higher-priority instructions."
+                            .to_string(),
+                    ),
                 ),
             ),
             (
@@ -437,7 +443,7 @@ fn update_context_state_spec() -> ToolSpec {
                         serde_json::Value::String("archiveOnly".to_string()),
                     ],
                     Some(
-                        "promote retains effective knowledge, keepOpen retains unresolved information, and archiveOnly confirms the group was process noise."
+                        "promote links the group to effective state, keepOpen links it to unresolved information, and archiveOnly removes process history from the prompt while immutable artifacts remain externally recallable. Truncation or a tool error alone does not require promotion."
                             .to_string(),
                     ),
                 ),
@@ -461,14 +467,16 @@ fn update_context_state_spec() -> ToolSpec {
     let properties = BTreeMap::from([
         (
             "completedToolGroups".to_string(),
-            string_array("Contiguous settled ToolGroup ids whose raw history can be replaced."),
+            string_array(
+                "A contiguous settled ToolGroup prefix selected only when a semantic work stage has closed, context pressure requires compaction, or the user explicitly requested a checkpoint. Do not checkpoint merely because tools were called.",
+            ),
         ),
         (
             "toolGroupSettlements".to_string(),
             JsonSchema::array(
                 tool_group_settlement,
                 Some(
-                    "Exactly one ordered semantic settlement for each completed ToolGroup."
+                    "Exactly one ordered semantic settlement for each selected ToolGroup. Archive process noise instead of inventing state entries to justify compression."
                         .to_string(),
                 ),
             ),
@@ -477,7 +485,7 @@ fn update_context_state_spec() -> ToolSpec {
     ]);
     ToolSpec::Function(ResponsesApiTool {
         name: "update_context_state".to_string(),
-        description: "Replace completed tool history with current effective knowledge, unresolved information, source coverage, and direct evidence bridges. Compression is not task planning: never choose a next action. Settle every completed ToolGroup as promote, keepOpen, or archiveOnly; preserve reusable facts in state and archive only process noise."
+        description: "Create a checkpoint only at semantic stage closure, under context pressure, or on explicit user request; never use it as routine bookkeeping after tool calls. Replace selected completed tool history with current effective knowledge, unresolved information, source coverage, and direct evidence bridges. Compression is not task planning and never chooses a next action. Keep only unfinished work in Active, move completed reusable facts to Session, clear Active when no work remains, and archive tool usage, task lifecycle narration, checkpoint bookkeeping, and other process noise even when its immutable artifacts remain recallable."
             .to_string(),
         output_schema: None,
         strict: false,

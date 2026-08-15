@@ -101,9 +101,16 @@ pub struct ToolGroupSettlement {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum EvidenceRef {
-    Artifact { artifact_id: ArtifactId },
-    WorkspacePath { path: String },
-    Symbol { value: String },
+    Artifact {
+        #[serde(rename = "artifactId", alias = "artifact_id")]
+        artifact_id: ArtifactId,
+    },
+    WorkspacePath {
+        path: String,
+    },
+    Symbol {
+        value: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -57,12 +57,12 @@ fn invocation(call_id: &str) -> ToolInvocationRecord {
     }
 }
 
-fn successful_result(value: &str) -> ToolResultRecord {
+fn successful_result(value: &str, truncation: TruncationProvenance) -> ToolResultRecord {
     ToolResultRecord {
         media_type: "text/plain".to_string(),
         payload: value.as_bytes().to_vec(),
         outcome: ToolCallOutcome::Success,
-        truncation: TruncationProvenance::Complete,
+        truncation,
     }
 }
 
@@ -82,13 +82,14 @@ async fn record_group(
     call_id: &str,
     history_start: usize,
     history_end: usize,
+    truncation: TruncationProvenance,
 ) -> ToolCallRecord {
     runtime
         .prepare_request("turn-1", history_start, usage(), 2_000)
         .await
         .expect("prepare sampling request");
     let ArtifactCaptureOutcome::Recorded(record) = runtime
-        .record_tool_result(invocation(call_id), successful_result(call_id))
+        .record_tool_result(invocation(call_id), successful_result(call_id, truncation))
         .await
     else {
         panic!("tool artifact capture degraded");
@@ -103,8 +104,8 @@ async fn record_group(
 #[tokio::test]
 async fn summary_must_select_the_contiguous_settled_prefix() {
     let (_directory, runtime) = runtime().await;
-    let first = record_group(&runtime, "call-1", 0, 2).await;
-    let second = record_group(&runtime, "call-2", 2, 4).await;
+    let first = record_group(&runtime, "call-1", 0, 2, TruncationProvenance::Complete).await;
+    let second = record_group(&runtime, "call-2", 2, 4, TruncationProvenance::Complete).await;
 
     let error = runtime
         .prepare_context_state(state_request(
@@ -120,9 +121,38 @@ async fn summary_must_select_the_contiguous_settled_prefix() {
 }
 
 #[tokio::test]
+async fn archive_only_keeps_truncated_artifacts_recallable() {
+    let (_directory, runtime) = runtime().await;
+    let call = record_group(
+        &runtime,
+        "call-1",
+        0,
+        2,
+        TruncationProvenance::ModelFacingFallback,
+    )
+    .await;
+
+    let pending = runtime
+        .prepare_context_state(state_request(
+            vec![call.group_id],
+            "retain effective knowledge only",
+            "the archived output remains selectively recallable",
+        ))
+        .await
+        .expect("truncated process output should archive without forced promotion");
+
+    assert_eq!(
+        pending.record.evidence,
+        vec![crate::EvidenceRef::Artifact {
+            artifact_id: call.output.artifact_id,
+        }]
+    );
+}
+
+#[tokio::test]
 async fn pending_checkpoint_survives_reload_and_installation() {
     let (directory, runtime) = runtime().await;
-    let call = record_group(&runtime, "call-1", 1, 3).await;
+    let call = record_group(&runtime, "call-1", 1, 3, TruncationProvenance::Complete).await;
     let pending = runtime
         .prepare_context_state(state_request(
             vec![call.group_id],
@@ -181,7 +211,10 @@ async fn recall_is_bounded_and_hash_verified() {
         .await
         .expect("prepare sampling request");
     let ArtifactCaptureOutcome::Recorded(call) = runtime
-        .record_tool_result(invocation("call-1"), successful_result("full output"))
+        .record_tool_result(
+            invocation("call-1"),
+            successful_result("full output", TruncationProvenance::Complete),
+        )
         .await
     else {
         panic!("tool artifact capture degraded");
