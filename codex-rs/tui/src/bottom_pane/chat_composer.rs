@@ -252,13 +252,13 @@ use self::slash_input::SubmissionValidation;
 use crate::app_event::AppEvent;
 use crate::app_event::ConnectorsSnapshot;
 use crate::app_event_sender::AppEventSender;
-use crate::project_agent_workbench::ProjectAgentWorkbenchAction;
 use crate::bottom_pane::LocalImageAttachment;
 use crate::bottom_pane::MentionBinding;
 use crate::bottom_pane::textarea::TextArea;
 use crate::clipboard_paste::normalize_pasted_path;
 use crate::clipboard_paste::pasted_image_format;
 use crate::history_cell;
+use crate::project_agent_workbench::ProjectAgentWorkbenchAction;
 use crate::skills_helpers::skill_display_name;
 use crate::tui::FrameRequester;
 use crate::ui_consts::LIVE_PREFIX_COLS;
@@ -7585,7 +7585,10 @@ mod tests {
         assert!(matches!(result, InputResult::None));
         assert_eq!(composer.draft.textarea.text(), "");
         loop {
-            match rx.try_recv().expect("expected project AGENT workbench event") {
+            match rx
+                .try_recv()
+                .expect("expected project AGENT workbench event")
+            {
                 AppEvent::ProjectAgentWorkbench { thread_id, action } => {
                     assert_eq!(thread_id, root_thread_id);
                     assert_eq!(

@@ -265,22 +265,19 @@ impl Renderable for StatusIndicatorWidget {
         if !spans.is_empty() {
             spans.push(" ".into());
         }
+        spans.push(format!("({pretty_elapsed}").dim());
+        if let Some(message) = &self.inline_message {
+            spans.push(" · ".dim());
+            spans.push(message.clone().dim());
+        }
         if self.show_interrupt_hint
             && let Some(interrupt_binding) = self.interrupt_binding
         {
-            spans.extend(vec![
-                format!("({pretty_elapsed} • ").dim(),
-                interrupt_binding.into(),
-                " to interrupt)".dim(),
-            ]);
+            spans.push(" • ".dim());
+            spans.push(interrupt_binding.into());
+            spans.push(" to interrupt)".dim());
         } else {
-            spans.push(format!("({pretty_elapsed})").dim());
-        }
-        if let Some(message) = &self.inline_message {
-            // Keep optional context after elapsed/interrupt text so that core
-            // interrupt affordances stay in a fixed visual location.
-            spans.push(" · ".dim());
-            spans.push(message.clone().dim());
+            spans.push(")".dim());
         }
 
         let mut lines = Vec::new();
@@ -348,14 +345,16 @@ mod tests {
     fn renders_truncated() {
         let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
         let tx = AppEventSender::new(tx_raw);
-        let w = StatusIndicatorWidget::new(
+        let mut w = StatusIndicatorWidget::new(
             tx,
             crate::tui::FrameRequester::test_dummy(),
             /*animations_enabled*/ true,
         );
 
+        w.update_inline_message(Some("reading files".to_string()));
+
         // Render into a fixed-size test terminal and snapshot the backend.
-        let mut terminal = Terminal::new(TestBackend::new(20, 2)).expect("terminal");
+        let mut terminal = Terminal::new(TestBackend::new(30, 2)).expect("terminal");
         terminal
             .draw(|f| w.render(f.area(), f.buffer_mut()))
             .expect("draw");

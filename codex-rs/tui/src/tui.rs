@@ -98,11 +98,13 @@ impl Drop for Tui {
 mod tests {
     use std::io::Write as _;
 
+    use super::Tui;
     use super::clear_for_viewport_change;
     use super::should_emit_notification;
     use crate::custom_terminal::Terminal as CustomTerminal;
     use crate::test_backend::VT100Backend;
     use codex_config::types::NotificationCondition;
+    use pretty_assertions::assert_eq;
     use ratatui::layout::Position;
     use ratatui::layout::Rect;
 
@@ -128,6 +130,60 @@ mod tests {
             NotificationCondition::Unfocused,
             /*terminal_focused*/ false
         ));
+    }
+
+    #[test]
+    fn resize_reflow_keeps_bottom_aligned_viewport_at_screen_bottom() {
+        let width = 12;
+        let screen_height = 10;
+        let backend = VT100Backend::new(width, screen_height);
+        let mut terminal =
+            CustomTerminal::with_options_and_cursor_position(backend, Position { x: 0, y: 1 })
+                .expect("terminal");
+        terminal.set_viewport_area(Rect {
+            x: 0,
+            y: 4,
+            width,
+            height: 6,
+        });
+
+        let short_height = 4;
+        Tui::update_inline_viewport_for_resize_reflow(&mut terminal, short_height)
+            .expect("shrink viewport");
+        assert_eq!(
+            terminal.viewport_area,
+            Rect {
+                x: 0,
+                y: 6,
+                width,
+                height: short_height,
+            }
+        );
+
+        let tall_height = 6;
+        Tui::update_inline_viewport_for_resize_reflow(&mut terminal, tall_height)
+            .expect("grow viewport");
+        assert_eq!(
+            terminal.viewport_area,
+            Rect {
+                x: 0,
+                y: 4,
+                width,
+                height: tall_height,
+            }
+        );
+
+        Tui::update_inline_viewport_for_resize_reflow(&mut terminal, short_height)
+            .expect("shrink viewport again");
+        assert_eq!(
+            terminal.viewport_area,
+            Rect {
+                x: 0,
+                y: 6,
+                width,
+                height: short_height,
+            }
+        );
     }
 
     #[test]
@@ -812,13 +868,15 @@ impl Tui {
     /// Unlike the legacy draw path, this path does not scroll rows above the viewport when the
     /// terminal shrinks. Resize reflow owns rebuilding those rows from transcript source, so
     /// scrolling here would move the viewport once and then replay history into the wrong row.
-    fn update_inline_viewport_for_resize_reflow(
-        terminal: &mut Terminal,
+    fn update_inline_viewport_for_resize_reflow<B>(
+        terminal: &mut CustomTerminal<B>,
         height: u16,
-    ) -> Result<bool> {
+    ) -> Result<bool>
+    where
+        B: Backend + Write,
+    {
         let size = terminal.size()?;
         let terminal_height_shrank = size.height < terminal.last_known_screen_size.height;
-        let terminal_height_grew = size.height > terminal.last_known_screen_size.height;
         let viewport_was_bottom_aligned =
             terminal.viewport_area.bottom() == terminal.last_known_screen_size.height;
         let previous_area = terminal.viewport_area;
@@ -836,7 +894,7 @@ impl Tui {
                     .scroll_region_up(0..area.top(), scroll_by)?;
             }
             area.y = size.height - area.height;
-        } else if terminal_height_grew && viewport_was_bottom_aligned {
+        } else if viewport_was_bottom_aligned {
             area.y = size.height - area.height;
         }
 

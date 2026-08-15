@@ -1,10 +1,10 @@
 use codex_core_skills::model::SkillMetadata;
 use codex_plugin::PluginCapabilitySummary;
 
-use crate::skills_helpers::skill_description;
-use crate::skills_helpers::skill_display_name;
 use crate::project_agent_workbench::ProjectAgentMentionCatalog;
 use crate::project_agent_workbench::ProjectAgentTaskMention;
+use crate::skills_helpers::skill_description;
+use crate::skills_helpers::skill_display_name;
 
 use super::candidate::Candidate;
 use super::candidate::MentionType;
@@ -325,11 +325,8 @@ mod tests {
             }],
             recent_tasks: vec![task.clone()],
         };
-        let candidates = build_search_catalog(
-            /*skills*/ None,
-            /*plugins*/ None,
-            Some(&catalog),
-        );
+        let candidates =
+            build_search_catalog(/*skills*/ None, /*plugins*/ None, Some(&catalog));
 
         assert_eq!(
             candidates

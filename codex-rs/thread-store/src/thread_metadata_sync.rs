@@ -507,6 +507,7 @@ mod tests {
         let item = RolloutItem::Compacted(CompactedItem {
             message: "compacted".to_string(),
             replacement_history: None,
+            checkpoint: None,
             window_number: None,
             first_window_id: None,
             previous_window_id: None,
