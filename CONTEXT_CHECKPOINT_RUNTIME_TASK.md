@@ -348,6 +348,35 @@ projection changes model-visible recovery cost, not evidence retention.
 - Hash verification remains mandatory before outline, line, or search results are produced. These
   views reduce model-context cost; they do not weaken immutable Artifact evidence.
 
+### Compression Philosophy: Three Checks And One Immutable History
+
+Compression is a projection operation, not a rewrite of history and not a narrative of actions the
+model performed. Before settling an item, the model and Runtime apply three checks:
+
+1. **Validity:** whether the fact, constraint, decision, question, or next action is still effective,
+   completed, invalidated, or superseded.
+2. **Provenance:** which user instruction, source revision, tool evidence, or earlier state entry owns
+   it, and which later record explicitly supersedes it.
+3. **Dependency:** whether future reasoning can safely proceed without the item. Important unresolved
+   questions, failure causes, and validation gaps remain active rather than disappearing for lack of
+   a confirmed answer.
+
+One history remains immutable: user decisions, externally effective actions, checkpoint ancestry,
+and raw Artifact evidence are append-only. Compression may remove them from the active model view but
+must never rewrite or physically delete them. A correction or revocation is another record linked to
+the earlier node.
+
+Policy consequences:
+
+- Bare `forgetKeys` is insufficient for protected rules and decisions. Forgetting requires an
+  explicit user revocation, a `supersededBy` reference, or verified source invalidation.
+- Active objectives and next actions require lifecycle state so completed actions do not remain as
+  stale instructions in the next checkpoint.
+- Artifact entries require a semantic title, source/tool identity, size, and recall hint in addition
+  to their stable reference and integrity hash.
+- Before freezing a checkpoint, the Runtime should expose a bounded diff: retained, archived,
+  superseded, and rejected removals, including the evidence for every protected-state transition.
+
 ### TUI Observability And History
 
 - Normal conversation shows concise lifecycle events for collecting, validating, preparing,
