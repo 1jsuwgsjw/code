@@ -15,6 +15,7 @@ fn renders_bounded_ephemeral_memory_status() {
         context_usage_basis_points: 8_512,
         usage_source: UsageSource::Provider,
         tool_result_share_basis_points: 2_050,
+        state_review_required: true,
         open_groups: 1,
         settled_groups: 2,
         settleable_group_ids: vec![ToolGroupId::new(3), ToolGroupId::new(4)],
@@ -34,6 +35,7 @@ last_checkpoint=none\n\
              pressure=Required checkpoint_required=true tool=update_context_state recall=recall_checkpoint_artifact\n\
              policy=checkpoint_at_semantic_closure_or_pressure;retain_effective_knowledge+uncertainty;archive_process_even_when_recallable;never_promote_tool_usage_or_bookkeeping;no_next_action;settle_each_selected_group\n\
              active_state=ephemeral;reconcile_with_latest_user_intent;clear_or_supersede_stale_active_on_goal_change_or_completion;do_not_narrate_stale_checkpoint_state\n\
+             state_review_required=true state_review_tool=update_context_state dispositions=continue|replace|clear;review_before_final_response\n\
 </MEMORY_STATUS>"
     );
 }

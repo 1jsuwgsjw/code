@@ -139,16 +139,44 @@ pub struct TurnRecord {
     pub open_items: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub correction_of: Option<TurnRecordId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_transition: Option<ActiveStateTransition>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ActiveStateDisposition {
+    Continue,
+    Replace,
+    Clear,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveStateTransition {
+    pub disposition: ActiveStateDisposition,
+    pub previous_objective: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_artifact: Option<ArtifactRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateContextStateRequest {
+    pub active_disposition: ActiveStateDisposition,
     #[serde(default)]
     pub completed_tool_groups: Vec<ToolGroupId>,
     #[serde(default)]
     pub tool_group_settlements: Vec<ToolGroupSettlement>,
+    #[serde(default)]
     pub state: ContextStateUpdate,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StateReviewOutcome {
+    Continued,
+    Committed(TurnRecord),
+    Pending(PendingCheckpoint),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,6 +237,7 @@ pub struct MemoryStatusSnapshot {
     pub context_usage_basis_points: u16,
     pub usage_source: UsageSource,
     pub tool_result_share_basis_points: u16,
+    pub state_review_required: bool,
     pub open_groups: usize,
     pub settled_groups: usize,
     pub settleable_group_ids: Vec<ToolGroupId>,

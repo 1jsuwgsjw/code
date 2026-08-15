@@ -15,7 +15,11 @@ fn checkpoint_tool_specs_have_stable_names_and_required_fields() {
     let update_schema = serde_json::to_value(update.parameters).expect("serialize update schema");
     assert_eq!(
         update_schema["required"],
-        serde_json::json!(["completedToolGroups", "toolGroupSettlements", "state"])
+        serde_json::json!(["activeDisposition"])
+    );
+    assert_eq!(
+        update_schema["properties"]["activeDisposition"]["enum"],
+        serde_json::json!(["continue", "replace", "clear"])
     );
     let recall_schema = serde_json::to_value(recall.parameters).expect("serialize recall schema");
     assert_eq!(recall_schema["required"], serde_json::Value::Null);
@@ -25,6 +29,7 @@ fn checkpoint_tool_specs_have_stable_names_and_required_fields() {
 #[test]
 fn update_context_state_accepts_artifact_evidence_from_its_schema() {
     let request: UpdateContextStateRequest = serde_json::from_value(serde_json::json!({
+        "activeDisposition": "replace",
         "completedToolGroups": [],
         "toolGroupSettlements": [],
         "state": {

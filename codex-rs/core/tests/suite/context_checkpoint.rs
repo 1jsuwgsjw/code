@@ -23,6 +23,7 @@ fn update_context_state_arguments(completed_groups: &[&str], objective: &str) ->
         })
         .collect::<Vec<_>>();
     serde_json::to_string(&json!({
+        "activeDisposition": "replace",
         "completedToolGroups": completed_groups,
         "toolGroupSettlements": tool_group_settlements,
         "state": {
@@ -100,9 +101,73 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn final_response_triggers_required_state_review_pass() -> Result<()> {
+    let harness = TestCodexHarness::with_builder(test_codex().with_model("gpt-5.4")).await?;
+    let shell_arguments = serde_json::to_string(&json!({ "command": "echo checkpoint" }))?;
+    let continue_arguments = serde_json::to_string(&json!({ "activeDisposition": "continue" }))?;
+    let responses = vec![
+        sse(vec![
+            ev_response_created("resp-review-1"),
+            ev_function_call("call-review-shell", "shell_command", &shell_arguments),
+            ev_completed("resp-review-1"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-review-2"),
+            ev_assistant_message("msg-premature", "premature final response"),
+            ev_completed("resp-review-2"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-review-3"),
+            ev_function_call(
+                "call-state-review",
+                "update_context_state",
+                &continue_arguments,
+            ),
+            ev_completed("resp-review-3"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-review-4"),
+            ev_assistant_message("msg-reviewed", "reviewed final response"),
+            ev_completed("resp-review-4"),
+        ]),
+    ];
+    let mock = mount_sse_sequence(harness.server(), responses).await;
+
+    harness.submit("run a tool and finish").await?;
+
+    let requests = mock.requests();
+    assert_eq!(requests.len(), 4);
+    let forced_request = requests[2].body_json();
+    assert!(
+        forced_request
+            .to_string()
+            .contains("state_review_required=true")
+    );
+    let tool_names = forced_request["tools"]
+        .as_array()
+        .expect("forced review request tools")
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect::<Vec<_>>();
+    assert!(tool_names.contains(&"update_context_state"));
+    assert!(tool_names.contains(&"recall_checkpoint_artifact"));
+    assert!(!tool_names.contains(&"shell_command"));
+    let output: serde_json::Value = serde_json::from_str(
+        &mock
+            .function_call_output_text("call-state-review")
+            .expect("state review tool output"),
+    )?;
+    assert_eq!(output["status"], "reviewed");
+    assert_eq!(output["activeDisposition"], "continue");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn checkpoint_artifact_recall_defaults_to_a_structured_outline() -> Result<()> {
     let harness = TestCodexHarness::with_builder(test_codex().with_model("gpt-5.4")).await?;
     let update = serde_json::to_string(&json!({
+        "activeDisposition": "replace",
         "completedToolGroups": ["TG000001"],
         "toolGroupSettlements": [{
             "groupId": "TG000001",

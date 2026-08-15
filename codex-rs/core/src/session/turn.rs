@@ -127,6 +127,8 @@ use tracing::trace;
 use tracing::trace_span;
 use tracing::warn;
 
+const MAX_STATE_REVIEW_RETRIES: u8 = 2;
+
 /// Takes initial turn input and runs a loop where, at each sampling request,
 /// the model replies with either:
 ///
@@ -211,6 +213,7 @@ pub(crate) async fn run_turn(
 
     let mut last_agent_message: Option<String> = None;
     let mut stop_hook_active = false;
+    let mut state_review_retries = 0_u8;
     // Although from the perspective of codex.rs, TurnDiffTracker has the lifecycle of a Task which contains
     // many turns, from the perspective of the user, it is a single turn.
     let turn_diff_tracker = Arc::new(tokio::sync::Mutex::new(
@@ -444,6 +447,27 @@ pub(crate) async fn run_turn(
                     .await
                     {
                         return Ok(None);
+                    }
+                    let turn_id = turn_context.sub_id.to_string();
+                    if sess
+                        .services
+                        .context_checkpoint
+                        .state_review_required(&turn_id)
+                        .await
+                    {
+                        if state_review_retries < MAX_STATE_REVIEW_RETRIES {
+                            state_review_retries = state_review_retries.saturating_add(1);
+                            sess.services
+                                .context_checkpoint
+                                .enforce_state_review(&turn_id)
+                                .await;
+                            continue;
+                        }
+                        warn!(
+                            turn_id,
+                            retries = state_review_retries,
+                            "model did not complete the required context-state review; retaining the requirement for a later turn"
+                        );
                     }
                     break;
                 }
@@ -1455,7 +1479,7 @@ pub(crate) async fn built_tools(
         == codex_context_checkpoint::CheckpointToolPolicy::CheckpointOnly
     {
         tool_visibility_policy.intersect(codex_extension_api::ToolVisibilityPolicy::allow_only([
-            ToolName::plain("update_summary"),
+            ToolName::plain("update_context_state"),
             ToolName::plain("recall_checkpoint_artifact"),
         ]));
     }

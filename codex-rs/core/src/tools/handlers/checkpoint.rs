@@ -44,24 +44,40 @@ impl ToolExecutor<ToolInvocation> for UpdateContextStateHandler {
                         "failed to parse update_context_state arguments: {error}"
                     ))
                 })?;
-            let pending = invocation
+            let turn_id = invocation.turn.sub_id.to_string();
+            let outcome = invocation
                 .session
                 .services
                 .context_checkpoint
-                .prepare_context_state(request, invocation.turn.cwd.as_path())
+                .review_context_state(&turn_id, request, invocation.turn.cwd.as_path())
                 .await
                 .map_err(|error| FunctionCallError::RespondToModel(error.to_string()))?;
-            let output = json!({
-                "status": "pending",
-                "checkpointRef": codex_context_checkpoint::checkpoint_reference(
-                    pending.record.generation_id,
-                    pending.record.record_id,
-                ),
-                "recordId": pending.record.record_id.to_string(),
-                "generationId": pending.record.generation_id.to_string(),
-                "historyStart": pending.history_start,
-                "historyEnd": pending.history_end,
-            });
+            let output = match outcome {
+                codex_context_checkpoint::StateReviewOutcome::Continued => json!({
+                    "status": "reviewed",
+                    "activeDisposition": "continue",
+                }),
+                codex_context_checkpoint::StateReviewOutcome::Committed(record) => json!({
+                    "status": "committed",
+                    "checkpointRef": codex_context_checkpoint::checkpoint_reference(
+                        record.generation_id,
+                        record.record_id,
+                    ),
+                    "recordId": record.record_id.to_string(),
+                    "generationId": record.generation_id.to_string(),
+                }),
+                codex_context_checkpoint::StateReviewOutcome::Pending(pending) => json!({
+                    "status": "pending",
+                    "checkpointRef": codex_context_checkpoint::checkpoint_reference(
+                        pending.record.generation_id,
+                        pending.record.record_id,
+                    ),
+                    "recordId": pending.record.record_id.to_string(),
+                    "generationId": pending.record.generation_id.to_string(),
+                    "historyStart": pending.history_start,
+                    "historyEnd": pending.history_end,
+                }),
+            };
             Ok(boxed_tool_output(FunctionToolOutput::from_text(
                 output.to_string(),
                 Some(true),
@@ -469,6 +485,16 @@ fn update_context_state_spec() -> ToolSpec {
     );
     let properties = BTreeMap::from([
         (
+            "activeDisposition".to_string(),
+            JsonSchema::string_enum(
+                vec![json!("continue"), json!("replace"), json!("clear")],
+                Some(
+                    "Required turn-end Active-state decision. continue confirms the same unfinished objective and must not mutate state or settle groups; replace archives the previous Active state and supplies its replacement; clear archives the previous Active state and supplies an empty Active state."
+                        .to_string(),
+                ),
+            ),
+        ),
+        (
             "completedToolGroups".to_string(),
             string_array(
                 "A contiguous settled ToolGroup prefix selected only when a semantic work stage has closed, context pressure requires compaction, or the user explicitly requested a checkpoint. Do not checkpoint merely because tools were called.",
@@ -488,18 +514,14 @@ fn update_context_state_spec() -> ToolSpec {
     ]);
     ToolSpec::Function(ResponsesApiTool {
         name: "update_context_state".to_string(),
-        description: "Create a checkpoint only at semantic stage closure, under context pressure, or on explicit user request; never use it as routine bookkeeping after tool calls. Replace selected completed tool history with current effective knowledge, unresolved information, source coverage, and direct evidence bridges. Compression is not task planning and never chooses a next action. Keep only unfinished work in Active, move completed reusable facts to Session, clear Active when no work remains, and archive tool usage, task lifecycle narration, checkpoint bookkeeping, and other process noise even when its immutable artifacts remain recallable. Associate promoted evidence through toolGroupSettlements.stateKeys; Runtime attaches bounded output-artifact references to those entries automatically, so never invent or memorize artifact ids for the selected groups."
+        description: "Review Active state before the final response whenever MEMORY_STATUS reports state_review_required=true. Use activeDisposition=continue when the unfinished objective is unchanged; continue performs no compaction and must omit state changes and group settlement. Use replace or clear when the old Active state has ended or changed; Runtime archives that previous state as immutable recallable history before installing the replacement or empty state. Select completed tool groups only at semantic stage closure, under context pressure, or on explicit user request; never checkpoint merely because tools were called. Compression retains effective knowledge, uncertainty, source coverage, and direct evidence bridges, never chooses a next action, and archives process noise while its immutable artifacts remain selectively recallable."
             .to_string(),
         output_schema: None,
         strict: false,
         defer_loading: None,
         parameters: JsonSchema::object(
             properties,
-            Some(vec![
-                "completedToolGroups".to_string(),
-                "toolGroupSettlements".to_string(),
-                "state".to_string(),
-            ]),
+            Some(vec!["activeDisposition".to_string()]),
             Some(false.into()),
         ),
     })

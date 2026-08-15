@@ -1,3 +1,5 @@
+use crate::ActiveStateDisposition;
+use crate::ActiveStateTransition;
 use crate::ArtifactCaptureFailure;
 use crate::ArtifactCaptureOutcome;
 use crate::ArtifactId;
@@ -18,6 +20,7 @@ use crate::PendingCheckpoint;
 use crate::PreparedCheckpointRequest;
 use crate::RecallRequest;
 use crate::RecallResult;
+use crate::StateReviewOutcome;
 use crate::ToolCallOutcome;
 use crate::ToolCallRecord;
 use crate::ToolGroupId;
@@ -59,6 +62,17 @@ pub(crate) struct RuntimeState {
     pub(crate) degraded_reason: Option<String>,
     pub(crate) manifest_sha256: Option<String>,
     last_tool_policy: CheckpointToolPolicy,
+    last_reviewed_turn_id: Option<String>,
+    review_only_turn_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ActiveStateHistoryArtifact<'a> {
+    disposition: ActiveStateDisposition,
+    previous_active: &'a crate::ActiveContextState,
+    replacement_active: &'a crate::ActiveContextState,
+    completed_tool_groups: &'a [ToolGroupId],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +128,8 @@ impl CheckpointRuntime {
                     degraded_reason: Some(error.to_string()),
                     manifest_sha256: None,
                     last_tool_policy: CheckpointToolPolicy::Normal,
+                    last_reviewed_turn_id: None,
+                    review_only_turn_id: None,
                 }),
                 persist_lock: Mutex::new(()),
             },
@@ -143,6 +159,8 @@ impl CheckpointRuntime {
                 degraded_reason: None,
                 manifest_sha256,
                 last_tool_policy: CheckpointToolPolicy::Normal,
+                last_reviewed_turn_id: None,
+                review_only_turn_id: None,
             }),
             persist_lock: Mutex::new(()),
         };
@@ -161,7 +179,54 @@ impl CheckpointRuntime {
     }
 
     pub async fn tool_policy(&self) -> CheckpointToolPolicy {
-        self.state.lock().await.last_tool_policy
+        let state = self.state.lock().await;
+        if state.review_only_turn_id.is_some() {
+            CheckpointToolPolicy::CheckpointOnly
+        } else {
+            state.last_tool_policy
+        }
+    }
+
+    pub async fn state_review_required(&self, turn_id: &str) -> bool {
+        let state = self.state.lock().await;
+        state_review_required(&state, turn_id)
+    }
+
+    pub async fn enforce_state_review(&self, turn_id: &str) {
+        let mut state = self.state.lock().await;
+        if state_review_required(&state, turn_id) {
+            state.review_only_turn_id = Some(turn_id.to_string());
+        }
+    }
+
+    pub async fn review_context_state(
+        &self,
+        turn_id: &str,
+        request: UpdateContextStateRequest,
+        workspace_root: &Path,
+    ) -> Result<StateReviewOutcome, CheckpointError> {
+        validate_state_review_request(&request)?;
+        let outcome = match request.active_disposition {
+            ActiveStateDisposition::Continue => StateReviewOutcome::Continued,
+            ActiveStateDisposition::Replace | ActiveStateDisposition::Clear
+                if request.completed_tool_groups.is_empty() =>
+            {
+                StateReviewOutcome::Committed(
+                    self.commit_state_revision(request, workspace_root).await?,
+                )
+            }
+            ActiveStateDisposition::Replace | ActiveStateDisposition::Clear => {
+                StateReviewOutcome::Pending(
+                    self.prepare_context_state(request, workspace_root).await?,
+                )
+            }
+        };
+        let mut state = self.state.lock().await;
+        state.last_reviewed_turn_id = Some(turn_id.to_string());
+        if state.review_only_turn_id.as_deref() == Some(turn_id) {
+            state.review_only_turn_id = None;
+        }
+        Ok(outcome)
     }
 
     pub async fn rollout_state(&self) -> CheckpointRolloutState {
@@ -188,6 +253,9 @@ impl CheckpointRuntime {
         let turn_id = turn_id.into();
         {
             let mut state = self.state.lock().await;
+            if state.review_only_turn_id.as_deref() != Some(turn_id.as_str()) {
+                state.review_only_turn_id = None;
+            }
             if let Some(previous) = state.manifest.active_sampling.take()
                 && let Some(group_id) = previous.group_id
             {
@@ -333,6 +401,7 @@ impl CheckpointRuntime {
         request: UpdateContextStateRequest,
         workspace_root: &Path,
     ) -> Result<PendingCheckpoint, CheckpointError> {
+        validate_state_review_request(&request)?;
         let snapshot = {
             let state = self.state.lock().await;
             if let Some(reason) = &state.degraded_reason {
@@ -385,6 +454,14 @@ impl CheckpointRuntime {
             .ok_or_else(|| {
                 CheckpointError::InvalidRequest("selected tool group is still open".to_string())
             })?;
+        let active_transition = self
+            .archive_active_transition(
+                request.active_disposition,
+                &current_state.active,
+                &context_state.active,
+                &request.completed_tool_groups,
+            )
+            .await?;
         let record_id = TurnRecordId::new(snapshot.next_turn_record_id);
         let record = TurnRecord {
             record_id,
@@ -400,6 +477,7 @@ impl CheckpointRuntime {
             decisions: Vec::new(),
             open_items: Vec::new(),
             correction_of: None,
+            active_transition,
         };
         let record_bytes = serde_json::to_vec(&record)
             .map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?;
@@ -426,6 +504,18 @@ impl CheckpointRuntime {
                     "checkpoint state changed while evidence was being verified".to_string(),
                 ));
             }
+            if let Some(artifact) = record
+                .active_transition
+                .as_ref()
+                .and_then(|transition| transition.history_artifact.as_ref())
+                && !state
+                    .manifest
+                    .artifacts
+                    .iter()
+                    .any(|existing| existing.artifact_id == artifact.artifact_id)
+            {
+                state.manifest.artifacts.push(artifact.clone());
+            }
             state.manifest.next_turn_record_id =
                 state.manifest.next_turn_record_id.saturating_add(1);
             state.manifest.turn_records.push(record);
@@ -447,6 +537,131 @@ impl CheckpointRuntime {
             .ok_or(CheckpointError::NoPendingCheckpoint)?;
         pending.manifest_sha256 = manifest_sha256;
         Ok(pending)
+    }
+
+    async fn commit_state_revision(
+        &self,
+        request: UpdateContextStateRequest,
+        workspace_root: &Path,
+    ) -> Result<TurnRecord, CheckpointError> {
+        let snapshot = {
+            let state = self.state.lock().await;
+            if let Some(reason) = &state.degraded_reason {
+                return Err(CheckpointError::Degraded(reason.clone()));
+            }
+            if state.manifest.pending_checkpoint.is_some() {
+                return Err(CheckpointError::InvalidRequest(
+                    "a checkpoint is already pending installation".to_string(),
+                ));
+            }
+            state.manifest.clone()
+        };
+        let mut current_state = snapshot
+            .turn_records
+            .last()
+            .map(|record| record.state.clone())
+            .unwrap_or_default();
+        invalidate_stale_source_facts(&mut current_state, workspace_root).await;
+        let mut context_state =
+            apply_context_state_update(&current_state, &request.state, snapshot.generation_id)?;
+        stamp_source_facts(&mut context_state, workspace_root).await?;
+        let evidence = update_evidence(&request.state);
+        for artifact in referenced_artifacts(&snapshot, &evidence)? {
+            self.store.verify_artifact(&artifact).await?;
+        }
+        let active_transition = self
+            .archive_active_transition(
+                request.active_disposition,
+                &current_state.active,
+                &context_state.active,
+                &request.completed_tool_groups,
+            )
+            .await?;
+        let record = TurnRecord {
+            record_id: TurnRecordId::new(snapshot.next_turn_record_id),
+            generation_id: snapshot.generation_id,
+            completed_groups: Vec::new(),
+            tool_group_settlements: Vec::new(),
+            state_removals: request.state.removals.clone(),
+            state: context_state,
+            summary: String::new(),
+            evidence,
+            changes: Vec::new(),
+            validation: Vec::new(),
+            decisions: Vec::new(),
+            open_items: Vec::new(),
+            correction_of: None,
+            active_transition,
+        };
+        let record_bytes = serde_json::to_vec(&record)
+            .map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?;
+        if record_bytes.len() > MAX_CHECKPOINT_RECORD_BYTES {
+            return Err(CheckpointError::InvalidRequest(format!(
+                "context state revision is {} bytes; maximum is {MAX_CHECKPOINT_RECORD_BYTES}",
+                record_bytes.len()
+            )));
+        }
+        self.store.write_turn_record(&record).await?;
+        {
+            let mut state = self.state.lock().await;
+            if state.manifest.next_turn_record_id != snapshot.next_turn_record_id
+                || state.manifest.pending_checkpoint.is_some()
+            {
+                return Err(CheckpointError::InvalidRequest(
+                    "checkpoint state changed while the revision was being prepared".to_string(),
+                ));
+            }
+            if let Some(artifact) = record
+                .active_transition
+                .as_ref()
+                .and_then(|transition| transition.history_artifact.as_ref())
+                && !state
+                    .manifest
+                    .artifacts
+                    .iter()
+                    .any(|existing| existing.artifact_id == artifact.artifact_id)
+            {
+                state.manifest.artifacts.push(artifact.clone());
+            }
+            state.manifest.next_turn_record_id =
+                state.manifest.next_turn_record_id.saturating_add(1);
+            state.manifest.turn_records.push(record.clone());
+        }
+        if let Err(error) = self.persist().await {
+            self.degrade(error.to_string()).await;
+            return Err(CheckpointError::Storage(format!(
+                "state revision was recorded but its manifest could not be persisted: {error}"
+            )));
+        }
+        Ok(record)
+    }
+
+    async fn archive_active_transition(
+        &self,
+        disposition: ActiveStateDisposition,
+        previous_active: &crate::ActiveContextState,
+        replacement_active: &crate::ActiveContextState,
+        completed_tool_groups: &[ToolGroupId],
+    ) -> Result<Option<ActiveStateTransition>, CheckpointError> {
+        if previous_active == &crate::ActiveContextState::default() {
+            return Ok(None);
+        }
+        let bytes = serde_json::to_vec_pretty(&ActiveStateHistoryArtifact {
+            disposition,
+            previous_active,
+            replacement_active,
+            completed_tool_groups,
+        })
+        .map_err(|error| CheckpointError::InvalidRequest(error.to_string()))?;
+        let history_artifact = self
+            .store
+            .write_artifact("application/vnd.codex.active-state+json", &bytes)
+            .await?;
+        Ok(Some(ActiveStateTransition {
+            disposition,
+            previous_objective: previous_active.objective.clone(),
+            history_artifact: Some(history_artifact),
+        }))
     }
 
     pub async fn take_pending_checkpoint(&self) -> Option<PendingCheckpoint> {
@@ -590,6 +805,13 @@ impl CheckpointRuntime {
         } else {
             CheckpointToolPolicy::Normal
         };
+        let turn_id = state
+            .manifest
+            .active_sampling
+            .as_ref()
+            .map(|sampling| sampling.turn_id.clone())
+            .unwrap_or_default();
+        let state_review_required = state_review_required(&state, &turn_id);
         state.last_tool_policy = tool_policy;
         PreparedCheckpointRequest {
             record: state.manifest.turn_records.last().cloned(),
@@ -601,15 +823,11 @@ impl CheckpointRuntime {
                     .generation_id
                     .get()
                     .is_multiple_of(SESSIONS_PER_QUARTER),
-                turn_id: state
-                    .manifest
-                    .active_sampling
-                    .as_ref()
-                    .map(|sampling| sampling.turn_id.clone())
-                    .unwrap_or_default(),
+                turn_id,
                 context_usage_basis_points: usage_basis_points,
                 usage_source: usage.usage_source,
                 tool_result_share_basis_points: tool_result_share_basis_points.min(10_000),
+                state_review_required,
                 open_groups,
                 settled_groups,
                 settleable_group_ids,
@@ -649,6 +867,59 @@ impl CheckpointRuntime {
             state.degraded_reason = Some(reason);
         }
     }
+}
+
+fn validate_state_review_request(
+    request: &UpdateContextStateRequest,
+) -> Result<(), CheckpointError> {
+    if request.completed_tool_groups.is_empty() && !request.tool_group_settlements.is_empty() {
+        return Err(CheckpointError::InvalidRequest(
+            "toolGroupSettlements require completedToolGroups".to_string(),
+        ));
+    }
+    match request.active_disposition {
+        ActiveStateDisposition::Continue => {
+            if !request.completed_tool_groups.is_empty()
+                || !request.tool_group_settlements.is_empty()
+                || request.state != crate::ContextStateUpdate::default()
+            {
+                return Err(CheckpointError::InvalidRequest(
+                    "continue must not settle groups or mutate context state".to_string(),
+                ));
+            }
+        }
+        ActiveStateDisposition::Replace => {
+            if request.state.active == crate::ActiveContextState::default() {
+                return Err(CheckpointError::InvalidRequest(
+                    "replace requires a non-empty Active state".to_string(),
+                ));
+            }
+        }
+        ActiveStateDisposition::Clear => {
+            if request.state.active != crate::ActiveContextState::default() {
+                return Err(CheckpointError::InvalidRequest(
+                    "clear requires an empty Active state".to_string(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn state_review_required(state: &RuntimeState, turn_id: &str) -> bool {
+    if turn_id.is_empty()
+        || state.degraded_reason.is_some()
+        || state.last_reviewed_turn_id.as_deref() == Some(turn_id)
+    {
+        return false;
+    }
+
+    let has_active = state
+        .manifest
+        .turn_records
+        .last()
+        .is_some_and(|record| record.state.active != crate::ActiveContextState::default());
+    has_active || !settleable_groups(&state.manifest).is_empty()
 }
 
 fn validate_group_selection<'a>(

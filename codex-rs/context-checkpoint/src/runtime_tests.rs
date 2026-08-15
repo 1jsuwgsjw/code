@@ -26,6 +26,7 @@ fn state_request(
         })
         .collect();
     UpdateContextStateRequest {
+        active_disposition: ActiveStateDisposition::Replace,
         completed_tool_groups,
         tool_group_settlements,
         state: ContextStateUpdate {
@@ -41,6 +42,128 @@ fn state_request(
             quarter_promotions: Vec::new(),
         },
     }
+}
+
+#[tokio::test]
+async fn continue_reviews_the_turn_without_creating_a_checkpoint() {
+    let (directory, runtime) = runtime().await;
+    let initial = runtime
+        .review_context_state(
+            "turn-setup",
+            state_request(
+                Vec::new(),
+                "keep investigating",
+                "preserve the known field map",
+            ),
+            directory.path(),
+        )
+        .await
+        .expect("create initial Active state");
+    assert!(matches!(initial, StateReviewOutcome::Committed(_)));
+    assert!(runtime.state_review_required("turn-current").await);
+
+    runtime.enforce_state_review("turn-current").await;
+    assert_eq!(
+        runtime.tool_policy().await,
+        CheckpointToolPolicy::CheckpointOnly
+    );
+    let outcome = runtime
+        .review_context_state(
+            "turn-current",
+            UpdateContextStateRequest {
+                active_disposition: ActiveStateDisposition::Continue,
+                completed_tool_groups: Vec::new(),
+                tool_group_settlements: Vec::new(),
+                state: ContextStateUpdate::default(),
+            },
+            directory.path(),
+        )
+        .await
+        .expect("review unchanged Active state");
+
+    assert_eq!(outcome, StateReviewOutcome::Continued);
+    assert!(!runtime.state_review_required("turn-current").await);
+    assert_eq!(runtime.tool_policy().await, CheckpointToolPolicy::Normal);
+    assert_eq!(
+        runtime.rollout_state().await.last_checkpoint,
+        Some(TurnRecordId::new(1))
+    );
+}
+
+#[tokio::test]
+async fn replace_and_clear_archive_previous_active_state_for_recall() {
+    let (directory, runtime) = runtime().await;
+    runtime
+        .review_context_state(
+            "turn-1",
+            state_request(Vec::new(), "map the old field array", "retain offsets"),
+            directory.path(),
+        )
+        .await
+        .expect("create initial Active state");
+
+    let replaced = runtime
+        .review_context_state(
+            "turn-2",
+            state_request(Vec::new(), "validate the new field array", "compare builds"),
+            directory.path(),
+        )
+        .await
+        .expect("replace Active state");
+    let StateReviewOutcome::Committed(replaced_record) = replaced else {
+        panic!("state-only replacement should commit immediately");
+    };
+    let transition = replaced_record
+        .active_transition
+        .as_ref()
+        .expect("replacement should retain previous Active history");
+    assert_eq!(transition.disposition, ActiveStateDisposition::Replace);
+    assert_eq!(transition.previous_objective, "map the old field array");
+    assert!(transition.history_artifact.is_some());
+    let view = model_checkpoint_view(&replaced_record).expect("render replacement checkpoint");
+    assert!(view.contains("Previous Active"));
+    assert!(view.contains("map the old field array"));
+    assert!(view.contains("history: artifact:TR000002/A001"));
+
+    let recalled = runtime
+        .recall(RecallRequest {
+            locator: ArtifactLocator::Reference("artifact:TR000002/A001".to_string()),
+            selection: crate::ArtifactRecallSelection::Prefix,
+            max_bytes: 4096,
+        })
+        .await
+        .expect("recall replaced Active state");
+    let crate::ArtifactRecallView::Prefix { content, .. } = recalled.view else {
+        panic!("Active history recall should return a prefix view");
+    };
+    assert!(content.contains("map the old field array"));
+    assert!(content.contains("validate the new field array"));
+
+    let cleared = runtime
+        .review_context_state(
+            "turn-3",
+            UpdateContextStateRequest {
+                active_disposition: ActiveStateDisposition::Clear,
+                completed_tool_groups: Vec::new(),
+                tool_group_settlements: Vec::new(),
+                state: ContextStateUpdate::default(),
+            },
+            directory.path(),
+        )
+        .await
+        .expect("clear Active state");
+    let StateReviewOutcome::Committed(cleared_record) = cleared else {
+        panic!("state-only clear should commit immediately");
+    };
+    assert_eq!(cleared_record.state.active, ActiveContextState::default());
+    assert_eq!(
+        cleared_record
+            .active_transition
+            .as_ref()
+            .expect("clear should retain previous Active history")
+            .previous_objective,
+        "validate the new field array"
+    );
 }
 
 fn usage() -> ContextUsageSnapshot {

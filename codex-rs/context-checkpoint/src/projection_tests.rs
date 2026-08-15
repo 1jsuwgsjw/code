@@ -21,6 +21,7 @@ fn pending(start: usize, end: usize) -> PendingCheckpoint {
             decisions: Vec::new(),
             open_items: Vec::new(),
             correction_of: None,
+            active_transition: None,
         },
         history_start: start,
         history_end: end,

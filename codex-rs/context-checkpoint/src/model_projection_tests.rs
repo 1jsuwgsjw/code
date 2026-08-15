@@ -60,6 +60,7 @@ fn projection_uses_semantic_references_and_hides_content_hashes() {
         decisions: Vec::new(),
         open_items: Vec::new(),
         correction_of: None,
+        active_transition: None,
     };
 
     let projected: serde_json::Value =
@@ -135,6 +136,7 @@ fn legacy_summary_projection_preserves_semantics_without_hashes() {
         decisions: Vec::new(),
         open_items: Vec::new(),
         correction_of: None,
+        active_transition: None,
     };
 
     let projected = model_checkpoint_json(&record).expect("projection should serialize");
@@ -178,6 +180,7 @@ fn model_view_materializes_all_memory_horizons_without_replaying_history() {
         decisions: Vec::new(),
         open_items: Vec::new(),
         correction_of: None,
+        active_transition: None,
     };
 
     assert_eq!(

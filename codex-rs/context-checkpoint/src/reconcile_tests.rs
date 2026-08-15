@@ -62,6 +62,7 @@ async fn fork_reconciliation_copies_checkpoint_dependencies() {
         .expect("settle source tool group");
     let pending = source
         .prepare_context_state(UpdateContextStateRequest {
+            active_disposition: ActiveStateDisposition::Replace,
             completed_tool_groups: vec![call.group_id],
             tool_group_settlements: vec![ToolGroupSettlement {
                 group_id: call.group_id,

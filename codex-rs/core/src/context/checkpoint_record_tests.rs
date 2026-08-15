@@ -31,6 +31,7 @@ fn renders_a_bounded_typed_checkpoint_fragment() {
         decisions: Vec::new(),
         open_items: Vec::new(),
         correction_of: None,
+        active_transition: None,
     };
 
     let fragment =

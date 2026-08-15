@@ -23,6 +23,8 @@ struct ModelCheckpoint<'a> {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     session: Vec<ModelStateEntry<'a>>,
     active: ModelActiveState<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    active_transition: Option<ModelActiveTransition<'a>>,
     #[serde(skip_serializing_if = "str::is_empty")]
     summary: &'a str,
     #[serde(skip_serializing_if = "slice_is_empty")]
@@ -51,6 +53,15 @@ struct ModelActiveState<'a> {
     open_questions: &'a [String],
     #[serde(skip_serializing_if = "slice_is_empty")]
     continuity_hints: &'a [String],
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModelActiveTransition<'a> {
+    disposition: crate::ActiveStateDisposition,
+    previous_objective: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    history_artifact: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -84,6 +95,9 @@ pub fn checkpoint_labels(record: &TurnRecord) -> Vec<String> {
     }
     if !record.state.active.continuity_hints.is_empty() {
         labels.insert("continuity");
+    }
+    if record.active_transition.is_some() {
+        labels.insert("active-history");
     }
     if !record.state_removals.is_empty() {
         labels.insert("superseded");
@@ -126,6 +140,13 @@ pub fn model_checkpoint_json(record: &TurnRecord) -> Result<String, CheckpointEr
             open_questions: &record.state.active.open_questions,
             continuity_hints: &record.state.active.continuity_hints,
         },
+        active_transition: record.active_transition.as_ref().map(|transition| {
+            ModelActiveTransition {
+                disposition: transition.disposition,
+                previous_objective: &transition.previous_objective,
+                history_artifact: active_transition_reference(record, &artifacts),
+            }
+        }),
         summary: &record.summary,
         changes: &record.changes,
         validation: &record.validation,
@@ -169,6 +190,7 @@ pub fn model_checkpoint_view(record: &TurnRecord) -> Result<String, CheckpointEr
         &artifacts,
     );
     append_active_state(&mut lines, record, &artifacts);
+    append_active_transition(&mut lines, record, &artifacts);
     append_legacy_state(&mut lines, record, &artifacts);
     append_state_removals(&mut lines, &record.state_removals);
 
@@ -217,6 +239,29 @@ fn append_active_state(lines: &mut Vec<String>, record: &TurnRecord, artifacts: 
     append_named_list(lines, "Constraints", &active.constraints, 2);
     append_named_list(lines, "Open", &active.open_questions, 2);
     append_named_list(lines, "May matter later", &active.continuity_hints, 2);
+}
+
+fn append_active_transition(
+    lines: &mut Vec<String>,
+    record: &TurnRecord,
+    artifacts: &[&ArtifactId],
+) {
+    let Some(transition) = &record.active_transition else {
+        return;
+    };
+    push_section(lines, "Previous Active");
+    let previous_objective = if transition.previous_objective.is_empty() {
+        "(empty)"
+    } else {
+        transition.previous_objective.as_str()
+    };
+    lines.push(format!(
+        "- {:?}: {previous_objective}",
+        transition.disposition
+    ));
+    if let Some(reference) = active_transition_reference(record, artifacts) {
+        lines.push(format!("  history: {reference}"));
+    }
 }
 
 fn append_legacy_state(lines: &mut Vec<String>, record: &TurnRecord, artifacts: &[&ArtifactId]) {
@@ -382,7 +427,28 @@ fn artifact_catalog(record: &TurnRecord) -> Vec<&ArtifactId> {
             artifacts.push(artifact_id);
         }
     }
+    if let Some(artifact) = record
+        .active_transition
+        .as_ref()
+        .and_then(|transition| transition.history_artifact.as_ref())
+        && seen.insert(artifact.artifact_id.clone())
+    {
+        artifacts.push(&artifact.artifact_id);
+    }
     artifacts
+}
+
+fn active_transition_reference(record: &TurnRecord, artifacts: &[&ArtifactId]) -> Option<String> {
+    let artifact_id = &record
+        .active_transition
+        .as_ref()?
+        .history_artifact
+        .as_ref()?
+        .artifact_id;
+    artifacts
+        .iter()
+        .position(|candidate| *candidate == artifact_id)
+        .map(|index| artifact_reference(record.record_id, index))
 }
 
 fn project_entries<'a>(

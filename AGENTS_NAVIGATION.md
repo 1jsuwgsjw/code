@@ -242,7 +242,8 @@ Important variations:
 - Context fragment contracts: `codex-rs/context-fragments/`
 - Durable context checkpointing:
   - design and delivery state: `CONTEXT_CHECKPOINT_RUNTIME_TASK.md`;
-  - storage, pressure, settlement, source-revision invalidation, projection, recall, and recovery:
+  - storage, pressure, settlement, immutable previous-Active history artifacts,
+    source-revision invalidation, projection, recall, and recovery:
     `codex-rs/context-checkpoint/src/`;
   - request/status and checkpoint installation facade:
     `codex-rs/core/src/context_checkpoint.rs`, `codex-rs/core/src/session/turn.rs`;
@@ -261,8 +262,10 @@ Important variations:
     `codex-rs/tui/src/history_cell/context_checkpoint.rs`,
     `codex-rs/tui/src/chatwidget/replay.rs`, `codex-rs/tui/src/thread_transcript.rs`;
   - representative symbols: `CheckpointRuntime`, `CheckpointStore`, `ContextStateSnapshot`,
-    `ToolGroupSettlement`, `StateRemoval`, `ArtifactRecallSelection`, `model_checkpoint_view`, `ContextCheckpointDetails`,
-    `update_context_state`, `recall_checkpoint_artifact`, `reconcile_reconstructed_checkpoint`;
+    `ActiveStateDisposition`, `ActiveStateTransition`, `StateReviewOutcome`,
+    `ToolGroupSettlement`, `StateRemoval`, `ArtifactRecallSelection`, `model_checkpoint_view`,
+    `review_context_state`, `ContextCheckpointDetails`, `update_context_state`,
+    `recall_checkpoint_artifact`, `reconcile_reconstructed_checkpoint`;
   - focused validation: `cd codex-rs && just test -p codex-context-checkpoint`, then
     `cd codex-rs && just test -p codex-core` for integration changes.
 - If `ConfigToml` or nested types change, run:
