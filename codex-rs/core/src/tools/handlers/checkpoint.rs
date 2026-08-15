@@ -274,7 +274,10 @@ fn update_context_state_spec() -> ToolSpec {
             ),
             (
                 "artifactId".to_string(),
-                JsonSchema::string(Some("Recorded artifact SHA-256 id.".to_string())),
+                JsonSchema::string(Some(
+                    "Recorded artifact SHA-256 id from an earlier visible evidence bridge. Do not invent or recover ids for the ToolGroups selected in this call; Runtime attaches their output artifacts from stateKeys automatically."
+                        .to_string(),
+                )),
             ),
             (
                 "path".to_string(),
@@ -451,7 +454,7 @@ fn update_context_state_spec() -> ToolSpec {
             (
                 "stateKeys".to_string(),
                 string_array(
-                    "Retained state keys produced or confirmed by this group. Required for promote.",
+                    "Retained state keys produced or confirmed by this group. Required for promote. Runtime automatically attaches a bounded set of this group's newest output artifacts to those entries, so the model does not supply their artifact ids.",
                 ),
             ),
             (
@@ -485,7 +488,7 @@ fn update_context_state_spec() -> ToolSpec {
     ]);
     ToolSpec::Function(ResponsesApiTool {
         name: "update_context_state".to_string(),
-        description: "Create a checkpoint only at semantic stage closure, under context pressure, or on explicit user request; never use it as routine bookkeeping after tool calls. Replace selected completed tool history with current effective knowledge, unresolved information, source coverage, and direct evidence bridges. Compression is not task planning and never chooses a next action. Keep only unfinished work in Active, move completed reusable facts to Session, clear Active when no work remains, and archive tool usage, task lifecycle narration, checkpoint bookkeeping, and other process noise even when its immutable artifacts remain recallable."
+        description: "Create a checkpoint only at semantic stage closure, under context pressure, or on explicit user request; never use it as routine bookkeeping after tool calls. Replace selected completed tool history with current effective knowledge, unresolved information, source coverage, and direct evidence bridges. Compression is not task planning and never chooses a next action. Keep only unfinished work in Active, move completed reusable facts to Session, clear Active when no work remains, and archive tool usage, task lifecycle narration, checkpoint bookkeeping, and other process noise even when its immutable artifacts remain recallable. Associate promoted evidence through toolGroupSettlements.stateKeys; Runtime attaches bounded output-artifact references to those entries automatically, so never invent or memorize artifact ids for the selected groups."
             .to_string(),
         output_schema: None,
         strict: false,
@@ -505,7 +508,7 @@ fn update_context_state_spec() -> ToolSpec {
 fn recall_checkpoint_artifact_spec() -> ToolSpec {
     ToolSpec::Function(ResponsesApiTool {
         name: "recall_checkpoint_artifact".to_string(),
-        description: "Inspect a hash-verified checkpoint artifact without reinjecting the whole tool result. Default mode=outline returns line ranges and previews; use mode=lines for a selected range or mode=search for bounded keyword matches. Provide exactly one of reference or legacy artifactId."
+        description: "Inspect a hash-verified checkpoint artifact without reinjecting the whole tool result. Default mode=outline returns line ranges and previews; use mode=lines for a selected range or mode=search for bounded keyword matches. Prefer the short reference rendered beside the retained knowledge that the artifact supports; Runtime generates that reference from stateKeys, so the model never needs to memorize a SHA-256 id. Provide exactly one of reference or legacy artifactId."
             .to_string(),
         output_schema: None,
         strict: false,

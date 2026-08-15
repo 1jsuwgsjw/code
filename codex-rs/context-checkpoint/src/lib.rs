@@ -6,6 +6,7 @@
 
 mod artifact_recall;
 mod budget;
+mod evidence_bridge;
 mod ids;
 mod model;
 mod model_projection;

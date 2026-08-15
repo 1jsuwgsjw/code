@@ -1,8 +1,11 @@
 use super::*;
 use crate::ActiveContextState;
 use crate::ContextStateUpdate;
+use crate::StateEntry;
+use crate::StateEntryKind;
 use crate::ToolGroupDisposition;
 use crate::ToolGroupSettlement;
+use crate::model_checkpoint_view;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::tempdir;
@@ -146,6 +149,59 @@ async fn archive_only_keeps_truncated_artifacts_recallable() {
         vec![crate::EvidenceRef::Artifact {
             artifact_id: call.output.artifact_id,
         }]
+    );
+    assert!(
+        !model_checkpoint_view(&pending.record)
+            .expect("render archive-only checkpoint view")
+            .contains("artifact:TR")
+    );
+}
+
+#[tokio::test]
+async fn promoted_groups_attach_output_artifacts_to_state_keys() {
+    let (_directory, runtime) = runtime().await;
+    let call = record_group(&runtime, "call-1", 0, 2, TruncationProvenance::Complete).await;
+    let state_key = "pricing.vip.invariants";
+    let symbol = EvidenceRef::Symbol {
+        value: "REFERENCE.md::INV-PRICE-01..03".to_string(),
+    };
+    let mut request = state_request(
+        vec![call.group_id],
+        "retain verified pricing rules",
+        "reuse the verified invariants",
+    );
+    request.state.active = Default::default();
+    request.state.session_upserts = vec![StateEntry {
+        key: state_key.to_string(),
+        kind: StateEntryKind::SourceFact,
+        content: "VIP tax is calculated from the discounted subtotal.".to_string(),
+        evidence: vec![symbol.clone()],
+        source_revision: None,
+    }];
+    request.tool_group_settlements = vec![ToolGroupSettlement {
+        group_id: call.group_id,
+        disposition: ToolGroupDisposition::Promote,
+        state_keys: vec![state_key.to_string()],
+        open_questions: Vec::new(),
+    }];
+
+    let pending = runtime
+        .prepare_context_state(request)
+        .await
+        .expect("promoted output should receive a runtime-owned artifact bridge");
+    assert_eq!(
+        pending.record.state.session[0].evidence,
+        vec![
+            symbol,
+            EvidenceRef::Artifact {
+                artifact_id: call.output.artifact_id,
+            },
+        ]
+    );
+    assert!(
+        model_checkpoint_view(&pending.record)
+            .expect("render model checkpoint view")
+            .contains("artifact:TR000001/A001")
     );
 }
 

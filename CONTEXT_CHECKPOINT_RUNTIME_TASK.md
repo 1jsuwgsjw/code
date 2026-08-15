@@ -399,6 +399,12 @@ The causes and corrected rules are:
   clears a closed stage instead of preserving `task_completed`, task lifecycle, or a synthetic next step.
 - Modern structured records do not render the legacy top-level evidence catalog. Artifact evidence stays
   immutable outside the prompt and appears model-side only when adjacent to retained semantic state.
+- `toolGroupSettlements.stateKeys` is the semantic join between retained knowledge and raw evidence.
+  Runtime, not the model, attaches at most the three newest output Artifacts from promoted or keep-open
+  groups to each referenced state entry. The model never has to discover, copy, or memorize SHA-256 IDs.
+- `archiveOnly` groups remain absent from the semantic view. A retained entry renders short
+  `artifact:TR.../A...` references beside its content, and recall begins with a bounded outline before
+  search or line selection.
 - Tool-schema `artifactId` is accepted while legacy persisted `artifact_id` remains readable, preventing
   model-generated evidence from failing at the serde boundary.
 

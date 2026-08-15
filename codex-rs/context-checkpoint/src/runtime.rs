@@ -29,6 +29,7 @@ use crate::TruncationProvenance;
 use crate::TurnRecord;
 use crate::TurnRecordId;
 use crate::UpdateContextStateRequest;
+use crate::evidence_bridge::attach_settled_group_artifacts;
 use crate::settlement::validate_tool_group_settlements;
 use crate::source_revision::invalidate_stale_source_facts;
 use crate::source_revision::stamp_source_facts;
@@ -360,6 +361,12 @@ impl CheckpointRuntime {
             &context_state,
         )?;
         let mut evidence = update_evidence(&request.state);
+        attach_settled_group_artifacts(
+            &selected,
+            &request.tool_group_settlements,
+            &mut context_state,
+            &mut evidence,
+        )?;
         append_required_recall_evidence(&selected, &mut evidence);
         let artifacts = referenced_artifacts(&snapshot, &evidence)?;
         for artifact in &artifacts {

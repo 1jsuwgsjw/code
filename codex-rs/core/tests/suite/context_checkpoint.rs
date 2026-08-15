@@ -102,7 +102,31 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn checkpoint_artifact_recall_defaults_to_a_structured_outline() -> Result<()> {
     let harness = TestCodexHarness::with_builder(test_codex().with_model("gpt-5.4")).await?;
-    let update = update_context_state_arguments(&["TG000001"], "inspect captured evidence");
+    let update = serde_json::to_string(&json!({
+        "completedToolGroups": ["TG000001"],
+        "toolGroupSettlements": [{
+            "groupId": "TG000001",
+            "disposition": "promote",
+            "stateKeys": ["checkpoint.shell.output"],
+            "openQuestions": []
+        }],
+        "state": {
+            "active": {
+                "objective": ""
+            },
+            "sessionUpserts": [{
+                "key": "checkpoint.shell.output",
+                "kind": "validation",
+                "content": "The shell output is retained as direct checkpoint evidence.",
+                "evidence": [{
+                    "kind": "symbol",
+                    "value": "shell_command::echo checkpoint"
+                }]
+            }],
+            "removals": [],
+            "quarterPromotions": []
+        }
+    }))?;
     let shell_arguments = serde_json::to_string(&json!({ "command": "echo checkpoint" }))?;
     let recall_arguments = serde_json::to_string(&json!({
         "reference": "artifact:TR000001/A001"
@@ -136,6 +160,15 @@ async fn checkpoint_artifact_recall_defaults_to_a_structured_outline() -> Result
     let mock = mount_sse_sequence(harness.server(), responses).await;
 
     harness.submit("inspect the saved artifact").await?;
+
+    let requests = mock.requests();
+    let recall_request = requests
+        .get(2)
+        .expect("model request after checkpoint installation")
+        .body_json()
+        .to_string();
+    assert!(recall_request.contains("validation/checkpoint.shell.output"));
+    assert!(recall_request.contains("artifact:TR000001/A001"));
 
     let output: serde_json::Value = serde_json::from_str(
         &mock
