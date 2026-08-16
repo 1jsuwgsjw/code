@@ -23,6 +23,10 @@ impl ContextualUserFragment for WorkflowRuntimeFragment {
     }
 
     fn markers(&self) -> (&'static str, &'static str) {
+        Self::type_markers()
+    }
+
+    fn type_markers() -> (&'static str, &'static str) {
         ("<WORKFLOW_RUNTIME_STATE>\n", "\n</WORKFLOW_RUNTIME_STATE>")
     }
 
