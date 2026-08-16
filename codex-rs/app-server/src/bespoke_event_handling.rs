@@ -1553,8 +1553,13 @@ async fn handle_token_count_event(
     token_count_event: TokenCountEvent,
     outgoing: &ThreadScopedOutgoingMessageSender,
 ) {
-    let TokenCountEvent { info, rate_limits } = token_count_event;
-    if let Some(token_usage) = info.map(ThreadTokenUsage::from) {
+    let TokenCountEvent {
+        info,
+        rate_limits,
+        tool_result_share_basis_points,
+    } = token_count_event;
+    if let Some(mut token_usage) = info.map(ThreadTokenUsage::from) {
+        token_usage.tool_result_share_basis_points = tool_result_share_basis_points;
         let notification = ThreadTokenUsageUpdatedNotification {
             thread_id: conversation_id.to_string(),
             turn_id,
@@ -3804,6 +3809,7 @@ mod tests {
             TokenCountEvent {
                 info: Some(info),
                 rate_limits: Some(rate_limits),
+                tool_result_share_basis_points: Some(4_325),
             },
             &outgoing,
         )
@@ -3821,6 +3827,7 @@ mod tests {
                 assert_eq!(usage.total.cached_input_tokens, 25);
                 assert_eq!(usage.last.output_tokens, 7);
                 assert_eq!(usage.model_context_window, Some(4096));
+                assert_eq!(usage.tool_result_share_basis_points, Some(4_325));
             }
             other => bail!("unexpected notification: {other:?}"),
         }
@@ -3837,6 +3844,23 @@ mod tests {
             }
             other => bail!("unexpected notification: {other:?}"),
         }
+        Ok(())
+    }
+
+    #[test]
+    fn thread_token_usage_deserializes_without_tool_result_share() -> Result<()> {
+        let mut value = serde_json::to_value(ThreadTokenUsage::from(TokenUsageInfo {
+            total_token_usage: TokenUsage::default(),
+            last_token_usage: TokenUsage::default(),
+            model_context_window: Some(4096),
+        }))?;
+        let object = value
+            .as_object_mut()
+            .expect("thread token usage serializes as an object");
+        assert!(object.remove("toolResultShareBasisPoints").is_some());
+
+        let decoded: ThreadTokenUsage = serde_json::from_value(value)?;
+        assert_eq!(decoded.tool_result_share_basis_points, None);
         Ok(())
     }
 
@@ -3861,6 +3885,7 @@ mod tests {
             TokenCountEvent {
                 info: None,
                 rate_limits: None,
+                tool_result_share_basis_points: None,
             },
             &outgoing,
         )

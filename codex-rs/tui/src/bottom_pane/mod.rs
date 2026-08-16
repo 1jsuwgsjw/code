@@ -205,6 +205,13 @@ struct DelayedApprovalRequest {
 /// This is the owning container for the prompt input (`ChatComposer`) and the view stack
 /// (`BottomPaneView`). It performs local input routing and renders time-based hints, while leaving
 /// process-level decisions (quit, interrupt, shutdown) to `ChatWidget`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ContextWindowUsage {
+    pub(crate) remaining_percent: Option<i64>,
+    pub(crate) used_tokens: Option<i64>,
+    pub(crate) tool_result_share_basis_points: Option<u16>,
+}
+
 pub(crate) struct BottomPane {
     /// Composer is retained even when a BottomPaneView is displayed so the
     /// input state is retained when the view is closed.
@@ -237,8 +244,7 @@ pub(crate) struct BottomPane {
     pending_input_preview: PendingInputPreview,
     /// Inactive threads with pending approval requests.
     pending_thread_approvals: PendingThreadApprovals,
-    context_window_percent: Option<i64>,
-    context_window_used_tokens: Option<i64>,
+    context_window_usage: ContextWindowUsage,
     keymap: RuntimeKeymap,
 }
 
@@ -294,8 +300,7 @@ impl BottomPane {
             pending_thread_approvals: PendingThreadApprovals::new(),
             esc_backtrack_hint: false,
             animations_enabled,
-            context_window_percent: None,
-            context_window_used_tokens: None,
+            context_window_usage: ContextWindowUsage::default(),
             keymap,
         }
     }
@@ -490,12 +495,17 @@ impl BottomPane {
 
     #[cfg(test)]
     pub(crate) fn context_window_percent(&self) -> Option<i64> {
-        self.context_window_percent
+        self.context_window_usage.remaining_percent
     }
 
     #[cfg(test)]
     pub(crate) fn context_window_used_tokens(&self) -> Option<i64> {
-        self.context_window_used_tokens
+        self.context_window_usage.used_tokens
+    }
+
+    #[cfg(test)]
+    pub(crate) fn context_window_tool_result_share_basis_points(&self) -> Option<u16> {
+        self.context_window_usage.tool_result_share_basis_points
     }
 
     fn active_view(&self) -> Option<&dyn BottomPaneView> {
@@ -1063,16 +1073,13 @@ impl BottomPane {
         }
     }
 
-    pub(crate) fn set_context_window(&mut self, percent: Option<i64>, used_tokens: Option<i64>) {
-        if self.context_window_percent == percent && self.context_window_used_tokens == used_tokens
-        {
+    pub(crate) fn set_context_window(&mut self, usage: ContextWindowUsage) {
+        if self.context_window_usage == usage {
             return;
         }
 
-        self.context_window_percent = percent;
-        self.context_window_used_tokens = used_tokens;
-        self.composer
-            .set_context_window(percent, self.context_window_used_tokens);
+        self.context_window_usage = usage;
+        self.composer.set_context_window(usage);
         self.request_redraw();
     }
 

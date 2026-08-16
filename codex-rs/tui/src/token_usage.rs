@@ -58,6 +58,7 @@ pub(crate) struct TokenUsageInfo {
     pub(crate) total_token_usage: TokenUsage,
     pub(crate) last_token_usage: TokenUsage,
     pub(crate) model_context_window: Option<i64>,
+    pub(crate) tool_result_share_basis_points: Option<u16>,
 }
 
 impl fmt::Display for TokenUsage {

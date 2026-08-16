@@ -2139,6 +2139,7 @@ impl TokenUsageInfo {
 pub struct TokenCountEvent {
     pub info: Option<TokenUsageInfo>,
     pub rate_limits: Option<RateLimitSnapshot>,
+    pub tool_result_share_basis_points: Option<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
@@ -6288,5 +6289,16 @@ mod tests {
                 .expect("new_or_append should return info");
 
         assert_eq!(info.model_context_window, Some(258_400));
+    }
+
+    #[test]
+    fn token_count_event_deserializes_without_tool_result_share() {
+        let event: TokenCountEvent = serde_json::from_value(serde_json::json!({
+            "info": null,
+            "rate_limits": null
+        }))
+        .expect("legacy token count event should deserialize");
+
+        assert_eq!(event.tool_result_share_basis_points, None);
     }
 }
