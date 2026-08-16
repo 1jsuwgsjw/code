@@ -370,10 +370,16 @@ pub(crate) async fn run_turn(
                             continue;
                         }
                         Ok(false) => {}
-                        Err(error) => tracing::warn!(
-                            error = %error,
-                            "pending checkpoint installation failed; retaining legacy fallback"
-                        ),
+                        Err(error) => {
+                            sess.services
+                                .context_checkpoint
+                                .require_legacy_fallback(error.to_string())
+                                .await;
+                            tracing::warn!(
+                                error = %error,
+                                "pending checkpoint installation failed; retaining legacy fallback"
+                            );
+                        }
                     }
                 }
 
@@ -865,10 +871,16 @@ async fn run_pre_sampling_compact(
     {
         Ok(true) => return Ok(()),
         Ok(false) => {}
-        Err(error) => tracing::warn!(
-            error = %error,
-            "pre-sampling checkpoint installation failed; evaluating fallback"
-        ),
+        Err(error) => {
+            sess.services
+                .context_checkpoint
+                .require_legacy_fallback(error.to_string())
+                .await;
+            tracing::warn!(
+                error = %error,
+                "pre-sampling checkpoint installation failed; evaluating fallback"
+            );
+        }
     }
     maybe_run_previous_model_inline_compact(sess, turn_context, client_session).await?;
     let token_status =
@@ -1043,6 +1055,17 @@ async fn run_auto_compact(
     phase: CompactionPhase,
 ) -> CodexResult<()> {
     let turn_context = &step_context.turn;
+    if sess
+        .services
+        .context_checkpoint
+        .can_settle_before_legacy_compaction()
+        .await
+    {
+        tracing::info!(
+            "deferring legacy whole-history compaction to controlled context settlement"
+        );
+        return Ok(());
+    }
     if turn_context.config.features.enabled(Feature::TokenBudget) {
         // Compaction is the reset request, so force a new context window
         // instead of consuming a pending `new_context` tool request.

@@ -85,16 +85,30 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
     )?;
     assert_eq!(first_update_output["checkpointRef"], "ctx:G000001/TR000001");
     assert!(first_update_output.get("manifestSha256").is_none());
-    let final_request = requests
-        .last()
-        .expect("final model request")
-        .body_json()
-        .to_string();
+    let final_request_body = requests.last().expect("final model request").body_json();
+    let checkpoint_item = final_request_body
+        .get("input")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|input| {
+            input
+                .iter()
+                .find(|item| item.to_string().contains("<CONTEXT_CHECKPOINT>"))
+        })
+        .expect("checkpoint input item");
+    assert_eq!(
+        checkpoint_item
+            .get("role")
+            .and_then(serde_json::Value::as_str),
+        Some("assistant")
+    );
+    let final_request = final_request_body.to_string();
     assert_eq!(final_request.matches("<CONTEXT_CHECKPOINT>").count(), 1);
+    assert!(final_request.contains("checkpoint the current project state"));
     assert!(final_request.contains("\\nActive\\n"));
     assert!(final_request.contains("second objective"));
     assert!(final_request.contains("ctx:G000002/TR000002"));
     assert!(!final_request.contains("\"objective\":"));
+    assert!(!final_request.contains("Another language model"));
     assert!(!final_request.contains("manifestSha256"));
 
     Ok(())

@@ -771,6 +771,17 @@ impl CheckpointRuntime {
         state.degraded_reason.is_some()
     }
 
+    /// Returns true when controlled settlement can reclaim model context without legacy compaction.
+    pub async fn can_settle_before_legacy_compaction(&self) -> bool {
+        let state = self.state.lock().await;
+        state.degraded_reason.is_none() && !settleable_groups(&state.manifest).is_empty()
+    }
+
+    /// Marks controlled checkpointing unavailable so the caller may enter its explicit fallback.
+    pub async fn require_legacy_fallback(&self, reason: impl Into<String>) {
+        self.degrade(reason.into()).await;
+    }
+
     async fn prepared_status(
         &self,
         usage: ContextUsageSnapshot,

@@ -7,6 +7,8 @@ use codex_context_fragments::ContextualUserFragment;
 use codex_protocol::items::ContextCheckpointDetails;
 use codex_protocol::items::ContextCompactionItem;
 use codex_protocol::items::TurnItem;
+use codex_protocol::models::MessagePhase;
+use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::CompactedItem;
 use codex_protocol::protocol::ContextCheckpointRolloutMetadata;
 use codex_protocol::protocol::ContextFallbackKind;
@@ -52,6 +54,11 @@ pub(crate) async fn install_pending_checkpoint(
         return Ok(false);
     };
     let history = session.clone_history().await;
+    validate_checkpoint_history_range(
+        history.raw_items(),
+        pending.history_start,
+        pending.history_end,
+    )?;
     let checkpoint_item =
         CheckpointRecordFragment::new(&pending.record)?.into_response_input_item();
     let replacement_history = codex_context_checkpoint::project_history(
@@ -146,6 +153,35 @@ pub(crate) async fn install_pending_checkpoint(
     Ok(true)
 }
 
+fn validate_checkpoint_history_range(
+    history: &[ResponseItem],
+    history_start: usize,
+    history_end: usize,
+) -> Result<(), CheckpointError> {
+    let selected = history.get(history_start..history_end).ok_or_else(|| {
+        CheckpointError::InvalidRequest(format!(
+            "checkpoint range {history_start}..{history_end} is invalid for history length {}",
+            history.len()
+        ))
+    })?;
+
+    for (relative_index, item) in selected.iter().enumerate() {
+        let ResponseItem::Message { role, phase, .. } = item else {
+            continue;
+        };
+        if role == "assistant" && matches!(phase, Some(MessagePhase::Commentary)) {
+            continue;
+        }
+
+        let history_index = history_start + relative_index;
+        return Err(CheckpointError::InvalidRequest(format!(
+            "checkpoint range contains persistent {role} message at history index {history_index}"
+        )));
+    }
+
+    Ok(())
+}
+
 pub(crate) async fn reconcile_reconstructed_checkpoint(
     session: &Session,
     checkpoint: Option<&ReconstructedCheckpoint>,
@@ -192,3 +228,7 @@ pub(crate) async fn reconcile_reconstructed_checkpoint(
         )
         .await
 }
+
+#[cfg(test)]
+#[path = "context_checkpoint_tests.rs"]
+mod tests;

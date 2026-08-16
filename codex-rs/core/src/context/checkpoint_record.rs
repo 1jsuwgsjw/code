@@ -1,5 +1,4 @@
 use super::ContextualUserFragment;
-use crate::compact::SUMMARY_PREFIX;
 use codex_context_checkpoint::CheckpointError;
 use codex_context_checkpoint::TurnRecord;
 use codex_protocol::models::ContentItem;
@@ -13,9 +12,7 @@ pub(crate) struct CheckpointRecordFragment {
 impl CheckpointRecordFragment {
     pub(crate) fn new(record: &TurnRecord) -> Result<Self, CheckpointError> {
         let record = codex_context_checkpoint::model_checkpoint_view(record)?;
-        Ok(Self {
-            body: format!("{SUMMARY_PREFIX}\n{record}"),
-        })
+        Ok(Self { body: record })
     }
 
     pub(crate) fn matches_item(item: &ResponseItem) -> bool {
@@ -30,7 +27,7 @@ impl CheckpointRecordFragment {
 
 impl ContextualUserFragment for CheckpointRecordFragment {
     fn role(&self) -> &'static str {
-        "user"
+        "assistant"
     }
 
     fn markers(&self) -> (&'static str, &'static str) {

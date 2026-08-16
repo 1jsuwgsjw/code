@@ -86,6 +86,12 @@ Implemented in the current working stage:
   labels, state-entry count, and the context-window chain;
 - an adaptive TUI checkpoint history tree with narrow-window folding, raw transcript recovery, and
   Unicode Windows Terminal / ASCII legacy-console rendering;
+- assistant-role checkpoint projections that do not reuse the legacy whole-history summary prefix;
+- installation-time range validation that keeps user, developer, and persistent assistant messages
+  outside lossy checkpoint replacement;
+- controlled settlement taking precedence over automatic whole-history compaction whenever a healthy
+  runtime has a contiguous settled tool-group prefix, with legacy compaction entered only after an
+  explicit degraded-runtime transition;
 - regenerated app-server JSON and TypeScript schema fixtures, with an opt-in Windows workflow export
   path that does not add work to normal push builds.
 

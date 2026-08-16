@@ -228,6 +228,21 @@ async fn record_group(
 }
 
 #[tokio::test]
+async fn controlled_settlement_precedes_legacy_compaction() {
+    let (_directory, runtime) = runtime().await;
+    assert!(!runtime.can_settle_before_legacy_compaction().await);
+
+    record_group(&runtime, "call-1", 1, 3, TruncationProvenance::Complete).await;
+    assert!(runtime.can_settle_before_legacy_compaction().await);
+
+    runtime
+        .require_legacy_fallback("checkpoint installation failed")
+        .await;
+    assert!(runtime.is_fallback_required().await);
+    assert!(!runtime.can_settle_before_legacy_compaction().await);
+}
+
+#[tokio::test]
 async fn summary_must_select_the_contiguous_settled_prefix() {
     let (_directory, runtime) = runtime().await;
     let first = record_group(&runtime, "call-1", 0, 2, TruncationProvenance::Complete).await;
