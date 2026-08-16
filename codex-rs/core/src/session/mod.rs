@@ -3797,11 +3797,20 @@ impl Session {
     }
 
     pub(crate) async fn send_token_count_event(&self, turn_context: &TurnContext) {
-        let (info, rate_limits) = {
+        let (info, rate_limits, tool_result_share_basis_points) = {
             let state = self.state.lock().await;
-            state.token_info_and_rate_limits()
+            let (info, rate_limits) = state.token_info_and_rate_limits();
+            (
+                info,
+                rate_limits,
+                state.tool_result_share_basis_points,
+            )
         };
-        let event = EventMsg::TokenCount(TokenCountEvent { info, rate_limits });
+        let event = EventMsg::TokenCount(TokenCountEvent {
+            info,
+            rate_limits,
+            tool_result_share_basis_points,
+        });
         self.send_event(turn_context, event).await;
     }
 

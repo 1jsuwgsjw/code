@@ -537,7 +537,8 @@ mod tests {
                     codex_protocol::protocol::TokenCountEvent {
                         info: None,
                         rate_limits: None,
-                    },
+                                            tool_result_share_basis_points: None,
+},
                 )),
                 RolloutItem::EventMsg(EventMsg::TurnComplete(TurnCompleteEvent {
                     turn_id: "turn-1".to_string(),
@@ -663,7 +664,8 @@ mod tests {
                 codex_protocol::protocol::TokenCountEvent {
                     info: None,
                     rate_limits: None,
-                },
+                                    tool_result_share_basis_points: None,
+},
             ))])
             .await
             .expect("append metadata-only item");

@@ -183,8 +183,8 @@ use super::footer::FooterMode;
 use super::footer::FooterProps;
 use super::footer::GoalStatusIndicator;
 use super::footer::SummaryLeft;
+use super::ContextWindowUsage;
 use super::footer::can_show_left_with_context;
-use super::footer::context_window_line;
 use super::footer::esc_hint_mode;
 use super::footer::footer_height;
 use super::footer::footer_hint_items_width;
@@ -193,6 +193,7 @@ use super::footer::inset_footer_hint_area;
 use super::footer::max_left_width_for_right;
 use super::footer::passive_footer_status_line;
 use super::footer::render_context_right;
+use super::footer::select_context_window_line;
 use super::footer::render_footer_from_props;
 use super::footer::render_footer_hint_items;
 use super::footer::render_footer_line;
@@ -521,8 +522,7 @@ impl ChatComposer {
                 hint_override: None,
                 plan_mode_nudge_visible: false,
                 flash: None,
-                context_window_percent: None,
-                context_window_used_tokens: None,
+                context_window_usage: ContextWindowUsage::default(),
                 collaboration_mode_indicator: None,
                 goal_status_indicator: None,
                 ide_context_active: false,
@@ -1129,12 +1129,20 @@ impl ChatComposer {
         }
     }
 
-    fn right_footer_line_with_context(&self) -> Line<'static> {
-        let mut line = context_window_line(
-            self.footer.context_window_percent,
-            self.footer.context_window_used_tokens,
-        );
-        if let Some(vim_mode) = self.vim_mode_indicator_span() {
+    fn right_footer_line_with_context(&self, area: Rect, left_width: u16) -> Line<'static> {
+        let vim_mode = self.vim_mode_indicator_span();
+        let vim_width = vim_mode
+            .as_ref()
+            .map(|span| span.width().saturating_add(3))
+            .unwrap_or(0);
+        let mut line = select_context_window_line(self.footer.context_window_usage, |line| {
+            can_show_left_with_context(
+                area,
+                left_width,
+                line.width().saturating_add(vim_width) as u16,
+            )
+        });
+        if let Some(vim_mode) = vim_mode {
             line.spans.push(" | ".dim());
             line.spans.push(vim_mode);
         }
@@ -3900,14 +3908,11 @@ impl ChatComposer {
         self.queue_submissions = queue_submissions;
     }
 
-    pub(crate) fn set_context_window(&mut self, percent: Option<i64>, used_tokens: Option<i64>) {
-        if self.footer.context_window_percent == percent
-            && self.footer.context_window_used_tokens == used_tokens
-        {
+    pub(crate) fn set_context_window(&mut self, usage: ContextWindowUsage) {
+        if self.footer.context_window_usage == usage {
             return;
         }
-        self.footer.context_window_percent = percent;
-        self.footer.context_window_used_tokens = used_tokens;
+        self.footer.context_window_usage = usage;
     }
 
     pub(crate) fn set_esc_backtrack_hint(&mut self, show: bool) {
@@ -4270,7 +4275,7 @@ impl ChatComposer {
                                 compact
                             }
                         } else {
-                            Some(self.right_footer_line_with_context())
+                            Some(self.right_footer_line_with_context(hint_rect, left_width))
                         };
                     let right_width = right_line.as_ref().map(|l| l.width() as u16).unwrap_or(0);
                     if status_line_active

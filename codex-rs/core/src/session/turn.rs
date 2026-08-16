@@ -1184,6 +1184,8 @@ async fn run_sampling_request(
     let raw_history_len = sess.clone_history().await.raw_items().len();
     let tool_result_share_basis_points =
         crate::context::CheckpointStatusFragment::tool_result_share_basis_points(&input);
+    sess.state.lock().await.tool_result_share_basis_points =
+        Some(tool_result_share_basis_points);
     let checkpoint_request = match sess
         .services
         .context_checkpoint

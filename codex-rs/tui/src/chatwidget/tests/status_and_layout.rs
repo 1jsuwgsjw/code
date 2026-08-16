@@ -95,6 +95,7 @@ async fn context_indicator_shows_used_tokens_when_window_unknown() {
         total_token_usage: token_usage.clone(),
         last_token_usage: token_usage,
         model_context_window: None,
+        tool_result_share_basis_points: Some(4_325),
     };
 
     handle_token_count(&mut chat, Some(token_info));
@@ -103,6 +104,11 @@ async fn context_indicator_shows_used_tokens_when_window_unknown() {
     assert_eq!(
         chat.bottom_pane.context_window_used_tokens(),
         Some(total_tokens)
+    );
+    assert_eq!(
+        chat.bottom_pane
+            .context_window_tool_result_share_basis_points(),
+        Some(4_325)
     );
 }
 

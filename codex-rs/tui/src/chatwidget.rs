@@ -264,6 +264,7 @@ use crate::auto_review_denials;
 use crate::auto_review_denials::RecentAutoReviewDenials;
 use crate::bottom_pane::ApprovalRequest;
 use crate::bottom_pane::BottomPane;
+use crate::bottom_pane::ContextWindowUsage;
 use crate::bottom_pane::BottomPaneParams;
 use crate::bottom_pane::CancellationEvent;
 use crate::bottom_pane::CollaborationModeIndicator;
@@ -927,6 +928,7 @@ fn token_usage_info_from_app_server(token_usage: ThreadTokenUsage) -> TokenUsage
             reasoning_output_tokens: token_usage.last.reasoning_output_tokens,
         },
         model_context_window: token_usage.model_context_window,
+        tool_result_share_basis_points: token_usage.tool_result_share_basis_points,
     }
 }
 
@@ -1102,7 +1104,7 @@ impl ChatWidget {
             Some(info) => self.apply_token_info(info),
             None => {
                 self.bottom_pane
-                    .set_context_window(/*percent*/ None, /*used_tokens*/ None);
+                    .set_context_window(ContextWindowUsage::default());
                 self.token_info = None;
             }
         }
@@ -1111,7 +1113,11 @@ impl ChatWidget {
     fn apply_token_info(&mut self, info: TokenUsageInfo) {
         let percent = self.context_remaining_percent(&info);
         let used_tokens = self.context_used_tokens(&info, percent.is_some());
-        self.bottom_pane.set_context_window(percent, used_tokens);
+        self.bottom_pane.set_context_window(ContextWindowUsage {
+            remaining_percent: percent,
+            used_tokens,
+            tool_result_share_basis_points: info.tool_result_share_basis_points,
+        });
         self.token_info = Some(info);
     }
 
@@ -1136,7 +1142,7 @@ impl ChatWidget {
                 Some(info) => self.apply_token_info(info),
                 None => {
                     self.bottom_pane
-                        .set_context_window(/*percent*/ None, /*used_tokens*/ None);
+                        .set_context_window(ContextWindowUsage::default());
                     self.token_info = None;
                 }
             }

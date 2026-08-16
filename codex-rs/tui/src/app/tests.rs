@@ -4377,6 +4377,7 @@ fn token_usage_notification(
                 reasoning_output_tokens: 0,
             },
             model_context_window,
+            tool_result_share_basis_points: None,
         },
     })
 }

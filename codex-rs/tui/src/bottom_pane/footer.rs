@@ -41,6 +41,7 @@
 //! In short: `single_line_footer_layout` chooses *what* best fits, and the two
 //! render helpers choose whether to draw the chosen line or the default
 //! `FooterProps` mapping.
+use super::ContextWindowUsage;
 use crate::key_hint;
 use crate::key_hint::KeyBinding;
 use crate::render::line_utils::prefix_lines;
@@ -1005,18 +1006,49 @@ fn build_columns(entries: Vec<Line<'static>>) -> Vec<Line<'static>> {
         .collect()
 }
 
-pub(crate) fn context_window_line(percent: Option<i64>, used_tokens: Option<i64>) -> Line<'static> {
-    if let Some(percent) = percent {
+pub(crate) fn context_window_line(usage: ContextWindowUsage) -> Line<'static> {
+    select_context_window_line(usage, |_| true)
+}
+
+pub(crate) fn select_context_window_line(
+    usage: ContextWindowUsage,
+    mut fits: impl FnMut(&Line<'static>) -> bool,
+) -> Line<'static> {
+    let mut fallback = None;
+    for line in context_window_lines(usage) {
+        fallback = Some(line.clone());
+        if fits(&line) {
+            return line;
+        }
+    }
+    fallback.expect("context window line candidates are never empty")
+}
+
+pub(crate) fn context_window_lines(
+    usage: ContextWindowUsage,
+) -> Vec<Line<'static>> {
+    let (full, compact) = if let Some(percent) = usage.remaining_percent {
         let percent = percent.clamp(0, 100);
-        return Line::from(vec![Span::from(format!("{percent}% context left")).dim()]);
-    }
-
-    if let Some(tokens) = used_tokens {
+        (format!("{percent}% context left"), format!("{percent}% ctx"))
+    } else if let Some(tokens) = usage.used_tokens {
         let used_fmt = format_tokens_compact(tokens);
-        return Line::from(vec![Span::from(format!("{used_fmt} used")).dim()]);
-    }
+        (format!("{used_fmt} tokens used"), format!("{used_fmt} used"))
+    } else {
+        ("100% context left".to_string(), "100% ctx".to_string())
+    };
+    let line = |text: String| Line::from(vec![Span::from(text).dim()]);
 
-    Line::from(vec![Span::from("100% context left").dim()])
+    let Some(basis_points) = usage.tool_result_share_basis_points else {
+        return vec![line(full), line(compact)];
+    };
+    let tool_percent = (u32::from(basis_points.min(10_000)) + 50) / 100;
+
+    vec![
+        line(format!("{full} · tools {tool_percent}%")),
+        line(format!("{compact} · tools {tool_percent}%")),
+        line(full),
+        line(compact),
+    ]
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1303,8 +1335,66 @@ mod tests {
             /*width*/ 80,
             &props,
             /*collaboration_mode_indicator*/ None,
-            context_window_line(percent, used_tokens),
+            context_window_line(ContextWindowUsage {
+                remaining_percent: percent,
+                used_tokens,
+                tool_result_share_basis_points: None,
+            }),
         );
+    }
+
+    #[test]
+    fn context_window_breakdown_snapshots() {
+        let percentage_only = ContextWindowUsage {
+            remaining_percent: Some(75),
+            used_tokens: None,
+            tool_result_share_basis_points: None,
+        };
+        assert_snapshot!(context_window_line(percentage_only).to_string(), @"75% context left");
+
+        let percentage_with_tools = ContextWindowUsage {
+            tool_result_share_basis_points: Some(4_325),
+            ..percentage_only
+        };
+        assert_snapshot!(
+            context_window_line(percentage_with_tools).to_string(),
+            @"75% context left · tools 43%"
+        );
+
+        let tokens_with_tools = ContextWindowUsage {
+            remaining_percent: None,
+            used_tokens: Some(32_000),
+            tool_result_share_basis_points: Some(4_325),
+        };
+        assert_snapshot!(
+            context_window_line(tokens_with_tools).to_string(),
+            @"32K tokens used · tools 43%"
+        );
+
+        let zero_tool_share = ContextWindowUsage {
+            tool_result_share_basis_points: Some(0),
+            ..percentage_only
+        };
+        assert_snapshot!(
+            context_window_line(zero_tool_share).to_string(),
+            @"75% context left · tools 0%"
+        );
+
+        let clamped_tool_share = ContextWindowUsage {
+            tool_result_share_basis_points: Some(u16::MAX),
+            ..percentage_only
+        };
+        assert_snapshot!(
+            context_window_line(clamped_tool_share).to_string(),
+            @"75% context left · tools 100%"
+        );
+
+        let compact = select_context_window_line(percentage_with_tools, |line| line.width() <= 20);
+        assert_snapshot!(compact.to_string(), @"75% ctx · tools 43%");
+
+        let total_only =
+            select_context_window_line(percentage_with_tools, |line| line.width() <= 16);
+        assert_snapshot!(total_only.to_string(), @"75% context left");
     }
 
     fn draw_footer_frame<B: Backend>(
@@ -1489,7 +1579,11 @@ mod tests {
             width,
             props,
             collaboration_mode_indicator,
-            context_window_line(/*percent*/ None, /*used_tokens*/ None),
+            context_window_line(ContextWindowUsage {
+                remaining_percent: None,
+                used_tokens: None,
+                tool_result_share_basis_points: None,
+            }),
         );
     }
 
@@ -1547,7 +1641,11 @@ mod tests {
             props,
             collaboration_mode_indicator,
             ide_context_active,
-            context_window_line(/*percent*/ None, /*used_tokens*/ None),
+            context_window_line(ContextWindowUsage {
+                remaining_percent: None,
+                used_tokens: None,
+                tool_result_share_basis_points: None,
+            }),
         );
         assert_snapshot!(name, terminal.backend());
     }
@@ -1881,7 +1979,11 @@ mod tests {
             /*width*/ 120,
             &props,
             Some(CollaborationModeIndicator::Plan),
-            context_window_line(Some(50), /*used_tokens*/ None),
+            context_window_line(ContextWindowUsage {
+                remaining_percent: Some(50),
+                used_tokens: None,
+                tool_result_share_basis_points: None,
+            }),
         );
 
         snapshot_footer_with_indicators(
@@ -1912,7 +2014,11 @@ mod tests {
             /*width*/ 120,
             &props,
             Some(CollaborationModeIndicator::Plan),
-            context_window_line(Some(50), /*used_tokens*/ None),
+            context_window_line(ContextWindowUsage {
+                remaining_percent: Some(50),
+                used_tokens: None,
+                tool_result_share_basis_points: None,
+            }),
         );
 
         let props = FooterProps {
@@ -1936,7 +2042,11 @@ mod tests {
             /*width*/ 120,
             &props,
             /*collaboration_mode_indicator*/ None,
-            context_window_line(Some(50), /*used_tokens*/ None),
+            context_window_line(ContextWindowUsage {
+                remaining_percent: Some(50),
+                used_tokens: None,
+                tool_result_share_basis_points: None,
+            }),
         );
 
         let props = FooterProps {
@@ -1961,7 +2071,11 @@ mod tests {
             /*width*/ 40,
             &props,
             Some(CollaborationModeIndicator::Plan),
-            context_window_line(Some(50), /*used_tokens*/ None),
+            context_window_line(ContextWindowUsage {
+                remaining_percent: Some(50),
+                used_tokens: None,
+                tool_result_share_basis_points: None,
+            }),
         );
 
         let props = FooterProps {
@@ -2023,7 +2137,11 @@ mod tests {
             /*width*/ 80,
             &props,
             Some(CollaborationModeIndicator::Plan),
-            context_window_line(Some(50), /*used_tokens*/ None),
+            context_window_line(ContextWindowUsage {
+                remaining_percent: Some(50),
+                used_tokens: None,
+                tool_result_share_basis_points: None,
+            }),
         );
         let collapsed = screen.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(
