@@ -218,6 +218,7 @@ pub(crate) mod time_reminder;
 mod token_budget;
 pub(crate) mod turn;
 pub(crate) mod turn_context;
+mod workflow_runtime;
 mod world_state;
 use self::code_mode_warning::unsupported_code_mode_warning;
 use self::config_lock::export_config_lock_if_configured;
@@ -1432,6 +1433,7 @@ impl Session {
             previous_turn_settings,
             reference_context_item,
             world_state_baseline,
+            workflow_runtime,
             window_number,
             first_window_id,
             previous_window_id,
@@ -1441,6 +1443,19 @@ impl Session {
         } = self
             .reconstruct_history_from_rollout(turn_context, rollout_items)
             .await;
+        let mut workflow_runtime = workflow_runtime.unwrap_or_default();
+        let workflow_runtime_item = workflow_runtime
+            .reconcile_after_resume(&self.thread_id.to_string())
+            .then(|| {
+                workflow_runtime
+                    .world_state_merge_patch()
+                    .map(WorldStateItem::patch)
+            })
+            .transpose()
+            .unwrap_or_else(|error| {
+                tracing::warn!(error = %error, "failed to persist resumed workflow runtime state");
+                None
+            });
         // Keep the recorded rollout unchanged. Prepare its reconstructed history before
         // installing it, so legacy images are processed once for this resume or fork and
         // will be processed again if the rollout is reconstructed in a future session.
@@ -1449,6 +1464,7 @@ impl Session {
         {
             let mut state = self.state.lock().await;
             state.replace_history(history, reference_context_item);
+            state.workflow_runtime = workflow_runtime;
             if let Some(world_state) = world_state_baseline {
                 state.history.set_world_state_baseline(world_state);
             }
@@ -1463,6 +1479,10 @@ impl Session {
                 },
             );
             state.set_previous_turn_settings(previous_turn_settings.clone());
+        }
+        if let Some(workflow_runtime_item) = workflow_runtime_item {
+            self.persist_rollout_items(&[RolloutItem::WorldState(workflow_runtime_item)])
+                .await;
         }
         if let Err(error) = crate::context_checkpoint::reconcile_reconstructed_checkpoint(
             self,
@@ -1977,7 +1997,13 @@ impl Session {
     async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
         // Persist the event into rollout storage; the store applies its persistence policy.
         if persist {
-            let rollout_items = vec![RolloutItem::EventMsg(event.msg.clone())];
+            let mut rollout_items = vec![RolloutItem::EventMsg(event.msg.clone())];
+            if let Some(workflow_runtime_item) = self
+                .workflow_runtime_world_state_item_for_event(&event.msg)
+                .await
+            {
+                rollout_items.push(RolloutItem::WorldState(workflow_runtime_item));
+            }
             self.persist_rollout_items(&rollout_items).await;
         }
         self.services
@@ -2844,6 +2870,13 @@ impl Session {
             );
         }
         self.persist_rollout_response_items(items).await;
+        if let Some(workflow_runtime_item) = self
+            .workflow_runtime_world_state_item_for_messages(items)
+            .await
+        {
+            self.persist_rollout_items(&[RolloutItem::WorldState(workflow_runtime_item)])
+                .await;
+        }
         self.send_raw_response_items(turn_context, items).await;
     }
 

@@ -18,6 +18,7 @@ use crate::session::research_context::ResearchTaskContext;
 use crate::session::session::SessionConfiguration;
 use crate::session::time_reminder::CurrentTimeReminderState;
 use crate::session_startup_prewarm::SessionStartupPrewarmHandle;
+use super::workflow_runtime::WorkflowRuntimeState;
 use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TokenUsageInfo;
@@ -28,6 +29,7 @@ use codex_utils_output_truncation::TruncationPolicy;
 pub(crate) struct SessionState {
     pub(crate) session_configuration: SessionConfiguration,
     pub(crate) history: ContextManager,
+    pub(crate) workflow_runtime: WorkflowRuntimeState,
     pub(crate) latest_rate_limits: Option<RateLimitSnapshot>,
     pub(crate) server_reasoning_included: bool,
     pub(crate) mcp_dependency_prompted: HashSet<String>,
@@ -68,6 +70,7 @@ impl SessionState {
         Self {
             session_configuration,
             history,
+            workflow_runtime: WorkflowRuntimeState::default(),
             latest_rate_limits: None,
             server_reasoning_included: false,
             mcp_dependency_prompted: HashSet::new(),

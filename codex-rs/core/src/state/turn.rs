@@ -21,6 +21,9 @@ use tokio::sync::oneshot;
 use crate::agent::control::AgentExecutionGuard;
 use crate::session::TurnInputQueue;
 use crate::session::turn_context::TurnContext;
+use super::workflow_runtime::ExternalWaitKind;
+use super::workflow_runtime::PendingExternalWait;
+use super::workflow_runtime::TurnRuntimeSnapshot;
 use crate::tasks::AnySessionTask;
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::protocol::ReviewDecision;
@@ -229,6 +232,37 @@ impl TurnState {
         self.granted_permissions_by_environment_id
             .get(environment_id)
             .cloned()
+    }
+
+    pub(crate) fn workflow_runtime_snapshot(&self) -> TurnRuntimeSnapshot {
+        let mut pending_waits = Vec::new();
+        pending_waits.extend(self.pending_approvals.keys().map(|source_id| {
+            PendingExternalWait::new(ExternalWaitKind::Approval, source_id.clone())
+        }));
+        pending_waits.extend(self.pending_request_permissions.keys().map(|source_id| {
+            PendingExternalWait::new(ExternalWaitKind::RequestPermissions, source_id.clone())
+        }));
+        pending_waits.extend(self.pending_user_input.keys().map(|source_id| {
+            PendingExternalWait::new(ExternalWaitKind::RequestUserInput, source_id.clone())
+        }));
+        pending_waits.extend(
+            self.pending_elicitations
+                .keys()
+                .map(|(server_name, request_id)| {
+                    PendingExternalWait::new(
+                        ExternalWaitKind::McpElicitation,
+                        format!("{server_name}:{request_id:?}"),
+                    )
+                }),
+        );
+        pending_waits.extend(self.pending_dynamic_tools.keys().map(|source_id| {
+            PendingExternalWait::new(ExternalWaitKind::DynamicTool, source_id.clone())
+        }));
+        pending_waits.sort();
+        TurnRuntimeSnapshot {
+            pending_waits,
+            queued_input_count: self.pending_input.len(),
+        }
     }
 
     pub(crate) fn enable_strict_auto_review(&mut self) {

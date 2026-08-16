@@ -253,6 +253,10 @@ impl InputQueue {
 }
 
 impl TurnInputQueue {
+    pub(crate) fn len(&self) -> usize {
+        self.items.len()
+    }
+
     fn has_user_input(&self) -> bool {
         self.items
             .iter()

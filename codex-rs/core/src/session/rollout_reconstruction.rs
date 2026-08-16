@@ -2,6 +2,7 @@ use super::*;
 use crate::context::world_state::WorldStateSnapshot;
 use crate::context_checkpoint::ReconstructedCheckpoint;
 use crate::context_manager::is_user_turn_boundary;
+use crate::state::WorkflowRuntimeState;
 use codex_protocol::protocol::ContextCheckpointRolloutMetadata;
 use codex_protocol::protocol::SessionContextWindow;
 use uuid::Uuid;
@@ -14,6 +15,7 @@ pub(super) struct RolloutReconstruction {
     pub(super) previous_turn_settings: Option<PreviousTurnSettings>,
     pub(super) reference_context_item: Option<TurnContextItem>,
     pub(super) world_state_baseline: Option<WorldStateSnapshot>,
+    pub(super) workflow_runtime: Option<WorkflowRuntimeState>,
     pub(super) window_number: u64,
     pub(super) first_window_id: Option<Uuid>,
     pub(super) previous_window_id: Option<Uuid>,
@@ -452,11 +454,25 @@ impl Session {
             id: None,
         });
         let checkpoint = reconstructed_checkpoint(base_checkpoint, base_replacement_history);
+        let workflow_runtime = world_state_baseline.as_ref().and_then(|snapshot| {
+            let value = snapshot.clone().into_value();
+            value
+                .get(crate::state::WORKFLOW_RUNTIME_WORLD_STATE_ID)
+                .cloned()
+                .and_then(|value| match serde_json::from_value(value) {
+                    Ok(state) => Some(state),
+                    Err(error) => {
+                        tracing::warn!(error = %error, "failed to restore workflow runtime state");
+                        None
+                    }
+                })
+        });
         RolloutReconstruction {
             history: history.into_raw_items(),
             previous_turn_settings,
             reference_context_item,
             world_state_baseline,
+            workflow_runtime,
             window_number: window.number,
             first_window_id: window.first_id,
             previous_window_id: window.previous_id,

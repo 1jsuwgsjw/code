@@ -6,6 +6,7 @@ use crate::context::world_state::AppsInstructionsState;
 use crate::context::world_state::EnvironmentsState;
 use crate::context::world_state::PluginsInstructionsState;
 use crate::context::world_state::ResearchContextState;
+use crate::context::world_state::WorkflowRuntimeWorldState;
 use crate::context::world_state::WorldState;
 use codex_extension_api::WorldStateContributionInput;
 use codex_research_state::ResearchContextCacheKey;
@@ -34,14 +35,16 @@ impl Session {
 
         let mut world_state = WorldState::default();
         world_state.add_section(AgentsMdState::new(step_context.loaded_agents_md.as_deref()));
-        let (research_task_context, research_project_revision, research_entries) = {
+        let (research_task_context, research_project_revision, research_entries, workflow_runtime) = {
             let state = self.state.lock().await;
             (
                 state.research_task_context.clone(),
                 state.research_project_revision,
                 state.research_state.entries(),
+                state.workflow_runtime.clone(),
             )
         };
+        world_state.add_section(WorkflowRuntimeWorldState::new(workflow_runtime));
         let research_projection = if research_task_context.signature.is_empty() {
             ResearchContextProjection::default()
         } else {

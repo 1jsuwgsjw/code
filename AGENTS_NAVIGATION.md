@@ -266,6 +266,11 @@ Important variations:
     `ToolGroupSettlement`, `StateRemoval`, `ArtifactRecallSelection`, `model_checkpoint_view`,
     `review_context_state`, `ContextCheckpointDetails`, `update_context_state`,
     `recall_checkpoint_artifact`, `reconcile_reconstructed_checkpoint`;
+  - structured workflow continuity:
+    `codex-rs/core/src/state/workflow_runtime.rs`,
+    `codex-rs/core/src/session/workflow_runtime.rs`, and
+    `codex-rs/core/src/context/world_state/workflow_runtime.rs`;
+    representative symbols: `WorkflowRuntimeState`, `WorkflowRuntimeEvent`;
   - focused validation: `cd codex-rs && just test -p codex-context-checkpoint`, then
     `cd codex-rs && just test -p codex-core` for integration changes.
 - If `ConfigToml` or nested types change, run:

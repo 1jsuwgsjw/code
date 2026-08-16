@@ -3,6 +3,7 @@ mod apps_instructions;
 mod environment;
 mod plugins_instructions;
 mod research;
+mod workflow_runtime;
 
 use crate::context::ContextualUserFragment;
 use codex_extension_api::PreviousWorldStateSection;
@@ -23,6 +24,7 @@ pub(crate) use apps_instructions::AppsInstructionsState;
 pub(crate) use environment::EnvironmentsState;
 pub(crate) use plugins_instructions::PluginsInstructionsState;
 pub(crate) use research::ResearchContextState;
+pub(crate) use workflow_runtime::WorkflowRuntimeWorldState;
 
 trait ErasedWorldStateSection: Send + Sync {
     fn snapshot(&self) -> Option<Value>;
