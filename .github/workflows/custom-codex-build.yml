@@ -69,6 +69,20 @@ jobs:
             --package codex-cli \
             --bin codex
 
+      - name: Test TUI and snapshots
+        shell: bash
+        run: |
+          just test -p codex-tui
+          cargo insta pending-snapshots -p codex-tui
+
+      - name: Test app-server protocol
+        shell: bash
+        run: just test -p codex-app-server-protocol
+
+      - name: Test app-server
+        shell: bash
+        run: just test -p codex-app-server
+
       - name: Generate app-server schema fixtures
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.generate_schema }}
         shell: bash
