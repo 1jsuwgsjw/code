@@ -2900,8 +2900,8 @@ mod tests {
                     model_context_window: None,
                 }),
                 rate_limits: None,
-                            tool_result_share_basis_points: None,
-},
+                tool_result_share_basis_points: None,
+            },
         ))];
         let override_updated_at =
             DateTime::<Utc>::from_timestamp(1_700_001_234, 0).expect("timestamp");

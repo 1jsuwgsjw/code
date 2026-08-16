@@ -1024,15 +1024,19 @@ pub(crate) fn select_context_window_line(
     fallback.expect("context window line candidates are never empty")
 }
 
-pub(crate) fn context_window_lines(
-    usage: ContextWindowUsage,
-) -> Vec<Line<'static>> {
+pub(crate) fn context_window_lines(usage: ContextWindowUsage) -> Vec<Line<'static>> {
     let (full, compact) = if let Some(percent) = usage.remaining_percent {
         let percent = percent.clamp(0, 100);
-        (format!("{percent}% context left"), format!("{percent}% ctx"))
+        (
+            format!("{percent}% context left"),
+            format!("{percent}% ctx"),
+        )
     } else if let Some(tokens) = usage.used_tokens {
         let used_fmt = format_tokens_compact(tokens);
-        (format!("{used_fmt} tokens used"), format!("{used_fmt} used"))
+        (
+            format!("{used_fmt} tokens used"),
+            format!("{used_fmt} used"),
+        )
     } else {
         ("100% context left".to_string(), "100% ctx".to_string())
     };

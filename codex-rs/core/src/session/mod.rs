@@ -3800,11 +3800,7 @@ impl Session {
         let (info, rate_limits, tool_result_share_basis_points) = {
             let state = self.state.lock().await;
             let (info, rate_limits) = state.token_info_and_rate_limits();
-            (
-                info,
-                rate_limits,
-                state.tool_result_share_basis_points,
-            )
+            (info, rate_limits, state.tool_result_share_basis_points)
         };
         let event = EventMsg::TokenCount(TokenCountEvent {
             info,

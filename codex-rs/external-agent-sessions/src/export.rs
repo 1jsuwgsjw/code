@@ -180,8 +180,8 @@ fn token_count_item(last_model_visible_tokens: i64) -> RolloutItem {
             model_context_window: None,
         }),
         rate_limits: None,
-            tool_result_share_basis_points: None,
-}))
+        tool_result_share_basis_points: None,
+    }))
 }
 
 fn turn_complete_item(
