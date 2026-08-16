@@ -38,11 +38,17 @@ fn renders_a_bounded_typed_checkpoint_fragment() {
         CheckpointRecordFragment::new(&record).expect("checkpoint record should serialize");
     let rendered = fragment.render();
     let item: codex_protocol::models::ResponseItem = fragment.into_response_input_item().into();
-    let codex_protocol::models::ResponseItem::Message { role, .. } = &item else {
+    let codex_protocol::models::ResponseItem::Message { role, content, .. } = &item else {
         panic!("checkpoint projection should be a message");
     };
 
     assert_eq!(role, "assistant");
+    assert_eq!(
+        content,
+        &[codex_protocol::models::ContentItem::OutputText {
+            text: rendered.clone(),
+        }]
+    );
     assert!(rendered.starts_with("<CONTEXT_CHECKPOINT>\n"));
     assert!(rendered.contains("\nActive\n"));
     assert!(rendered.contains("    preserve effective runtime state"));

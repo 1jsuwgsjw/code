@@ -2,6 +2,7 @@ use super::ContextualUserFragment;
 use codex_context_checkpoint::CheckpointError;
 use codex_context_checkpoint::TurnRecord;
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,15 +20,31 @@ impl CheckpointRecordFragment {
         let ResponseItem::Message { content, .. } = item else {
             return false;
         };
-        content
-            .iter()
-            .any(|item| matches!(item, ContentItem::InputText { text } if Self::matches_text(text)))
+        content.iter().any(|item| match item {
+            ContentItem::InputText { text } | ContentItem::OutputText { text } => {
+                Self::matches_text(text)
+            }
+            _ => false,
+        })
     }
 }
 
 impl ContextualUserFragment for CheckpointRecordFragment {
     fn role(&self) -> &'static str {
         "assistant"
+    }
+
+    fn into_response_input_item(self) -> ResponseInputItem
+    where
+        Self: Sized,
+    {
+        ResponseInputItem::Message {
+            role: self.role().to_string(),
+            content: vec![ContentItem::OutputText {
+                text: self.render(),
+            }],
+            phase: None,
+        }
     }
 
     fn markers(&self) -> (&'static str, &'static str) {

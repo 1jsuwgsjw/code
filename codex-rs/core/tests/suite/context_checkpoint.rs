@@ -101,6 +101,15 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
             .and_then(serde_json::Value::as_str),
         Some("assistant")
     );
+    assert_eq!(
+        checkpoint_item
+            .get("content")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|content| content.first())
+            .and_then(|content| content.get("type"))
+            .and_then(serde_json::Value::as_str),
+        Some("output_text")
+    );
     let final_request = final_request_body.to_string();
     assert_eq!(final_request.matches("<CONTEXT_CHECKPOINT>").count(), 1);
     assert!(final_request.contains("checkpoint the current project state"));
