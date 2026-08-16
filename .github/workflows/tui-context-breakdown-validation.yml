@@ -1,0 +1,24 @@
+name: TUI context breakdown validation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: codex-rs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup-ci
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - name: Test TUI and snapshots
+        run: |
+          just test -p codex-tui
+          cargo insta pending-snapshots -p codex-tui
+      - name: Test app-server protocol
+        run: just test -p codex-app-server-protocol
+      - name: Test app-server
+        run: just test -p codex-app-server
