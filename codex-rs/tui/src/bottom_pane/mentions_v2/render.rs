@@ -297,8 +297,6 @@ fn file_name_start(row: &SearchResult) -> usize {
             .rfind(['/', '\\'])
             .map(|idx| row.display_name[..idx + 1].chars().count())
             .unwrap_or(0),
-        Selection::File(_)
-        | Selection::ProjectAgentTask(_)
-        | Selection::Tool { .. } => usize::MAX,
+        Selection::File(_) | Selection::ProjectAgentTask(_) | Selection::Tool { .. } => usize::MAX,
     }
 }

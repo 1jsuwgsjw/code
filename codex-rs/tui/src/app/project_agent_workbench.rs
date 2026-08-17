@@ -179,9 +179,7 @@ impl App {
                         root_thread_id: thread_id,
                         task_id,
                         worker_thread_id: session_thread_id,
-                        active_agent_label: format!(
-                            "@{agent_id} · {task_title} · Esc 返回任务树"
-                        ),
+                        active_agent_label: format!("@{agent_id} · {task_title} · Esc 返回任务树"),
                     });
                 self.sync_active_agent_label();
             }
