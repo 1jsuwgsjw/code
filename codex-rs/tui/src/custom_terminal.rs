@@ -38,6 +38,7 @@ use derive_more::IsVariant;
 use ratatui::backend::Backend;
 use ratatui::backend::ClearType;
 use ratatui::buffer::Buffer;
+use ratatui::buffer::CellDiffOption;
 use ratatui::layout::Position;
 use ratatui::layout::Rect;
 use ratatui::layout::Size;
@@ -494,11 +495,16 @@ where
         Ok(())
     }
 
-    /// Force the next draw pass to repaint the entire viewport by resetting the
-    /// diff buffer. Call this after raw terminal operations that move screen
-    /// content outside ratatui's knowledge.
+    /// Force the next draw pass to repaint the entire viewport after raw terminal
+    /// operations move screen content outside ratatui's knowledge. Resetting the
+    /// diff buffer alone would leave default-style spaces equal to their previous
+    /// cells, allowing stale terminal content to show through those spaces.
     pub fn invalidate_viewport(&mut self) {
-        self.previous_buffer_mut().reset();
+        let previous_buffer = self.previous_buffer_mut();
+        previous_buffer.reset();
+        for cell in &mut previous_buffer.content {
+            cell.set_diff_option(CellDiffOption::AlwaysUpdate);
+        }
     }
 
     /// Clear terminal scrollback (if supported) and force a full redraw.
