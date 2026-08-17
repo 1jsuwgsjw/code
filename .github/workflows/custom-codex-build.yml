@@ -77,6 +77,14 @@ jobs:
         shell: bash
         run: just test -p codex-tui
 
+      - name: Upload pending TUI snapshots
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: pending-tui-snapshots
+          path: codex-rs/tui/src/**/*.snap.new
+          if-no-files-found: ignore
+
       - name: Test app-server protocol
         shell: bash
         run: just test -p codex-app-server-protocol
