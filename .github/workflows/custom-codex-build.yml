@@ -57,18 +57,6 @@ jobs:
           restore-keys: |
             windows-codex-dev-small-${{ hashFiles('codex-rs/Cargo.lock') }}-
 
-      - name: Build Codex for Windows
-        shell: bash
-        env:
-          LIBSQLITE3_FLAGS: SQLITE_DISABLE_INTRINSIC
-        run: |
-          cargo build \
-            --locked \
-            --profile dev-small \
-            --target x86_64-pc-windows-msvc \
-            --package codex-cli \
-            --bin codex
-
       - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
           tool: nextest
@@ -94,6 +82,18 @@ jobs:
       - name: Test app-server
         shell: bash
         run: just test -p codex-app-server
+
+      - name: Build Codex for Windows
+        shell: bash
+        env:
+          LIBSQLITE3_FLAGS: SQLITE_DISABLE_INTRINSIC
+        run: |
+          cargo build \
+            --locked \
+            --profile dev-small \
+            --target x86_64-pc-windows-msvc \
+            --package codex-cli \
+            --bin codex
 
       - name: Stage custom binary
         shell: pwsh
