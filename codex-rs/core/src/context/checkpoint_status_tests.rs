@@ -32,6 +32,7 @@ context_usage=85.12% usage_source=Provider tool_result_share=20.50%\n\
 tool_groups=3 open=1 settled=2 settleable=[TG000003,TG000004]\n\
 last_checkpoint=none\n\
              pressure=Required checkpoint_required=true tool=update_context_state recall=recall_checkpoint_artifact\n\
+             policy=checkpoint_at_semantic_closure_or_pressure;retain_effective_knowledge+uncertainty;archive_process_even_when_recallable;never_promote_tool_usage_or_bookkeeping;no_next_action;settle_each_selected_group\n\
 </MEMORY_STATUS>"
     );
 }

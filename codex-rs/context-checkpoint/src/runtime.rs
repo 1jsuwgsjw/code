@@ -29,6 +29,8 @@ use crate::TruncationProvenance;
 use crate::TurnRecord;
 use crate::TurnRecordId;
 use crate::UpdateContextStateRequest;
+use crate::evidence_bridge::attach_settled_group_artifacts;
+use crate::settlement::validate_tool_group_settlements;
 use crate::source_revision::invalidate_stale_source_facts;
 use crate::source_revision::stamp_source_facts;
 use crate::state::SESSIONS_PER_QUARTER;
@@ -353,7 +355,18 @@ impl CheckpointRuntime {
             apply_context_state_update(&current_state, &request.state, snapshot.generation_id)?;
         stamp_source_facts(&mut context_state, workspace_root).await?;
         let selected = validate_group_selection(&snapshot, &request)?;
+        validate_tool_group_settlements(
+            &selected,
+            &request.tool_group_settlements,
+            &context_state,
+        )?;
         let mut evidence = update_evidence(&request.state);
+        attach_settled_group_artifacts(
+            &selected,
+            &request.tool_group_settlements,
+            &mut context_state,
+            &mut evidence,
+        )?;
         append_required_recall_evidence(&selected, &mut evidence);
         let artifacts = referenced_artifacts(&snapshot, &evidence)?;
         for artifact in &artifacts {
@@ -377,6 +390,8 @@ impl CheckpointRuntime {
             record_id,
             generation_id: snapshot.generation_id,
             completed_groups: request.completed_tool_groups.clone(),
+            tool_group_settlements: request.tool_group_settlements.clone(),
+            state_removals: request.state.removals.clone(),
             state: context_state,
             summary: String::new(),
             evidence,
@@ -384,7 +399,6 @@ impl CheckpointRuntime {
             validation: Vec::new(),
             decisions: Vec::new(),
             open_items: Vec::new(),
-            next_action: String::new(),
             correction_of: None,
         };
         let record_bytes = serde_json::to_vec(&record)
@@ -528,15 +542,13 @@ impl CheckpointRuntime {
                 ))
             })?
         };
-        let (data, truncated) = self
-            .store
-            .recall_artifact(&artifact, request.max_bytes.min(MAX_RECALL_BYTES))
-            .await?;
-        Ok(RecallResult {
+        let data = self.store.read_verified_artifact(&artifact).await?;
+        crate::artifact_recall::build_recall_result(
             artifact,
             data,
-            truncated,
-        })
+            request.selection,
+            request.max_bytes.min(MAX_RECALL_BYTES),
+        )
     }
 
     pub async fn is_fallback_required(&self) -> bool {

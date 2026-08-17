@@ -4,17 +4,26 @@
 //! does not depend on Codex protocol or session types; hosts project their own conversation items
 //! into the history ranges recorded here.
 
+mod artifact_recall;
 mod budget;
+mod evidence_bridge;
 mod ids;
 mod model;
 mod model_projection;
 mod projection;
 mod reconcile;
 mod runtime;
+mod settlement;
 mod source_revision;
 mod state;
 mod store;
 
+pub use artifact_recall::ArtifactOutlineSection;
+pub use artifact_recall::ArtifactRecallSelection;
+pub use artifact_recall::ArtifactRecallView;
+pub use artifact_recall::ArtifactSearchMatch;
+pub use artifact_recall::RecallRequest;
+pub use artifact_recall::RecallResult;
 pub use budget::CheckpointBudget;
 pub use ids::ArtifactId;
 pub use ids::CheckpointGenerationId;
@@ -34,11 +43,11 @@ pub use model::InstalledCheckpoint;
 pub use model::MemoryStatusSnapshot;
 pub use model::PendingCheckpoint;
 pub use model::PreparedCheckpointRequest;
-pub use model::RecallRequest;
-pub use model::RecallResult;
 pub use model::ToolCallOutcome;
 pub use model::ToolCallRecord;
+pub use model::ToolGroupDisposition;
 pub use model::ToolGroupRecord;
+pub use model::ToolGroupSettlement;
 pub use model::ToolGroupState;
 pub use model::ToolInvocationRecord;
 pub use model::ToolResultRecord;
@@ -50,6 +59,7 @@ pub use model_projection::checkpoint_labels;
 pub use model_projection::checkpoint_reference;
 pub use model_projection::checkpoint_state_entry_count;
 pub use model_projection::model_checkpoint_json;
+pub use model_projection::model_checkpoint_view;
 pub use projection::project_history;
 pub use runtime::CheckpointRuntime;
 pub use state::ActiveContextState;
@@ -57,5 +67,7 @@ pub use state::ContextStateSnapshot;
 pub use state::ContextStateUpdate;
 pub use state::StateEntry;
 pub use state::StateEntryKind;
+pub use state::StateRemoval;
+pub use state::StateRemovalReason;
 pub use store::CheckpointStore;
 pub use store::content_sha256;

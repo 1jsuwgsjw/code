@@ -18,7 +18,7 @@ fn state_with_source(path: &str) -> ContextStateSnapshot {
             }],
             constraints: Vec::new(),
             open_questions: Vec::new(),
-            next_action: "continue implementation".to_string(),
+            continuity_hints: vec!["The verified source fact may be reused later.".to_string()],
         },
         ..Default::default()
     }

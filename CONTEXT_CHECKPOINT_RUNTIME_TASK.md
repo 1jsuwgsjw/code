@@ -56,8 +56,9 @@ State ownership rules:
   file contents or modification logs.
 - Stale keys are explicitly forgotten before replacement. Historical versions remain immutable on
   disk but are absent from the current model projection.
-- Normal requests filter all historical checkpoint fragments and append exactly one latest state
-  projection at the request tail. If state projection fails, historical fragments remain visible as
+- Normal requests filter all historical checkpoint fragments and append exactly one latest
+  hierarchical Quarter/Session/Active projection at the request tail. This is one materialized view,
+  not one summary: immutable earlier TurnRecords and Artifacts remain externally addressable. If state projection fails, historical fragments remain visible as
   the conservative recovery path.
 
 The model tool is `update_context_state`. ToolGroups only delimit raw history that may be removed;
@@ -79,17 +80,22 @@ Implemented in the current working stage:
 - legacy TurnRecord payload fields retained only for reading earlier manifests.
 - semantic `ctx:Gxxxxxx/TRxxxxxx` checkpoint identities and deterministic
   `artifact:TRxxxxxx/Axxx` recall references, while SHA-256 remains integrity metadata only;
-- a bounded model projection that preserves both three-layer state and legacy summary semantics
-  without injecting manifest, artifact, or source-revision hashes;
+- a bounded sparse outline for the model that preserves both three-layer state and legacy summary
+  semantics without injecting JSON syntax, manifest hashes, artifact hashes, or source-revision hashes;
 - structured checkpoint lifecycle metadata through core protocol and app-server history, including
   labels, state-entry count, and the context-window chain;
 - an adaptive TUI checkpoint history tree with narrow-window folding, raw transcript recovery, and
-  Unicode Windows Terminal / ASCII legacy-console rendering.
+  Unicode Windows Terminal / ASCII legacy-console rendering;
+- regenerated app-server JSON and TypeScript schema fixtures, with an opt-in Windows workflow export
+  path that does not add work to normal push builds.
 
-Still required before this correction is complete:
+Runtime acceptance evidence:
 
-- GitHub Windows workflow confirmation for the semantic recall, protocol, app-server, and TUI
-  changes, followed by a real resumed-thread smoke of projection, recall, and history replay.
+- Windows workflow `31846792396` generated and uploaded the app-server schemas, and final-head
+  workflow `31848095705` compiled and uploaded the Windows CLI successfully.
+- Resumed-thread smoke `01a00283-6275-7e93-a1e0-59ca8cc77eac` created
+  `ctx:G000001/TR000001`, restored its Active and Session state in the next request, and recalled
+  `artifact:TR000001/A001` as `CONTEXT_CHECKPOINT_SMOKE_EVIDENCE` with exit status `0`.
 
 ## Problem
 
@@ -161,27 +167,42 @@ session=S001 turn=T018
 context_usage=73.4% tool_result_share=28.6%
 tool_groups=3 open=1 settled=2
 turn_record=pending last_checkpoint=T014
-checkpoint_required=false tool=update_summary
+checkpoint_required=false tool=update_context_state
+policy=retain_knowledge+retain_uncertainty+archive_process;no_next_action;settle_each_group
 </MEMORY_STATUS>
 ```
 
 Old status values are not rewritten into persisted history. A request receives only the current
 ephemeral value, and the completed turn is reconciled once.
 
-## Summary Tool Contract
+## Context State Tool Contract
 
 ```json
 {
-  "name": "update_summary",
-  "scope": "turn | stage | session",
-  "completedToolGroups": ["TG-018-01"],
-  "summary": "purpose, essential process, and actual result",
-  "evidence": ["existing file, symbol, record, or artifact references"],
-  "changes": ["changes actually produced"],
-  "validation": ["validation performed and its real result"],
-  "decisions": ["user and engineering decisions"],
-  "openItems": ["unfinished work and why it remains open"],
-  "nextAction": "one directly executable next action"
+  "name": "update_context_state",
+  "completedToolGroups": ["TG000018"],
+  "toolGroupSettlements": [
+    {
+      "groupId": "TG000018",
+      "disposition": "promote | keepOpen | archiveOnly",
+      "stateKeys": ["source:checkpoint/runtime"],
+      "openQuestions": []
+    }
+  ],
+  "state": {
+    "active": {
+      "objective": "the current user-owned objective",
+      "entries": [],
+      "constraints": [],
+      "openQuestions": [],
+      "continuityHints": [
+        "non-authoritative knowledge or evidence that may matter later; never an action"
+      ]
+    },
+    "sessionUpserts": [],
+    "removals": [],
+    "quarterPromotions": []
+  }
 }
 ```
 
@@ -225,8 +246,10 @@ memory/artifacts/S001/T018/TG01/call-31.log
 
 - Recall order is TurnRecord, then ToolGroup excerpt, then full Artifact.
 - Unresolved errors, unique evidence, and content still requiring line-by-line analysis are marked
-  `requiresRecall` and cannot be discarded from the active reasoning set.
-- User decisions, failure causes, validation conclusions, and `nextAction` are mandatory fields.
+  `requiresRecall`. Their immutable Artifact and direct recall bridge must survive, but the raw result
+  may leave the active prompt once effective knowledge or the unresolved question is retained separately.
+- User decisions, failure causes, validation conclusions, effective source knowledge, and explicit
+  source coverage are mandatory when they exist. Compression never creates or selects a next action.
 - A missing artifact or hash mismatch marks dependent summaries untrusted; Runtime never fills the
   gap by inference.
 - Track original tokens, summary tokens, provider-reported cached tokens, recall count, rejected
@@ -267,7 +290,7 @@ behavior contradicts it.
 | Legacy remote fallback | `core/src/compact_remote.rs` (`run_remote_compact_task_inner_impl`) | It installs provider-produced replacement history through the same Session method. Retain it only as an observable provider fallback. |
 | Pressure calculation | `core/src/session/context_window.rs` (`context_window_token_status`) | This is the authoritative source for active usage, scoped limits, full-window limits, and tokens remaining. Derive usable-budget pressure here rather than estimating it in the model. |
 | Runtime ownership | `core/src/state/service.rs` (`SessionServices`) and `core/src/session/session.rs` (`Session::new`) | Store one per-thread `CheckpointRuntime` in services and construct it from a deterministic host-local root. Startup failure must produce a degraded runtime, not fail Session creation. |
-| Tool registration | `core/src/tools/spec_plan.rs` (`add_core_utility_tools`, `build_tool_specs_and_registry`) | Register `update_summary` and recall handlers here. Pressure-based visibility belongs in the tool-plan policy, not in individual handlers. |
+| Tool registration | `core/src/tools/spec_plan.rs` (`add_core_utility_tools`, `build_tool_specs_and_registry`) | Register `update_context_state` and recall handlers here. Pressure-based visibility belongs in the tool-plan policy, not in individual handlers. |
 | Context fragment contract | `context-fragments/src/fragment.rs` (`ContextualUserFragment`) | `into_response_input_item` creates a bounded role-bearing item. The status implementation belongs under `core/src/context/` and is appended only to the mutable request tail. |
 | Existing tests | `core/src/session/rollout_reconstruction_tests.rs` and `core/src/session/tests.rs` | Existing coverage proves replacement history is restored verbatim. Extend these tests for optional metadata and checkpoint generation recovery rather than introducing a parallel test harness. |
 
@@ -330,6 +353,91 @@ Before rendering `<CONTEXT_CHECKPOINT>`, Runtime deterministically reduces the d
 The full manifest, TurnRecord, tool calls, outputs, and integrity hashes remain recoverable. Compact
 projection changes model-visible recovery cost, not evidence retention.
 
+### Selective Artifact Recall
+
+- `recall_checkpoint_artifact` defaults to an outline that returns line counts, bounded section
+  previews, approximate section sizes, and selectable line ranges without returning artifact text.
+- `mode=lines` returns only an explicit 1-based line window, with a hard line cap, byte cap, and
+  `nextStartLine` when the requested window cannot fit.
+- `mode=search` scans the verified artifact but returns only bounded keyword matches, columns,
+  excerpts, and a small number of neighboring lines. It never injects the full matching artifact.
+- `mode=prefix` remains only as an explicit compatibility path. Normal model behavior must inspect
+  the outline first and then select a line range or keyword query.
+- Hash verification remains mandatory before outline, line, or search results are produced. These
+  views reduce model-context cost; they do not weaken immutable Artifact evidence.
+
+### Sparse Model View And Long-Running Hierarchy
+
+- Runtime persists strongly typed JSON, but the model receives a sparse, line-oriented semantic view;
+  storage syntax is never used as prompt presentation.
+- Exactly one latest checkpoint fragment is visible for cache stability, but that fragment materializes
+  three different time scales: Quarter knowledge, Session knowledge, and precise Active state.
+- Earlier TurnRecords, earlier Quarter states, and raw Artifacts remain immutable outside the active
+  context. The latest view references them rather than replaying every historical summary.
+- Empty sections are omitted. Repeated JSON keys, braces, hashes, and empty arrays never consume model
+  context. Each retained fact stays adjacent to its evidence and source status.
+- Long-running continuity comes from merging still-valid knowledge forward through the layers, not from
+  stacking summaries of summaries in the prompt.
+
+### Normal-Task Smoke Finding And Corrected Settlement Rules
+
+A normal pricing repair smoke task exposed a rule conflict rather than an evidence-retention failure.
+The task completed correctly, but four checkpoint generations promoted tool discovery, task-anchor
+bookkeeping, taskctl command shape, and lifecycle narration. The latest view contained 17 state items
+and roughly 70 raw Artifact references for a three-test repair.
+
+The causes and corrected rules are:
+
+- `requiresRecall` records that an immutable result must remain selectively recoverable. It does not
+  mean the result is durable project knowledge and no longer forbids `archiveOnly`.
+- `archiveOnly` removes process history from the model prompt while Runtime retains and verifies its
+  Artifact. A truncated result or tool error alone never justifies a fabricated state entry.
+- Checkpointing is not routine post-tool bookkeeping. The model calls `update_context_state` only when
+  a semantic work stage closes, context pressure requires settlement, or the user explicitly requests
+  it. Every selected ToolGroup is settled, but every ToolGroup is not settled immediately.
+- Active contains unfinished work only. Completed reusable facts move to Session; an empty Active state
+  clears a closed stage instead of preserving `task_completed`, task lifecycle, or a synthetic next step.
+- Modern structured records do not render the legacy top-level evidence catalog. Artifact evidence stays
+  immutable outside the prompt and appears model-side only when adjacent to retained semantic state.
+- `toolGroupSettlements.stateKeys` is the semantic join between retained knowledge and raw evidence.
+  Runtime, not the model, attaches at most the three newest output Artifacts from promoted or keep-open
+  groups to each referenced state entry. The model never has to discover, copy, or memorize SHA-256 IDs.
+- `archiveOnly` groups remain absent from the semantic view. A retained entry renders short
+  `artifact:TR.../A...` references beside its content, and recall begins with a bounded outline before
+  search or line selection.
+- Tool-schema `artifactId` is accepted while legacy persisted `artifact_id` remains readable, preventing
+  model-generated evidence from failing at the serde boundary.
+
+### Compression Philosophy: Three Checks And One Immutable History
+
+Compression is a projection operation, not a rewrite of history and not a narrative of actions the
+model performed. Before settling an item, the model and Runtime apply three checks:
+
+1. **Validity:** whether the fact, constraint, decision, or question is still effective, invalidated,
+   resolved, or superseded.
+2. **Provenance:** which user instruction, source revision, tool evidence, or earlier state entry owns
+   it, and which later record explicitly supersedes it.
+3. **Dependency:** whether future reasoning can safely proceed without the item. Important unresolved
+   questions, failure causes, and validation gaps remain active rather than disappearing for lack of
+   a confirmed answer.
+
+One history remains immutable: user decisions, externally effective actions, checkpoint ancestry,
+and raw Artifact evidence are append-only. Compression may remove them from the active model view but
+must never rewrite or physically delete them. A correction or revocation is another record linked to
+the earlier node.
+
+Policy consequences:
+
+- Bare forgetting is forbidden for protected rules, decisions, and source knowledge. A removal
+  requires explicit user revocation or a `supersededBy` reference; source invalidation is performed
+  automatically from the verified source revision.
+- `continuityHints` is the model's bounded, non-authoritative place to preserve knowledge or evidence
+  that may matter later. It must never contain an action, commitment, or selected plan.
+- Artifact entries require a semantic title, source/tool identity, size, and recall hint in addition
+  to their stable reference and integrity hash.
+- Before freezing a checkpoint, the Runtime should expose a bounded diff: retained, archived,
+  superseded, and rejected removals, including the evidence for every protected-state transition.
+
 ### TUI Observability And History
 
 - Normal conversation shows concise lifecycle events for collecting, validating, preparing,
@@ -359,8 +467,8 @@ projection changes model-visible recovery cost, not evidence retention.
   duration, and context cost. Load individual calls and raw output only when that node is opened.
 - Manual expand/collapse choices override automatic folding and are persisted by semantic reference.
   Incoming events must not steal focus, collapse the selected branch, or reset scroll position.
-- Adapt folding to viewport pressure without hiding failures, user decisions, active constraints, or
-  `nextAction`. A bounded visible-row model virtualizes large trees and avoids rendering off-screen
+- Adapt folding to viewport pressure without hiding failures, user decisions, active constraints,
+  retained knowledge, or continuity hints. A bounded visible-row model virtualizes large trees and avoids rendering off-screen
   history.
 - Keep thread identity separate from live worker/process state. A resumed or completed thread remains
   navigable from its persisted checkpoint index even when no worker is active.
@@ -513,8 +621,7 @@ codex-rs/core/src/context_checkpoint/
   projection.rs              ResponseItem projection adapter
 
 codex-rs/core/src/context/checkpoint_status.rs
-codex-rs/core/src/tools/handlers/update_summary.rs
-codex-rs/core/src/tools/handlers/update_summary_spec.rs
+codex-rs/core/src/tools/handlers/checkpoint.rs
 codex-rs/core/src/tools/handlers/recall_checkpoint.rs
 codex-rs/core/src/tools/handlers/recall_checkpoint_spec.rs
 codex-rs/core/src/session/context_checkpoint.rs
@@ -768,7 +875,7 @@ not become a new availability dependency for ordinary Codex work.
   checkpoint artifact capture fails.
 - Capture failure moves the runtime to `Degraded`, emits one bounded event, and records the reason in
   rollout when persistence remains available.
-- `update_summary` is rejected while required evidence is degraded; it never freezes an incomplete
+- `update_context_state` is rejected while required evidence is degraded; it never freezes an incomplete
   record as trusted.
 - At normal pressure the conversation continues with the original history intact.
 - At fallback pressure the existing local/remote compaction path runs with the degradation reason.
@@ -783,10 +890,11 @@ not become a new availability dependency for ordinary Codex work.
 - Runtime creates one ToolGroup for each assistant sampling step that emits one or more tool calls.
 - Parallel calls emitted by the same response share the group.
 - A later sampling step receives a new group ID.
-- Runtime does not infer the semantic purpose. `update_summary` supplies the meaning and may settle
+- Runtime does not infer the semantic purpose. `update_context_state` supplies the meaning and may settle
   one or more contiguous completed groups.
-- Groups with in-flight calls, unresolved unique evidence, or `requiresRecall=true` cannot be
-  removed from the active tail.
+- Groups with in-flight calls cannot be removed from the active tail. A settled `requiresRecall=true`
+  group may be archived after Runtime has persisted its Artifact and effective knowledge or unresolved
+  questions have been retained separately when they exist.
 
 This gives Runtime mechanical boundaries while preserving the model's responsibility for semantic
 stage completion.
@@ -820,7 +928,7 @@ let prompt = build_prompt(prepared.input, router.as_ref(), turn_context, base_in
 item. It has a hard byte/token cap and is never written into ContextManager or rollout history.
 Retries rebuild only the mutable request tail; frozen history items remain byte-for-byte stable.
 
-## Summary Tool Lifecycle
+## Context State Tool Lifecycle
 
 The handler validates JSON and prepares a checkpoint, but does not replace history inside tool
 dispatch:
@@ -954,7 +1062,7 @@ usable budget. Invalid combinations fail config loading instead of being silentl
 
 ### Core Integration
 
-- A tool-heavy turn calls `update_summary`; the next request contains the frozen TurnRecord and omits
+- A tool-heavy turn calls `update_context_state`; the next request contains the frozen TurnRecord and omits
   only the settled raw groups.
 - Open groups remain byte-for-byte in the next request.
 - Invalid references return a tool error and leave history unchanged.
@@ -993,3 +1101,29 @@ This order is for code dependency management, not for shipping incomplete user-v
 
 The deployable result must contain all seven steps. Intermediate commits may compile for review, but
 must not be presented as the completed replacement runtime.
+
+## Blind Compaction Validation Record
+
+Windows artifact `31874802017` was exercised without telling the model to compact, checkpoint, use a
+skill, or select a file-reading tool. The persisted test thread is
+`01a004ae-35c8-73b0-b38c-08c191868a33` in
+`D:\codex-blind-compaction-smoke-31874802017`.
+
+- The first ordinary inventory task naturally loaded `task-anchor`, ran bootstrap, used
+  `compact_view.py`, and created checkpoint `ctx:G000001/TR000001` after 20 ToolGroups. The projection
+  retained five effective source/validation entries and ten bounded Artifact references while
+  removing the settled process noise.
+- The replacement history itself retained the original developer skills catalog and the checkpoint
+  projection. Compaction therefore did not directly delete the skill rules.
+- On process resume, the World State skills extension incorrectly treated the retained host-skills
+  catalog as an unknown prior selected-environment catalog and injected `No selected-environment
+  skills are currently available.` The model consequently stopped using `task-anchor` and read
+  project files with `Get-Content`, despite receiving no instruction to change tools.
+- The root cause is an over-broad legacy matcher in
+  `codex-rs/ext/skills/src/world_state.rs`: it matched every `<skills_instructions>` block rather than
+  only selected-environment skill catalogs and explicit `Skills update` fragments. The matcher must
+  remain narrow so an unknown World State snapshot cannot revoke unrelated stable skill rules.
+- The second task still repaired `Inventory.release` correctly and passed all six unittest cases,
+  proving effective project knowledge survived; however, tool-policy continuity failed and is a
+  release-blocking resume regression until the narrowed matcher passes CI and the same blind smoke
+  test.

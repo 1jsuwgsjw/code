@@ -17,7 +17,7 @@ fn active(entries: Vec<StateEntry>) -> ActiveContextState {
         entries,
         constraints: Vec::new(),
         open_questions: Vec::new(),
-        next_action: "edit the state projection".to_string(),
+        continuity_hints: vec!["The projection policy may be reused later.".to_string()],
     }
 }
 
@@ -39,7 +39,7 @@ fn state_update_replaces_active_and_promotes_existing_session_memory() {
         &ContextStateUpdate {
             active: expected.active.clone(),
             session_upserts: expected.session.clone(),
-            forget_keys: Vec::new(),
+            removals: Vec::new(),
             quarter_promotions: vec!["compression.model".to_string()],
         },
         CheckpointGenerationId::new(SESSIONS_PER_QUARTER),
@@ -56,7 +56,7 @@ fn state_update_rejects_immediate_quarter_promotion() {
         &ContextStateUpdate {
             active: active(Vec::new()),
             session_upserts: vec![decision("compression.model", "preserve effective state")],
-            forget_keys: Vec::new(),
+            removals: Vec::new(),
             quarter_promotions: vec!["compression.model".to_string()],
         },
         CheckpointGenerationId::new(SESSIONS_PER_QUARTER),
@@ -79,7 +79,7 @@ fn source_facts_require_recallable_evidence() {
                 source_revision: Some("64b688afc".to_string()),
             }]),
             session_upserts: Vec::new(),
-            forget_keys: Vec::new(),
+            removals: Vec::new(),
             quarter_promotions: Vec::new(),
         },
         CheckpointGenerationId::new(1),
@@ -102,7 +102,7 @@ fn state_update_rejects_quarter_promotion_before_scheduled_boundary() {
         &ContextStateUpdate {
             active: active(Vec::new()),
             session_upserts: Vec::new(),
-            forget_keys: Vec::new(),
+            removals: Vec::new(),
             quarter_promotions: vec!["compression.model".to_string()],
         },
         CheckpointGenerationId::new(SESSIONS_PER_QUARTER - 1),
@@ -110,4 +110,61 @@ fn state_update_rejects_quarter_promotion_before_scheduled_boundary() {
     .expect_err("quarter promotion before the fifth boundary must fail");
 
     assert!(matches!(error, CheckpointError::InvalidRequest(_)));
+}
+
+#[test]
+fn state_update_can_clear_active_after_semantic_closure() {
+    let current = ContextStateSnapshot {
+        session: vec![decision("session.fact", "retain this project fact")],
+        active: active(Vec::new()),
+        ..Default::default()
+    };
+    let expected = ContextStateSnapshot {
+        session: current.session.clone(),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        apply_context_state_update(
+            &current,
+            &ContextStateUpdate {
+                active: ActiveContextState::default(),
+                session_upserts: Vec::new(),
+                removals: Vec::new(),
+                quarter_promotions: Vec::new(),
+            },
+            CheckpointGenerationId::new(2),
+        ),
+        Ok(expected)
+    );
+}
+
+#[test]
+fn state_removal_requires_a_retained_superseding_entry() {
+    let current = ContextStateSnapshot {
+        session: vec![decision("compression.policy.v1", "retain task summaries")],
+        ..Default::default()
+    };
+    let replacement = decision(
+        "compression.policy.v2",
+        "retain effective knowledge and archive process noise",
+    );
+
+    let actual = apply_context_state_update(
+        &current,
+        &ContextStateUpdate {
+            active: active(Vec::new()),
+            session_upserts: vec![replacement.clone()],
+            removals: vec![StateRemoval {
+                key: "compression.policy.v1".to_string(),
+                reason: StateRemovalReason::Superseded,
+                superseded_by: Some("compression.policy.v2".to_string()),
+            }],
+            quarter_promotions: Vec::new(),
+        },
+        CheckpointGenerationId::new(2),
+    )
+    .expect("superseded state should retain its replacement");
+
+    assert_eq!(actual.session, vec![replacement]);
 }

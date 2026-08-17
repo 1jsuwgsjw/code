@@ -11,6 +11,7 @@ fn renders_a_bounded_typed_checkpoint_fragment() {
         record_id: TurnRecordId::new(2),
         generation_id: CheckpointGenerationId::new(1),
         completed_groups: vec![ToolGroupId::new(3)],
+        tool_group_settlements: Vec::new(),
         state: ContextStateSnapshot {
             quarter: Vec::new(),
             session: Vec::new(),
@@ -19,16 +20,16 @@ fn renders_a_bounded_typed_checkpoint_fragment() {
                 entries: Vec::new(),
                 constraints: Vec::new(),
                 open_questions: Vec::new(),
-                next_action: "install the checkpoint".to_string(),
+                continuity_hints: vec!["The checkpoint state may be relevant later.".to_string()],
             },
         },
+        state_removals: Vec::new(),
         summary: String::new(),
         evidence: Vec::new(),
         changes: Vec::new(),
         validation: Vec::new(),
         decisions: Vec::new(),
         open_items: Vec::new(),
-        next_action: String::new(),
         correction_of: None,
     };
 
@@ -38,7 +39,9 @@ fn renders_a_bounded_typed_checkpoint_fragment() {
     let item: codex_protocol::models::ResponseItem = fragment.into_response_input_item().into();
 
     assert!(rendered.starts_with("<CONTEXT_CHECKPOINT>\n"));
-    assert!(rendered.contains("\"objective\":\"preserve effective runtime state\""));
+    assert!(rendered.contains("\nActive\n"));
+    assert!(rendered.contains("    preserve effective runtime state"));
+    assert!(!rendered.contains("\"objective\""));
     assert!(!rendered.contains("recordId"));
     assert!(rendered.ends_with("\n</CONTEXT_CHECKPOINT>"));
     assert!(CheckpointRecordFragment::matches_item(&item));

@@ -11,18 +11,30 @@ use pretty_assertions::assert_eq;
 use serde_json::json;
 
 fn update_context_state_arguments(completed_groups: &[&str], objective: &str) -> String {
+    let tool_group_settlements = completed_groups
+        .iter()
+        .map(|group_id| {
+            json!({
+                "groupId": group_id,
+                "disposition": "archiveOnly",
+                "stateKeys": [],
+                "openQuestions": []
+            })
+        })
+        .collect::<Vec<_>>();
     serde_json::to_string(&json!({
         "completedToolGroups": completed_groups,
+        "toolGroupSettlements": tool_group_settlements,
         "state": {
             "active": {
                 "objective": objective,
                 "entries": [],
                 "constraints": [],
                 "openQuestions": [],
-                "nextAction": "continue from the projected state"
+                "continuityHints": ["The projected state may be relevant later."]
             },
             "sessionUpserts": [],
-            "forgetKeys": [],
+            "removals": [],
             "quarterPromotions": []
         }
     }))
@@ -78,9 +90,98 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
         .body_json()
         .to_string();
     assert_eq!(final_request.matches("<CONTEXT_CHECKPOINT>").count(), 1);
+    assert!(final_request.contains("\\nActive\\n"));
     assert!(final_request.contains("second objective"));
     assert!(final_request.contains("ctx:G000002/TR000002"));
+    assert!(!final_request.contains("\"objective\":"));
     assert!(!final_request.contains("manifestSha256"));
 
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn checkpoint_artifact_recall_defaults_to_a_structured_outline() -> Result<()> {
+    let harness = TestCodexHarness::with_builder(test_codex().with_model("gpt-5.4")).await?;
+    let update = serde_json::to_string(&json!({
+        "completedToolGroups": ["TG000001"],
+        "toolGroupSettlements": [{
+            "groupId": "TG000001",
+            "disposition": "promote",
+            "stateKeys": ["checkpoint.shell.output"],
+            "openQuestions": []
+        }],
+        "state": {
+            "active": {
+                "objective": ""
+            },
+            "sessionUpserts": [{
+                "key": "checkpoint.shell.output",
+                "kind": "validation",
+                "content": "The shell output is retained as direct checkpoint evidence.",
+                "evidence": [{
+                    "kind": "symbol",
+                    "value": "shell_command::echo checkpoint"
+                }]
+            }],
+            "removals": [],
+            "quarterPromotions": []
+        }
+    }))?;
+    let shell_arguments = serde_json::to_string(&json!({ "command": "echo checkpoint" }))?;
+    let recall_arguments = serde_json::to_string(&json!({
+        "reference": "artifact:TR000001/A001"
+    }))?;
+    let responses = vec![
+        sse(vec![
+            ev_response_created("resp-outline-1"),
+            ev_function_call("call-outline-shell", "shell_command", &shell_arguments),
+            ev_completed("resp-outline-1"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-outline-2"),
+            ev_function_call("call-outline-state", "update_context_state", &update),
+            ev_completed("resp-outline-2"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-outline-3"),
+            ev_function_call(
+                "call-outline-recall",
+                "recall_checkpoint_artifact",
+                &recall_arguments,
+            ),
+            ev_completed("resp-outline-3"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-outline-4"),
+            ev_assistant_message("msg-outline", "done"),
+            ev_completed("resp-outline-4"),
+        ]),
+    ];
+    let mock = mount_sse_sequence(harness.server(), responses).await;
+
+    harness.submit("inspect the saved artifact").await?;
+
+    let requests = mock.requests();
+    let recall_request = requests
+        .get(2)
+        .expect("model request after checkpoint installation")
+        .body_json()
+        .to_string();
+    assert!(recall_request.contains("validation/checkpoint.shell.output"));
+    assert!(recall_request.contains("artifact:TR000001/A001"));
+
+    let output: serde_json::Value = serde_json::from_str(
+        &mock
+            .function_call_output_text("call-outline-recall")
+            .expect("recall tool output"),
+    )?;
+    assert_eq!(output["view"]["mode"], "outline");
+    assert!(
+        !output["view"]["sections"]
+            .as_array()
+            .expect("outline sections")
+            .is_empty()
+    );
+    assert!(output["view"].get("content").is_none());
     Ok(())
 }

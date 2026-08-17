@@ -85,10 +85,16 @@ pub(crate) async fn install_pending_checkpoint(
         message: if pending.record.state.is_empty() {
             pending.record.summary.clone()
         } else {
-            format!(
-                "Context state: {}\nNext action: {}",
-                pending.record.state.active.objective, pending.record.state.active.next_action
-            )
+            let objective = &pending.record.state.active.objective;
+            let continuity_hints = &pending.record.state.active.continuity_hints;
+            if continuity_hints.is_empty() {
+                format!("Context state: {objective}")
+            } else {
+                format!(
+                    "Context state: {objective}\nContinuity hints: {}",
+                    continuity_hints.join("; ")
+                )
+            }
         },
         replacement_history: Some(replacement_history.clone()),
         checkpoint: Some(ContextCheckpointRolloutMetadata {

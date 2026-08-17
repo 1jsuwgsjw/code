@@ -2,6 +2,12 @@ name: Project AGENT Windows Build
 
 on:
   workflow_dispatch:
+    inputs:
+      generate_schema:
+        description: Generate and upload app-server schema fixtures
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - research-state
@@ -62,6 +68,20 @@ jobs:
             --target x86_64-pc-windows-msvc \
             --package codex-cli \
             --bin codex
+
+      - name: Generate app-server schema fixtures
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.generate_schema }}
+        shell: bash
+        run: just write-app-server-schema
+
+      - name: Upload app-server schema fixtures
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.generate_schema }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: app-server-schema
+          path: codex-rs/app-server-protocol/schema
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Stage custom binary
         shell: pwsh

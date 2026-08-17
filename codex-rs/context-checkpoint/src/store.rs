@@ -209,7 +209,7 @@ impl CheckpointStore {
         Ok(self.root.join(MANIFESTS_DIR).join(format!("{sha256}.json")))
     }
 
-    async fn read_verified_artifact(
+    pub(crate) async fn read_verified_artifact(
         &self,
         artifact: &ArtifactRef,
     ) -> Result<Vec<u8>, CheckpointError> {

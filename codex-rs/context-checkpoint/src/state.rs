@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 const MAX_ACTIVE_ENTRIES: usize = 24;
 const MAX_LAYER_ENTRIES: usize = 64;
@@ -18,6 +19,7 @@ pub(crate) const SESSIONS_PER_QUARTER: u64 = 5;
 #[serde(rename_all = "camelCase")]
 pub enum StateEntryKind {
     SourceFact,
+    SourceCoverage,
     UserDecision,
     Constraint,
     Validation,
@@ -45,7 +47,24 @@ pub struct ActiveContextState {
     pub constraints: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_questions: Vec<String>,
-    pub next_action: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub continuity_hints: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StateRemovalReason {
+    UserRevoked,
+    Superseded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StateRemoval {
+    pub key: String,
+    pub reason: StateRemovalReason,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,7 +92,7 @@ pub struct ContextStateUpdate {
     #[serde(default)]
     pub session_upserts: Vec<StateEntry>,
     #[serde(default)]
-    pub forget_keys: Vec<String>,
+    pub removals: Vec<StateRemoval>,
     #[serde(default)]
     pub quarter_promotions: Vec<String>,
 }
@@ -85,7 +104,7 @@ pub(crate) fn apply_context_state_update(
 ) -> Result<ContextStateSnapshot, CheckpointError> {
     validate_active_state(&update.active)?;
     validate_entries("sessionUpserts", &update.session_upserts, MAX_LAYER_ENTRIES)?;
-    validate_keys("forgetKeys", &update.forget_keys)?;
+    validate_removals(&update.removals)?;
     validate_keys("quarterPromotions", &update.quarter_promotions)?;
     if !update.quarter_promotions.is_empty()
         && !generation_id.get().is_multiple_of(SESSIONS_PER_QUARTER)
@@ -98,9 +117,15 @@ pub(crate) fn apply_context_state_update(
     let mut quarter = entries_by_key("quarter", &current.quarter)?;
     let mut session = entries_by_key("session", &current.session)?;
 
-    for key in &update.forget_keys {
-        quarter.remove(key);
-        session.remove(key);
+    for removal in &update.removals {
+        let removed_from_quarter = quarter.remove(&removal.key).is_some();
+        let removed_from_session = session.remove(&removal.key).is_some();
+        if !removed_from_quarter && !removed_from_session {
+            return Err(CheckpointError::InvalidRequest(format!(
+                "removal key {} does not exist in session or quarter state",
+                removal.key
+            )));
+        }
     }
 
     for key in &update.quarter_promotions {
@@ -126,6 +151,41 @@ pub(crate) fn apply_context_state_update(
         return Err(CheckpointError::InvalidRequest(format!(
             "context memory layer exceeds {MAX_LAYER_ENTRIES} entries"
         )));
+    }
+
+    for removal in &update.removals {
+        match removal.reason {
+            StateRemovalReason::UserRevoked => {
+                if removal.superseded_by.is_some() {
+                    return Err(CheckpointError::InvalidRequest(format!(
+                        "user-revoked key {} cannot declare supersededBy",
+                        removal.key
+                    )));
+                }
+            }
+            StateRemovalReason::Superseded => {
+                let replacement = removal.superseded_by.as_deref().ok_or_else(|| {
+                    CheckpointError::InvalidRequest(format!(
+                        "superseded key {} requires supersededBy",
+                        removal.key
+                    ))
+                })?;
+                if replacement == removal.key
+                    || (!quarter.contains_key(replacement)
+                        && !session.contains_key(replacement)
+                        && !update
+                            .active
+                            .entries
+                            .iter()
+                            .any(|entry| entry.key == replacement))
+                {
+                    return Err(CheckpointError::InvalidRequest(format!(
+                        "supersededBy {replacement} for key {} must name a retained state entry",
+                        removal.key
+                    )));
+                }
+            }
+        }
     }
 
     for entry in &update.active.entries {
@@ -155,15 +215,14 @@ pub(crate) fn update_evidence(update: &ContextStateUpdate) -> Vec<EvidenceRef> {
 }
 
 fn validate_active_state(active: &ActiveContextState) -> Result<(), CheckpointError> {
+    if active == &ActiveContextState::default() {
+        return Ok(());
+    }
     validate_required_text("active.objective", &active.objective, MAX_ACTIVE_TEXT_BYTES)?;
-    validate_required_text(
-        "active.nextAction",
-        &active.next_action,
-        MAX_ACTIVE_TEXT_BYTES,
-    )?;
     validate_entries("active.entries", &active.entries, MAX_ACTIVE_ENTRIES)?;
     validate_text_list("active.constraints", &active.constraints)?;
-    validate_text_list("active.openQuestions", &active.open_questions)
+    validate_text_list("active.openQuestions", &active.open_questions)?;
+    validate_text_list("active.continuityHints", &active.continuity_hints)
 }
 
 fn validate_entries(
@@ -190,7 +249,9 @@ fn validate_entries(
         }
         if matches!(
             entry.kind,
-            StateEntryKind::SourceFact | StateEntryKind::Validation
+            StateEntryKind::SourceFact
+                | StateEntryKind::SourceCoverage
+                | StateEntryKind::Validation
         ) && entry.evidence.is_empty()
         {
             return Err(CheckpointError::InvalidRequest(format!(
@@ -207,6 +268,30 @@ fn validate_entries(
                 "state entry {:?} has an empty source revision",
                 entry.key
             )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_removals(removals: &[StateRemoval]) -> Result<(), CheckpointError> {
+    if removals.len() > MAX_LAYER_ENTRIES {
+        return Err(CheckpointError::InvalidRequest(format!(
+            "removals contains {} entries; maximum is {MAX_LAYER_ENTRIES}",
+            removals.len()
+        )));
+    }
+
+    let mut keys = HashSet::new();
+    for removal in removals {
+        validate_required_text("removals.key", &removal.key, MAX_KEY_BYTES)?;
+        if !keys.insert(removal.key.as_str()) {
+            return Err(CheckpointError::InvalidRequest(format!(
+                "removals contains duplicate key {}",
+                removal.key
+            )));
+        }
+        if let Some(replacement) = &removal.superseded_by {
+            validate_required_text("removals.supersededBy", replacement, MAX_KEY_BYTES)?;
         }
     }
     Ok(())

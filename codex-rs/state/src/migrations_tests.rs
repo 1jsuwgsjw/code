@@ -7,6 +7,7 @@ use sqlx::sqlite::SqlitePoolOptions;
 
 use super::STATE_MIGRATOR;
 use super::repair_legacy_recency_migration_version;
+use super::runtime_state_migrator;
 
 fn migrator_through(version: i64) -> Migrator {
     Migrator {
@@ -195,4 +196,56 @@ async fn repairs_recency_migration_that_was_applied_as_version_38() {
         .map(|migration| (migration.version, migration.checksum.to_vec()))
         .collect::<Vec<_>>();
     assert_eq!(applied, expected);
+}
+
+#[tokio::test]
+async fn research_state_migration_does_not_collide_with_official_version_41() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("in-memory sqlite should open");
+    migrator_through(40)
+        .run(&pool)
+        .await
+        .expect("migrations through version 40 should apply");
+
+    sqlx::query(
+        r#"
+INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
+VALUES (?, ?, TRUE, ?, 0)
+        "#,
+    )
+    .bind(41_i64)
+    .bind("threads name")
+    .bind(vec![0_u8; 48])
+    .execute(&pool)
+    .await
+    .expect("official version 41 marker should insert");
+
+    runtime_state_migrator()
+        .run(&pool)
+        .await
+        .expect("research state migration should use a non-conflicting version");
+
+    let tables = sqlx::query_scalar::<_, String>(
+        r#"
+SELECT name
+FROM sqlite_master
+WHERE type = 'table' AND name LIKE 'research_%'
+ORDER BY name
+        "#,
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("research tables should load");
+    assert_eq!(
+        tables,
+        vec![
+            "research_events".to_string(),
+            "research_project_aliases".to_string(),
+            "research_projections".to_string(),
+            "research_projects".to_string(),
+        ]
+    );
 }

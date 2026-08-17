@@ -1,6 +1,11 @@
 use super::*;
 use crate::ActiveContextState;
 use crate::ContextStateUpdate;
+use crate::StateEntry;
+use crate::StateEntryKind;
+use crate::ToolGroupDisposition;
+use crate::ToolGroupSettlement;
+use crate::model_checkpoint_view;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::tempdir;
@@ -8,20 +13,31 @@ use tempfile::tempdir;
 fn state_request(
     completed_tool_groups: Vec<ToolGroupId>,
     objective: &str,
-    next_action: &str,
+    continuity_hint: &str,
 ) -> UpdateContextStateRequest {
+    let tool_group_settlements = completed_tool_groups
+        .iter()
+        .copied()
+        .map(|group_id| ToolGroupSettlement {
+            group_id,
+            disposition: ToolGroupDisposition::ArchiveOnly,
+            state_keys: Vec::new(),
+            open_questions: Vec::new(),
+        })
+        .collect();
     UpdateContextStateRequest {
         completed_tool_groups,
+        tool_group_settlements,
         state: ContextStateUpdate {
             active: ActiveContextState {
                 objective: objective.to_string(),
                 entries: Vec::new(),
                 constraints: Vec::new(),
                 open_questions: Vec::new(),
-                next_action: next_action.to_string(),
+                continuity_hints: vec![continuity_hint.to_string()],
             },
             session_upserts: Vec::new(),
-            forget_keys: Vec::new(),
+            removals: Vec::new(),
             quarter_promotions: Vec::new(),
         },
     }
@@ -44,12 +60,12 @@ fn invocation(call_id: &str) -> ToolInvocationRecord {
     }
 }
 
-fn successful_result(value: &str) -> ToolResultRecord {
+fn successful_result(value: &str, truncation: TruncationProvenance) -> ToolResultRecord {
     ToolResultRecord {
         media_type: "text/plain".to_string(),
         payload: value.as_bytes().to_vec(),
         outcome: ToolCallOutcome::Success,
-        truncation: TruncationProvenance::Complete,
+        truncation,
     }
 }
 
@@ -69,13 +85,14 @@ async fn record_group(
     call_id: &str,
     history_start: usize,
     history_end: usize,
+    truncation: TruncationProvenance,
 ) -> ToolCallRecord {
     runtime
         .prepare_request("turn-1", history_start, usage(), 2_000)
         .await
         .expect("prepare sampling request");
     let ArtifactCaptureOutcome::Recorded(record) = runtime
-        .record_tool_result(invocation(call_id), successful_result(call_id))
+        .record_tool_result(invocation(call_id), successful_result(call_id, truncation))
         .await
     else {
         panic!("tool artifact capture degraded");
@@ -90,8 +107,8 @@ async fn record_group(
 #[tokio::test]
 async fn summary_must_select_the_contiguous_settled_prefix() {
     let (_directory, runtime) = runtime().await;
-    let first = record_group(&runtime, "call-1", 0, 2).await;
-    let second = record_group(&runtime, "call-2", 2, 4).await;
+    let first = record_group(&runtime, "call-1", 0, 2, TruncationProvenance::Complete).await;
+    let second = record_group(&runtime, "call-2", 2, 4, TruncationProvenance::Complete).await;
 
     let error = runtime
         .prepare_context_state(state_request(
@@ -107,9 +124,91 @@ async fn summary_must_select_the_contiguous_settled_prefix() {
 }
 
 #[tokio::test]
+async fn archive_only_keeps_truncated_artifacts_recallable() {
+    let (_directory, runtime) = runtime().await;
+    let call = record_group(
+        &runtime,
+        "call-1",
+        0,
+        2,
+        TruncationProvenance::ModelFacingFallback,
+    )
+    .await;
+
+    let pending = runtime
+        .prepare_context_state(state_request(
+            vec![call.group_id],
+            "retain effective knowledge only",
+            "the archived output remains selectively recallable",
+        ))
+        .await
+        .expect("truncated process output should archive without forced promotion");
+
+    assert_eq!(
+        pending.record.evidence,
+        vec![crate::EvidenceRef::Artifact {
+            artifact_id: call.output.artifact_id,
+        }]
+    );
+    assert!(
+        !model_checkpoint_view(&pending.record)
+            .expect("render archive-only checkpoint view")
+            .contains("artifact:TR")
+    );
+}
+
+#[tokio::test]
+async fn promoted_groups_attach_output_artifacts_to_state_keys() {
+    let (_directory, runtime) = runtime().await;
+    let call = record_group(&runtime, "call-1", 0, 2, TruncationProvenance::Complete).await;
+    let state_key = "pricing.vip.invariants";
+    let symbol = EvidenceRef::Symbol {
+        value: "REFERENCE.md::INV-PRICE-01..03".to_string(),
+    };
+    let mut request = state_request(
+        vec![call.group_id],
+        "retain verified pricing rules",
+        "reuse the verified invariants",
+    );
+    request.state.active = Default::default();
+    request.state.session_upserts = vec![StateEntry {
+        key: state_key.to_string(),
+        kind: StateEntryKind::SourceFact,
+        content: "VIP tax is calculated from the discounted subtotal.".to_string(),
+        evidence: vec![symbol.clone()],
+        source_revision: None,
+    }];
+    request.tool_group_settlements = vec![ToolGroupSettlement {
+        group_id: call.group_id,
+        disposition: ToolGroupDisposition::Promote,
+        state_keys: vec![state_key.to_string()],
+        open_questions: Vec::new(),
+    }];
+
+    let pending = runtime
+        .prepare_context_state(request)
+        .await
+        .expect("promoted output should receive a runtime-owned artifact bridge");
+    assert_eq!(
+        pending.record.state.session[0].evidence,
+        vec![
+            symbol,
+            EvidenceRef::Artifact {
+                artifact_id: call.output.artifact_id,
+            },
+        ]
+    );
+    assert!(
+        model_checkpoint_view(&pending.record)
+            .expect("render model checkpoint view")
+            .contains("artifact:TR000001/A001")
+    );
+}
+
+#[tokio::test]
 async fn pending_checkpoint_survives_reload_and_installation() {
     let (directory, runtime) = runtime().await;
-    let call = record_group(&runtime, "call-1", 1, 3).await;
+    let call = record_group(&runtime, "call-1", 1, 3, TruncationProvenance::Complete).await;
     let pending = runtime
         .prepare_context_state(state_request(
             vec![call.group_id],
@@ -145,11 +244,19 @@ async fn pending_checkpoint_survives_reload_and_installation() {
     let recalled = restored
         .recall(RecallRequest {
             locator: ArtifactLocator::Reference("artifact:TR000001/A001".to_string()),
+            selection: crate::ArtifactRecallSelection::Prefix,
             max_bytes: 1024,
         })
         .await
         .expect("recall artifact after its tool group was settled");
-    assert_eq!(recalled.data, b"call-1".to_vec());
+    assert_eq!(
+        recalled.view,
+        crate::ArtifactRecallView::Prefix {
+            line_count: 1,
+            content: "call-1".to_string(),
+            truncated: false,
+        }
+    );
 }
 
 #[tokio::test]
@@ -160,7 +267,10 @@ async fn recall_is_bounded_and_hash_verified() {
         .await
         .expect("prepare sampling request");
     let ArtifactCaptureOutcome::Recorded(call) = runtime
-        .record_tool_result(invocation("call-1"), successful_result("full output"))
+        .record_tool_result(
+            invocation("call-1"),
+            successful_result("full output", TruncationProvenance::Complete),
+        )
         .await
     else {
         panic!("tool artifact capture degraded");
@@ -169,11 +279,18 @@ async fn recall_is_bounded_and_hash_verified() {
     let recalled = runtime
         .recall(RecallRequest {
             locator: ArtifactLocator::ArtifactId(call.output.artifact_id.clone()),
+            selection: crate::ArtifactRecallSelection::Prefix,
             max_bytes: 4,
         })
         .await
         .expect("recall output artifact");
 
-    assert_eq!(recalled.data, b"full".to_vec());
-    assert!(recalled.truncated);
+    assert_eq!(
+        recalled.view,
+        crate::ArtifactRecallView::Prefix {
+            line_count: 1,
+            content: "full".to_string(),
+            truncated: true,
+        }
+    );
 }
