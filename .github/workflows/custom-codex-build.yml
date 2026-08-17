@@ -73,14 +73,6 @@ jobs:
         with:
           tool: nextest
 
-      - name: Test app-server protocol
-        shell: bash
-        run: just test -p codex-app-server-protocol
-
-      - name: Test app-server
-        shell: bash
-        run: just test -p codex-app-server
-
       - name: Generate app-server schema fixtures
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.generate_schema }}
         shell: bash
@@ -94,6 +86,14 @@ jobs:
           path: codex-rs/app-server-protocol/schema
           if-no-files-found: error
           retention-days: 7
+
+      - name: Test app-server protocol
+        shell: bash
+        run: just test -p codex-app-server-protocol
+
+      - name: Test app-server
+        shell: bash
+        run: just test -p codex-app-server
 
       - name: Stage custom binary
         shell: pwsh

@@ -267,7 +267,7 @@ fn thread_items_list_round_trips() {
     assert_eq!(
         serde_json::to_value(&response).expect("serialize response"),
         json!({
-            "data": [{"type": "contextCompaction", "id": "item_1"}],
+            "data": [{"type": "contextCompaction", "id": "item_1", "checkpoint": null}],
             "nextCursor": null,
             "backwardsCursor": "cursor_0",
         })
