@@ -21662,6 +21662,14 @@
               "null"
             ]
           },
+          "toolResultShareBasisPoints": {
+            "format": "uint16",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "total": {
             "$ref": "#/definitions/v2/TokenUsageBreakdown"
           }
