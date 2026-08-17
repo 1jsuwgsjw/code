@@ -4,6 +4,7 @@ use crate::common::ResponseStream;
 use crate::common::ResponsesWsRequest;
 use crate::common::SafetyBufferingTreatment;
 use crate::common::WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY;
+use crate::common::add_prompt_cache_breakpoint;
 use crate::error::ApiError;
 use crate::provider::Provider;
 use crate::rate_limits::parse_rate_limit_event;
@@ -884,7 +885,9 @@ async fn send_websocket_request(
 }
 
 fn serialize_websocket_request(request: &ResponsesWsRequest) -> Result<String, ApiError> {
-    serde_json::to_string(request)
+    serde_json::to_value(request)
+        .map(add_prompt_cache_breakpoint)
+        .and_then(|request| serde_json::to_string(&request))
         .map_err(|err| ApiError::Stream(format!("failed to encode websocket request: {err}")))
 }
 
@@ -892,6 +895,7 @@ fn serialize_websocket_request(request: &ResponsesWsRequest) -> Result<String, A
 mod tests {
     use super::*;
     use crate::common::ResponseCreateWsRequest;
+    use crate::common::add_prompt_cache_breakpoint;
     use codex_protocol::ResponseItemId;
     use codex_protocol::models::ContentItem;
     use codex_protocol::models::ResponseItem;
@@ -900,9 +904,87 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
-    fn direct_serialization_preserves_websocket_request_payload() {
+    fn adds_breakpoint_to_last_eligible_input_text_for_gpt_5_6() {
+        let request = json!({
+            "model": "gpt-5.6-sol",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{ "type": "input_text", "text": "first" }]
+                },
+                { "type": "custom_tool_call_output", "call_id": "call-1", "output": "result" },
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        { "type": "input_text", "text": "second" },
+                        { "type": "input_text", "text": "last" }
+                    ]
+                }
+            ],
+            "prompt_cache_key": "thread-1"
+        });
+
+        let actual = add_prompt_cache_breakpoint(request);
+
+        assert_eq!(
+            actual,
+            json!({
+                "model": "gpt-5.6-sol",
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{ "type": "input_text", "text": "first" }]
+                    },
+                    { "type": "custom_tool_call_output", "call_id": "call-1", "output": "result" },
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            { "type": "input_text", "text": "second" },
+                            {
+                                "type": "input_text",
+                                "text": "last",
+                                "prompt_cache_breakpoint": { "mode": "explicit" }
+                            }
+                        ]
+                    }
+                ],
+                "prompt_cache_key": "thread-1"
+            })
+        );
+    }
+
+    #[test]
+    fn leaves_unsupported_models_unchanged() {
+        let request = json!({
+            "model": "gpt-5.5",
+            "input": [{
+                "type": "message",
+                "role": "user",
+                "content": [{ "type": "input_text", "text": "hello" }]
+            }]
+        });
+
+        assert_eq!(add_prompt_cache_breakpoint(request.clone()), request);
+    }
+
+    #[test]
+    fn leaves_requests_without_input_text_unchanged() {
+        let request = json!({
+            "model": "gpt-6.0",
+            "input": [{ "type": "custom_tool_call_output", "call_id": "call-1", "output": "result" }]
+        });
+
+        assert_eq!(add_prompt_cache_breakpoint(request.clone()), request);
+    }
+
+    #[test]
+    fn direct_serialization_adds_prompt_cache_breakpoint() {
         let request = ResponsesWsRequest::ResponseCreate(ResponseCreateWsRequest {
-            model: "gpt-test".to_string(),
+            model: "gpt-5.6-sol".to_string(),
             instructions: "Use the available tools.".to_string(),
             previous_response_id: Some("resp-1".to_string()),
             input: vec![ResponseItem::Message {
@@ -936,7 +1018,10 @@ mod tests {
             )])),
         });
 
-        let previous_payload = serde_json::to_value(&request).expect("serialize previous payload");
+        let mut previous_payload =
+            serde_json::to_value(&request).expect("serialize previous payload");
+        previous_payload["input"][0]["content"][0]["prompt_cache_breakpoint"] =
+            serde_json::json!({ "mode": "explicit" });
         let request_text =
             serialize_websocket_request(&request).expect("serialize websocket request");
         let wire_payload =

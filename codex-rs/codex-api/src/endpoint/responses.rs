@@ -1,6 +1,7 @@
 use crate::auth::SharedAuthProvider;
 use crate::common::ResponseStream;
 use crate::common::ResponsesApiRequest;
+use crate::common::add_prompt_cache_breakpoint;
 use crate::endpoint::session::EndpointSession;
 use crate::error::ApiError;
 use crate::provider::Provider;
@@ -81,6 +82,9 @@ impl<T: HttpTransport> ResponsesClient<T> {
             turn_state,
         } = options;
 
+        let request = serde_json::to_value(request)
+            .map(add_prompt_cache_breakpoint)
+            .map_err(|e| ApiError::Stream(format!("failed to encode responses request: {e}")))?;
         let body = EncodedJsonBody::encode(&request)
             .map_err(|e| ApiError::Stream(format!("failed to encode responses request: {e}")))?;
 
@@ -119,7 +123,7 @@ impl<T: HttpTransport> ResponsesClient<T> {
         compression: Compression,
         turn_state: Option<Arc<OnceLock<String>>>,
     ) -> Result<ResponseStream, ApiError> {
-        let body = EncodedJsonBody::encode(&body)
+        let body = EncodedJsonBody::encode(&add_prompt_cache_breakpoint(body))
             .map_err(|e| ApiError::Stream(format!("failed to encode responses request: {e}")))?;
         self.stream_encoded(body, extra_headers, compression, turn_state)
             .await
