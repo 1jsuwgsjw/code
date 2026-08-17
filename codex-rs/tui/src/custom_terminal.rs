@@ -38,7 +38,6 @@ use derive_more::IsVariant;
 use ratatui::backend::Backend;
 use ratatui::backend::ClearType;
 use ratatui::buffer::Buffer;
-use ratatui::buffer::CellDiffOption;
 use ratatui::layout::Position;
 use ratatui::layout::Rect;
 use ratatui::layout::Size;
@@ -166,6 +165,8 @@ where
     pub last_known_cursor_pos: Position,
     /// Count of visible history rows rendered above the viewport in inline mode.
     visible_history_rows: u16,
+    /// Whether the next buffer diff must repaint every visible viewport cell.
+    force_viewport_repaint: bool,
 }
 
 impl<B> Drop for Terminal<B>
@@ -243,6 +244,7 @@ where
             last_known_screen_size: screen_size,
             last_known_cursor_pos: cursor_pos,
             visible_history_rows: 0,
+            force_viewport_repaint: false,
         }
     }
 
@@ -298,12 +300,20 @@ where
     /// Obtains a difference between the previous and the current buffer and passes it to the
     /// current backend for drawing.
     pub fn flush(&mut self) -> io::Result<()> {
-        let updates = diff_buffers(self.previous_buffer(), self.current_buffer());
+        let diff_mode = if self.force_viewport_repaint {
+            BufferDiffMode::FullRepaint
+        } else {
+            BufferDiffMode::Incremental
+        };
+        let updates =
+            diff_buffers_with_mode(self.previous_buffer(), self.current_buffer(), diff_mode);
         let last_put_command = updates.iter().rfind(|command| command.is_put());
         if let Some(&DrawCommand::Put { x, y, .. }) = last_put_command {
             self.last_known_cursor_pos = Position { x, y };
         }
-        draw(&mut self.backend, updates.into_iter())
+        draw(&mut self.backend, updates.into_iter())?;
+        self.force_viewport_repaint = false;
+        Ok(())
     }
 
     /// Updates the Terminal so that internal buffers match the requested area.
@@ -500,11 +510,8 @@ where
     /// diff buffer alone would leave default-style spaces equal to their previous
     /// cells, allowing stale terminal content to show through those spaces.
     pub fn invalidate_viewport(&mut self) {
-        let previous_buffer = self.previous_buffer_mut();
-        previous_buffer.reset();
-        for cell in &mut previous_buffer.content {
-            cell.set_diff_option(CellDiffOption::AlwaysUpdate);
-        }
+        self.previous_buffer_mut().reset();
+        self.force_viewport_repaint = true;
     }
 
     /// Clear terminal scrollback (if supported) and force a full redraw.
@@ -588,9 +595,19 @@ enum DrawCommand {
     ClearToEnd { x: u16, y: u16, bg: Color },
 }
 
+enum BufferDiffMode {
+    Incremental,
+    FullRepaint,
+}
+
 fn diff_buffers(a: &Buffer, b: &Buffer) -> Vec<DrawCommand> {
+    diff_buffers_with_mode(a, b, BufferDiffMode::Incremental)
+}
+
+fn diff_buffers_with_mode(a: &Buffer, b: &Buffer, mode: BufferDiffMode) -> Vec<DrawCommand> {
     let previous_buffer = &a.content;
     let next_buffer = &b.content;
+    let full_repaint = matches!(mode, BufferDiffMode::FullRepaint);
 
     let mut updates = vec![];
     let mut last_nonblank_columns = vec![0; a.area.height as usize];
@@ -630,10 +647,11 @@ fn diff_buffers(a: &Buffer, b: &Buffer) -> Vec<DrawCommand> {
     // their place (the skipped cells should be blank anyway), or due to per-cell-skipping:
     let mut to_skip: usize = 0;
     for (i, (current, previous)) in next_buffer.iter().zip(previous_buffer.iter()).enumerate() {
-        if !current.skip && (current != previous || invalidated > 0) && to_skip == 0 {
+        if !current.skip && (full_repaint || current != previous || invalidated > 0) && to_skip == 0
+        {
             let (x, y) = a.pos_of(i);
             let row = i / a.area.width as usize;
-            if x <= last_nonblank_columns[row] {
+            if full_repaint || x <= last_nonblank_columns[row] {
                 updates.push(DrawCommand::Put {
                     x,
                     y,
