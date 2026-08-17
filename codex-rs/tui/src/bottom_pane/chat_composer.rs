@@ -5147,7 +5147,11 @@ mod tests {
         ) {
             composer.set_collaboration_modes_enabled(/*enabled*/ true);
             composer.set_collaboration_mode_indicator(indicator);
-            composer.set_context_window(Some(context_percent), /*used_tokens*/ None);
+            composer.set_context_window(ContextWindowUsage {
+                remaining_percent: Some(context_percent),
+                used_tokens: None,
+                tool_result_share_basis_points: None,
+            });
         }
 
         // Empty textarea, agent idle: shortcuts hint can show, and cycle hint is hidden.
