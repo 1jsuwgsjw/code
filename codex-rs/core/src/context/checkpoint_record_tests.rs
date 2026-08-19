@@ -39,10 +39,16 @@ fn renders_a_bounded_typed_checkpoint_fragment() {
     let item: codex_protocol::models::ResponseItem = fragment.into_response_input_item().into();
 
     assert!(rendered.starts_with("<CONTEXT_CHECKPOINT>\n"));
+    assert!(rendered.contains(CHECKPOINT_CONTINUITY_PREFIX));
+    assert!(!rendered.contains("Another language model started"));
     assert!(rendered.contains("\nActive\n"));
     assert!(rendered.contains("    preserve effective runtime state"));
     assert!(!rendered.contains("\"objective\""));
     assert!(!rendered.contains("recordId"));
     assert!(rendered.ends_with("\n</CONTEXT_CHECKPOINT>"));
     assert!(CheckpointRecordFragment::matches_item(&item));
+    let codex_protocol::models::ResponseItem::Message { role, .. } = item else {
+        panic!("checkpoint fragment should render as a message");
+    };
+    assert_eq!(role, "developer");
 }

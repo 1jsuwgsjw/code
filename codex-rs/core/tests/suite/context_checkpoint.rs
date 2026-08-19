@@ -68,15 +68,21 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
             ev_assistant_message("msg-1", "done"),
             ev_completed("resp-4"),
         ]),
+        sse(vec![
+            ev_response_created("resp-5"),
+            ev_assistant_message("msg-2", "continued"),
+            ev_completed("resp-5"),
+        ]),
     ];
     let mock = mount_sse_sequence(harness.server(), responses).await;
 
     harness
         .submit("checkpoint the current project state")
         .await?;
+    harness.submit("continue from the saved checkpoint").await?;
 
     let requests = mock.requests();
-    assert_eq!(requests.len(), 4);
+    assert_eq!(requests.len(), 5);
     let first_update_output: serde_json::Value = serde_json::from_str(
         &mock
             .function_call_output_text("call-state-1")
@@ -95,6 +101,29 @@ async fn model_request_contains_only_the_latest_context_state_projection() -> Re
     assert!(final_request.contains("ctx:G000002/TR000002"));
     assert!(!final_request.contains("\"objective\":"));
     assert!(!final_request.contains("manifestSha256"));
+    let checkpoint_positions = requests[3..]
+        .iter()
+        .map(|request| {
+            request
+                .input()
+                .iter()
+                .position(|item| item.to_string().contains("<CONTEXT_CHECKPOINT>"))
+                .expect("checkpoint fragment should be present")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(checkpoint_positions.len(), 2);
+    assert_eq!(checkpoint_positions[0], checkpoint_positions[1]);
+    let final_input = requests.last().expect("final model request").input();
+    let checkpoint_position = checkpoint_positions[1];
+    assert_eq!(final_input[checkpoint_position]["role"], "developer");
+    let resumed_user_position = final_input
+        .iter()
+        .position(|item| {
+            item.to_string()
+                .contains("continue from the saved checkpoint")
+        })
+        .expect("resumed user message should be present");
+    assert!(checkpoint_position < resumed_user_position);
 
     Ok(())
 }

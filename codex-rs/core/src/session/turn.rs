@@ -1184,8 +1184,7 @@ async fn run_sampling_request(
     let raw_history_len = sess.clone_history().await.raw_items().len();
     let tool_result_share_basis_points =
         crate::context::CheckpointStatusFragment::tool_result_share_basis_points(&input);
-    sess.state.lock().await.tool_result_share_basis_points =
-        Some(tool_result_share_basis_points);
+    sess.state.lock().await.tool_result_share_basis_points = Some(tool_result_share_basis_points);
     let checkpoint_request = match sess
         .services
         .context_checkpoint
@@ -1245,10 +1244,17 @@ async fn run_sampling_request(
             if let Some(record) = prepared.record {
                 match crate::context::CheckpointRecordFragment::new(&record) {
                     Ok(fragment) => {
+                        let checkpoint_index = prompt_input
+                            .iter()
+                            .position(crate::context::CheckpointRecordFragment::matches_item)
+                            .unwrap_or(0);
                         prompt_input.retain(|item| {
                             !crate::context::CheckpointRecordFragment::matches_item(item)
                         });
-                        prompt_input.push(fragment.into_response_input_item().into());
+                        prompt_input.insert(
+                            checkpoint_index.min(prompt_input.len()),
+                            fragment.into_response_input_item().into(),
+                        );
                     }
                     Err(error) => {
                         tracing::warn!(

@@ -1,9 +1,13 @@
 use super::ContextualUserFragment;
-use crate::compact::SUMMARY_PREFIX;
 use codex_context_checkpoint::CheckpointError;
 use codex_context_checkpoint::TurnRecord;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
+
+const CHECKPOINT_CONTINUITY_PREFIX: &str = "\
+This checkpoint is durable context for the current conversation. Continue from its latest \
+active state. It is not a new user request, a new session, or a collaboration-mode change. \
+Do not repeat completed work or re-run verified setup unless later context invalidates it.";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CheckpointRecordFragment {
@@ -14,7 +18,7 @@ impl CheckpointRecordFragment {
     pub(crate) fn new(record: &TurnRecord) -> Result<Self, CheckpointError> {
         let record = codex_context_checkpoint::model_checkpoint_view(record)?;
         Ok(Self {
-            body: format!("{SUMMARY_PREFIX}\n{record}"),
+            body: format!("{CHECKPOINT_CONTINUITY_PREFIX}\n{record}"),
         })
     }
 
@@ -30,7 +34,7 @@ impl CheckpointRecordFragment {
 
 impl ContextualUserFragment for CheckpointRecordFragment {
     fn role(&self) -> &'static str {
-        "user"
+        "developer"
     }
 
     fn markers(&self) -> (&'static str, &'static str) {
