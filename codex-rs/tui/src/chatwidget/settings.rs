@@ -606,7 +606,10 @@ impl ChatWidget {
         }
         match self.active_mode_kind() {
             ModeKind::Plan => Some(CollaborationModeIndicator::Plan),
-            ModeKind::Default | ModeKind::PairProgramming | ModeKind::Execute => None,
+            ModeKind::Default
+            | ModeKind::Unrestricted
+            | ModeKind::PairProgramming
+            | ModeKind::Execute => None,
         }
     }
 
