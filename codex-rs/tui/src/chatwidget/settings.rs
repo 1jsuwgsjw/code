@@ -672,10 +672,12 @@ impl ChatWidget {
             return;
         }
 
-        if let Some(next_mask) = collaboration_modes::next_mask(
-            self.model_catalog.as_ref(),
-            self.active_collaboration_mask.as_ref(),
-        ) {
+        let current_mask = self.active_collaboration_mask.clone().or_else(|| {
+            collaboration_modes::mask_for_kind(self.model_catalog.as_ref(), self.active_mode_kind())
+        });
+        if let Some(next_mask) =
+            collaboration_modes::next_mask(self.model_catalog.as_ref(), current_mask.as_ref())
+        {
             self.set_collaboration_mask_from_user_action(next_mask);
         }
     }
