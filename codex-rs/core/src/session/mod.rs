@@ -3165,7 +3165,7 @@ impl Session {
             }
         }
 
-        let mut items = Vec::with_capacity(3);
+        let mut items = Vec::with_capacity(4);
         if let Some(developer_message) =
             crate::context_manager::updates::build_developer_update_item(developer_sections)
         {
@@ -3182,6 +3182,18 @@ impl Session {
             crate::context_manager::updates::build_contextual_user_message(contextual_user_sections)
         {
             items.push(contextual_user_message);
+        }
+        if turn_context.config.include_collaboration_mode_instructions
+            && let Some(collab_instructions) =
+                CollaborationModeInstructions::from_collaboration_mode(
+                    &self.collaboration_mode().await,
+                )
+            && let Some(developer_message) =
+                crate::context_manager::updates::build_developer_update_item(vec![
+                    collab_instructions.render(),
+                ])
+        {
+            items.push(developer_message);
         }
         items
     }
