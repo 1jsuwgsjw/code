@@ -161,11 +161,14 @@ impl ChatWidget {
 
         match key_event {
             KeyEvent {
-                code: KeyCode::BackTab,
+                code: code @ (KeyCode::BackTab | KeyCode::Tab),
+                modifiers,
                 kind: KeyEventKind::Press,
                 ..
             } if self.collaboration_modes_enabled()
                 && !self.bottom_pane.is_task_running()
+                && (matches!(code, KeyCode::BackTab)
+                    || modifiers.contains(KeyModifiers::SHIFT))
                 && self.bottom_pane.no_modal_or_popup_active() =>
             {
                 self.cycle_collaboration_mode();
